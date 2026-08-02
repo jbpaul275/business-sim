@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { zArchetype, zCostClass, zMoneyFromDollars, zNonNegative, zPositive, zStatementLine } from './primitives.js';
+import {
+  zArchetype,
+  zCostClass,
+  zMoneyFromDollars,
+  zNonNegative,
+  zPositive,
+  zStatementLine,
+  zVolumeDriver,
+} from './primitives.js';
 import { zWorkingCapitalPolicy } from './model.js';
 
 /**
@@ -26,6 +34,15 @@ export const zCostDefault = z.object({
   isMoney: z.boolean().default(false),
   isLabor: z.boolean().default(false),
   accruable: z.boolean().default(false),
+  /** STEP_FIXED and VARIABLE_ACTIVITY: the volume driver this line scales with. */
+  driver: zVolumeDriver.optional(),
+  /** STEP_FIXED: volume one block supports, in driver units. */
+  capacityPerBlock: z.number().positive().optional(),
+  /** STEP_FIXED: you need at least one manager regardless of volume. */
+  minimumBlocks: z.number().int().nonnegative().default(0),
+  /** FIXED_PERIOD: contractual escalator, not an estimate. */
+  annualEscalatorPct: z.number().default(0.02),
+  isPrepaidExpense: z.boolean().default(false),
   benchmarkBand: zBenchmarkBand.optional(),
   sourceNote: z.string().min(1),
 });

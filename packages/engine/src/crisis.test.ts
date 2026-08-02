@@ -27,13 +27,12 @@ function strugglingWorld(policy: CrisisRemedy[], equity = 700_000): WorldState {
   const model = buildModelFromTemplate({
     businessName: 'Struggling',
     template: getSeedTemplate('full_service_restaurant'),
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: 90,
       turnsPerDay: 2,
       addressableTrafficPerQuarter: 95_000,
       captureRate: 0.035,
-      avgTicket: fromDisplay(28),
+      price: fromDisplay(28),
     },
     marketingSpendPerQuarter: fromDisplay(12_000),
     equityInjection: fromDisplay(equity),
@@ -133,13 +132,12 @@ describe('insolvency (§9.4)', () => {
     const model = buildModelFromTemplate({
       businessName: 'Doomed',
       template: getSeedTemplate('full_service_restaurant'),
-      stream: {
-        archetype: 'TRAFFIC',
+      scale: {
         seats: 120,
         turnsPerDay: 2,
         addressableTrafficPerQuarter: 30_000,
         captureRate: 0.02,
-        avgTicket: fromDisplay(20),
+        price: fromDisplay(20),
       },
       equityInjection: fromDisplay(400_000),
       debt: [{ kind: 'SBA_7A', principal: fromDisplay(300_000), termQuarters: 40 }],
@@ -176,26 +174,24 @@ describe('insolvency (§9.4)', () => {
     const healthy = buildModelFromTemplate({
       businessName: 'Healthy',
       template,
-      stream: {
-        archetype: 'TRAFFIC',
+      scale: {
         seats: 64,
         turnsPerDay: 2,
         addressableTrafficPerQuarter: 180_000,
         captureRate: 0.05,
-        avgTicket: fromDisplay(42),
+        price: fromDisplay(42),
       },
       equityInjection: fromDisplay(800_000),
     });
     const doomed = buildModelFromTemplate({
       businessName: 'Doomed',
       template,
-      stream: {
-        archetype: 'TRAFFIC',
+      scale: {
         seats: 120,
         turnsPerDay: 2,
         addressableTrafficPerQuarter: 20_000,
         captureRate: 0.02,
-        avgTicket: fromDisplay(18),
+        price: fromDisplay(18),
       },
       equityInjection: fromDisplay(650_000),
     });
@@ -224,13 +220,12 @@ describe('peak cash need (§5.4)', () => {
     const model = buildModelFromTemplate({
       businessName: 'Peak',
       template: getSeedTemplate('full_service_restaurant'),
-      stream: {
-        archetype: 'TRAFFIC',
+      scale: {
         seats: 64,
         turnsPerDay: 2,
         addressableTrafficPerQuarter: 180_000,
         captureRate: 0.05,
-        avgTicket: fromDisplay(42),
+        price: fromDisplay(42),
       },
       equityInjection: fromDisplay(500_000),
     });

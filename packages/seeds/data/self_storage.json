@@ -1,0 +1,132 @@
+{
+  "id": "self_storage",
+  "label": "Self-storage facility",
+  "naicsCode": "531130",
+  "defaultArchetypes": [
+    "OCCUPANCY"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "property_management",
+      "label": "Property management fee",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "G&A",
+      "value": 0.06,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.04,
+        "high": 0.07,
+        "source": "Self Storage Association industry survey"
+      },
+      "sourceNote": "Third-party management at 6% of gross collections."
+    },
+    {
+      "lineId": "site_staff",
+      "label": "Site staff",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 15000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "OCCUPIED_UNITS",
+      "capacityPerBlock": 450,
+      "minimumBlocks": 1,
+      "sourceNote": "One site manager covers roughly 450 occupied units."
+    },
+    {
+      "lineId": "property_tax",
+      "label": "Property tax",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 26000,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.025,
+      "sourceNote": "Assessed value at the local millage rate."
+    }
+  ],
+  "streamParamDefaults": {
+    "units": 620,
+    "ratePerUnitPerQuarter": 345,
+    "stabilizedOccupancy": 0.89,
+    "concessionsPct": 0.05,
+    "ancillaryRevenuePctOfBase": 0.09
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.25,
+    "rampConstant": 5.0,
+    "marketingMaxLift": 0.2,
+    "halfSaturationSpend": 9000,
+    "priceElasticity": 1.0,
+    "baseMarketingSpendPerQuarter": 9000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 6,
+    "dioDays": 0,
+    "dpoDays": 22,
+    "prepaidInsuranceMonths": 12,
+    "securityDepositMonths": 0,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.1315,
+  "workersCompPct": 0.04,
+  "offersBenefits": false,
+  "seasonality": [
+    0.92,
+    1.08,
+    1.06,
+    0.94
+  ],
+  "monthlySeasonalWeight": [
+    0.88,
+    0.9,
+    0.98,
+    1.04,
+    1.1,
+    1.1,
+    1.1,
+    1.06,
+    1.02,
+    0.96,
+    0.94,
+    0.92
+  ],
+  "typicalCapex": [
+    {
+      "label": "Storage buildings",
+      "category": "REAL_PROPERTY",
+      "cost": 3200000,
+      "usefulLifeYears": 39
+    },
+    {
+      "label": "Gates, cameras & office fit-out",
+      "category": "EQUIPMENT",
+      "cost": 180000,
+      "usefulLifeYears": 10
+    }
+  ],
+  "plausibility": {
+    "ebitdaMarginPct": {
+      "low": 0.18,
+      "high": 0.45,
+      "source": "Self Storage Association industry survey \u2014 note the published 60%+ figures are property-level NOI; this line is full EBITDA after owner compensation, management fee, insurance and property tax"
+    }
+  },
+  "monthlyRent": 0,
+  "preOpening": {
+    "payrollAndTraining": 25000,
+    "marketing": 35000,
+    "permitsAndLegal": 60000
+  },
+  "generalLiabilityInsurancePerYear": 14000,
+  "propertyInsurancePerYear": 42000,
+  "accountingAndLegalPerYear": 9000,
+  "softwareAndPosPerYear": 8000,
+  "permitsAndLicensesPerYear": 5000,
+  "utilitiesPerQuarter": 7000,
+  "ownerCompPerYear": 70000,
+  "badDebtPctOfRevenue": 0.018,
+  "repairsPctOfRevenue": 0.02,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.9
+}

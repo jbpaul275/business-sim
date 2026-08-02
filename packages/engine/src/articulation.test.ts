@@ -43,13 +43,12 @@ function buildWorld(params: {
   const model = buildModelFromTemplate({
     businessName: 'Property Case',
     template,
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: params.seats,
       turnsPerDay: params.turnsPerDay,
       addressableTrafficPerQuarter: params.traffic,
       captureRate: params.captureRate,
-      avgTicket: fromDisplay(params.ticket),
+      price: fromDisplay(params.ticket),
       skuCount: params.skuCount,
     },
     marketingSpendPerQuarter: fromDisplay(params.marketing),

@@ -18,13 +18,12 @@ function world(): WorldState {
   const model = buildModelFromTemplate({
     businessName: 'Replay Test',
     template: getSeedTemplate('full_service_restaurant'),
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: 64,
       turnsPerDay: 2,
       addressableTrafficPerQuarter: 180_000,
       captureRate: 0.05,
-      avgTicket: fromDisplay(42),
+      price: fromDisplay(42),
     },
     equityInjection: fromDisplay(400_000),
     debt: [{ kind: 'REVOLVER', principal: fromDisplay(100_000), termQuarters: 40 }],

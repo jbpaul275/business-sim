@@ -10,13 +10,12 @@ function model(): BusinessModel {
   return buildModelFromTemplate({
     businessName: 'Validation Test',
     template: getSeedTemplate('full_service_restaurant'),
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: 64,
       turnsPerDay: 2,
       addressableTrafficPerQuarter: 180_000,
       captureRate: 0.05,
-      avgTicket: fromDisplay(42),
+      price: fromDisplay(42),
     },
     equityInjection: fromDisplay(350_000),
   });
@@ -71,13 +70,12 @@ describe('the omission guard (§4.6)', () => {
     const m = buildModelFromTemplate({
       businessName: 'No Owner Comp',
       template: getSeedTemplate('full_service_restaurant'),
-      stream: {
-        archetype: 'TRAFFIC',
+      scale: {
         seats: 64,
         turnsPerDay: 2,
         addressableTrafficPerQuarter: 180_000,
         captureRate: 0.05,
-        avgTicket: fromDisplay(42),
+        price: fromDisplay(42),
       },
       equityInjection: fromDisplay(350_000),
       acknowledgedZeroes: new Set(['og_owner_comp']),

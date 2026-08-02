@@ -53,13 +53,12 @@ function restaurantWorld(overrides: {
   const model = buildModelFromTemplate({
     businessName: 'Test',
     template,
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: overrides.seats ?? 64,
       turnsPerDay: overrides.turns ?? 2,
       addressableTrafficPerQuarter: overrides.traffic ?? 180_000,
       captureRate: 0.05,
-      avgTicket: fromDisplay(overrides.ticket ?? 42),
+      price: fromDisplay(overrides.ticket ?? 42),
     },
     marketingSpendPerQuarter: fromDisplay(overrides.marketing ?? 8_000),
     equityInjection: fromDisplay(overrides.equity ?? 500_000),

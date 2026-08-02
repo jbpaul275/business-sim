@@ -1,6 +1,6 @@
 import { fromDisplay } from '@bizsim/money';
 import { buildModelFromTemplate, createWorld, createWorldConfig } from '@bizsim/engine';
-import type { WorldState } from '@bizsim/schemas';
+import type { Archetype, WorldState } from '@bizsim/schemas';
 import { getSeedTemplate } from '@bizsim/seeds';
 
 /**
@@ -18,13 +18,12 @@ export function referenceRestaurant(): WorldState {
     businessName: 'Reference Restaurant',
     template,
     legalForm: 'LLC_PASSTHROUGH',
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: 64,
       turnsPerDay: 2.0,
       addressableTrafficPerQuarter: 180_000,
       captureRate: 0.05,
-      avgTicket: fromDisplay(42),
+      price: fromDisplay(42),
     },
     marketingSpendPerQuarter: fromDisplay(8_000),
     equityInjection: fromDisplay(350_000),
@@ -54,13 +53,12 @@ export function growthCashCrunch(): WorldState {
     businessName: 'Growth Cash Crunch',
     template,
     legalForm: 'LLC_PASSTHROUGH',
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: 200,
       turnsPerDay: 3.0,
       addressableTrafficPerQuarter: 900_000,
       captureRate: 0.05,
-      avgTicket: fromDisplay(42),
+      price: fromDisplay(42),
     },
     marketingSpendPerQuarter: fromDisplay(40_000),
     equityInjection: fromDisplay(150_000),
@@ -90,13 +88,12 @@ export function understaffedRestaurant(): WorldState {
   const model = buildModelFromTemplate({
     businessName: 'Understaffed Restaurant',
     template,
-    stream: {
-      archetype: 'TRAFFIC',
+    scale: {
       seats: 200,
       turnsPerDay: 3.0,
       addressableTrafficPerQuarter: 600_000,
       captureRate: 0.05,
-      avgTicket: fromDisplay(42),
+      price: fromDisplay(42),
     },
     equityInjection: fromDisplay(600_000),
   });
@@ -112,8 +109,56 @@ export function understaffedRestaurant(): WorldState {
   });
 }
 
+/**
+ * One reference scenario per archetype, so seed calibration (§13.3) can be
+ * driven from the command line rather than from a test runner. Appendix A
+ * records three iterations to land a single template in band; doing that
+ * eleven more times without a harness is eleven rounds of clicking.
+ */
+function fromTemplate(
+  id: string,
+  name: string,
+  archetype: Archetype,
+  equity: number,
+  household: number,
+  debt: { kind: 'SBA_7A' | 'REVOLVER'; principal: number; termQuarters: number }[] = [],
+): () => WorldState {
+  return () => {
+    const model = buildModelFromTemplate({
+      businessName: name,
+      template: getSeedTemplate(id),
+      archetype,
+      equityInjection: fromDisplay(equity),
+      debt: debt.map((d) => ({
+        kind: d.kind,
+        principal: fromDisplay(d.principal),
+        termQuarters: d.termQuarters,
+      })),
+    });
+    return createWorld({
+      id,
+      playerId: 'reference-player',
+      config: createWorldConfig({ startMode: 'FREEPLAY', customCapital: fromDisplay(household) }),
+      models: [model],
+    });
+  };
+}
+
 export const SCENARIOS: Record<string, () => WorldState> = {
   restaurant: referenceRestaurant,
   'cash-crunch': growthCashCrunch,
   understaffed: understaffedRestaurant,
+  services: fromTemplate('professional_services_firm', 'Reference Agency', 'UTILIZATION', 350_000, 750_000, [
+    { kind: 'REVOLVER', principal: 150_000, termQuarters: 40 },
+  ]),
+  ecommerce: fromTemplate('ecommerce_dtc_brand', 'Reference DTC Brand', 'UNITS_CAC', 500_000, 900_000, [
+    { kind: 'REVOLVER', principal: 150_000, termQuarters: 40 },
+  ]),
+  saas: fromTemplate('b2b_saas', 'Reference SaaS', 'SUBSCRIPTION', 5_000_000, 5_400_000),
+  storage: fromTemplate('self_storage', 'Reference Storage', 'OCCUPANCY', 1_900_000, 2_400_000, [
+    { kind: 'SBA_7A', principal: 2_800_000, termQuarters: 100 },
+  ]),
+  contractor: fromTemplate('general_contractor', 'Reference Contractor', 'PROJECT_BACKLOG', 900_000, 1_300_000, [
+    { kind: 'REVOLVER', principal: 400_000, termQuarters: 40 },
+  ]),
 };

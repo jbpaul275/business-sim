@@ -1,5 +1,10 @@
 import { zSeedTemplate, type SeedTemplate } from '@bizsim/schemas';
 import fullServiceRestaurant from '../data/full_service_restaurant.json' with { type: 'json' };
+import professionalServicesFirm from '../data/professional_services_firm.json' with { type: 'json' };
+import ecommerceDtcBrand from '../data/ecommerce_dtc_brand.json' with { type: 'json' };
+import b2bSaas from '../data/b2b_saas.json' with { type: 'json' };
+import selfStorage from '../data/self_storage.json' with { type: 'json' };
+import generalContractor from '../data/general_contractor.json' with { type: 'json' };
 
 /**
  * Seed templates — spec §4.7. Stored as data, not code, so they can be revised
@@ -10,12 +15,20 @@ import fullServiceRestaurant from '../data/full_service_restaurant.json' with { 
  * cost side, and an out-of-band value is what turns the register from a passive
  * log into an active reviewer.
  *
- * MVP target is 12+ templates (§4.7). This is the calibrated first one; the
- * remaining eleven are M2 content work, and calibration — not authoring — is
- * the schedule risk. See docs/plan/02-milestones.md.
+ * MVP target is 12+ templates (§4.7). Six are here — one per archetype, so
+ * every archetype is exercised by the property and plausibility suites. The
+ * remaining six are M2 content work, and calibration, not authoring, is the
+ * schedule risk. See docs/plan/02-milestones.md.
  */
 
-const RAW: unknown[] = [fullServiceRestaurant];
+const RAW: unknown[] = [
+  fullServiceRestaurant,
+  professionalServicesFirm,
+  ecommerceDtcBrand,
+  b2bSaas,
+  selfStorage,
+  generalContractor,
+];
 
 const templates = new Map<string, SeedTemplate>();
 for (const raw of RAW) {

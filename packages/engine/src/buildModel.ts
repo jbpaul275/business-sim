@@ -1,46 +1,61 @@
 import { fromDisplay, mulRate, type Money } from '@bizsim/money';
 import {
+  ARCHETYPE_DRIVER,
   DEFAULT_MAINTENANCE_PCT,
   type Archetype,
+  type ArchetypeParams,
   type Assumption,
   type BusinessModel,
   type CostStructure,
+  type CostDefault,
   type LegalForm,
   type RevenueStreamSpec,
   type SeedTemplate,
+  type StatementLine,
+  type VariableActivityCost,
+  type VariableRevenueCost,
   type StepFixedCost,
+  type FixedPeriodCost,
 } from '@bizsim/schemas';
 import { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
 
 /**
  * Build a complete `BusinessModel` from a seed template plus a handful of scale
- * inputs.
+ * inputs. This is model synthesis WITHOUT the LLM.
  *
- * This is model synthesis WITHOUT the LLM. M3 replaces the caller — an LLM
- * emits archetype choice, stream parameters and cost lines, and the engine
- * fills the rest from the template exactly as it does here. Keeping the path
- * engine-side means seed calibration (§13.3), golden files (§13.2) and the
- * property suite (§13.1) can all run before a single prompt exists, which is
- * what lets M1 and M2 ship without an LLM at all.
+ * M3 replaces the caller, not this file: an LLM emits archetype choice, stream
+ * parameters and cost lines, and the engine fills the rest from the template
+ * exactly as it does here. Keeping the path engine-side is what lets seed
+ * calibration (§13.3), golden files (§13.2) and the property suite (§13.1) all
+ * run before a single prompt exists.
+ *
+ * Everything archetype-specific reads from template data rather than from code
+ * here, which is the point of §4.7: adding a template is a JSON change, not a
+ * deploy. The only per-archetype code is `streamParams`, which shapes a flat
+ * bag of defaults into the right discriminated union.
  */
 
-export interface TrafficBuildInput {
-  archetype: 'TRAFFIC';
-  seats: number;
+export interface ScaleInput {
+  /** Per-archetype scale knobs. Anything omitted falls back to the template. */
+  seats?: number;
   turnsPerDay?: number;
-  addressableTrafficPerQuarter: number;
+  addressableTrafficPerQuarter?: number;
   captureRate?: number;
-  avgTicket?: Money;
   skuCount?: number;
+  demandHoursPerQuarter?: number;
+  units?: number;
+  bidsSubmittedPerQuarter?: number;
+  executionCapacityPerQuarter?: Money;
+  /** The archetype's price field (§3.0.1). */
+  price?: Money;
 }
-
-export type BuildInput = TrafficBuildInput;
 
 export interface BuildModelOptions {
   businessName: string;
   template: SeedTemplate;
+  archetype?: Archetype;
   legalForm?: LegalForm;
-  stream: BuildInput;
+  scale?: ScaleInput;
   marketingSpendPerQuarter?: Money;
   equityInjection: Money;
   debt?: { kind: 'SBA_7A' | 'AMORTIZING' | 'REVOLVER'; principal: Money; termQuarters: number }[];
@@ -48,20 +63,23 @@ export interface BuildModelOptions {
   acknowledgedZeroes?: ReadonlySet<string>;
 }
 
-let assumptionSeq = 0;
-const resetAssumptions = (): void => {
-  assumptionSeq = 0;
-};
+// ---------------------------------------------------------------------------
+// Assumption registration
+// ---------------------------------------------------------------------------
+
+interface AssumptionSink {
+  next: number;
+  out: Assumption[];
+}
 
 function assume(
-  out: Assumption[],
+  sink: AssumptionSink,
   path: string,
   label: string,
   value: number | Money,
   opts: {
     category: Assumption['category'];
     unit: Assumption['unit'];
-    isMoney?: boolean;
     range?: { low: number; high: number };
     provenance?: Assumption['provenance'];
     sourceNote: string;
@@ -69,16 +87,19 @@ function assume(
   },
 ): void {
   const numeric = typeof value === 'bigint' ? Number(value) / 100 : value;
-  const range = opts.range ?? { low: numeric * 0.7, high: numeric * 1.3 };
-  out.push({
-    id: `a${(assumptionSeq += 1)}`,
+  const range = opts.range ?? {
+    low: numeric >= 0 ? numeric * 0.7 : numeric * 1.3,
+    high: numeric >= 0 ? numeric * 1.3 : numeric * 0.7,
+  };
+  sink.out.push({
+    id: `a${(sink.next += 1)}`,
     businessId: '',
     path,
     label,
     category: opts.category,
     value,
     unit: opts.unit,
-    isMoney: opts.isMoney ?? typeof value === 'bigint',
+    isMoney: typeof value === 'bigint',
     range,
     provenance: opts.provenance ?? 'BENCHMARK',
     sourceNote: opts.sourceNote,
@@ -90,196 +111,348 @@ function assume(
   });
 }
 
-export function buildModelFromTemplate(options: BuildModelOptions): BusinessModel {
-  resetAssumptions();
-  const t = options.template;
-  const assumptions: Assumption[] = [];
-  const defaults = t.streamParamDefaults;
+const humanise = (key: string): string =>
+  key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/ Pct$/, ' %')
+    .trim();
 
+/** Infer a unit from the parameter name, so templates do not have to declare one. */
+function unitFor(key: string, value: number | Money): Assumption['unit'] {
+  if (typeof value === 'bigint') return 'USD';
+  if (/Days$/.test(key)) return 'days';
+  if (/Hours/.test(key)) return 'hours';
+  if (/Years$/.test(key)) return 'years';
+  if (/(Rate|Pct|occupancy|Utilization|utilisation|churn|attrition)/i.test(key)) return 'pct';
+  if (/(Count|units|seats|Headcount|bids)/i.test(key)) return 'count';
+  return 'ratio';
+}
+
+// ---------------------------------------------------------------------------
+// Stream parameters
+// ---------------------------------------------------------------------------
+
+function streamParams(
+  archetype: Archetype,
+  template: SeedTemplate,
+  scale: ScaleInput,
+): ArchetypeParams {
+  const d = template.streamParamDefaults;
   const num = (key: string, fallback: number): number => {
-    const v = defaults[key];
+    const v = d[key];
     return typeof v === 'number' ? v : fallback;
   };
+  const cash = (key: string, fallback: number): Money => fromDisplay(num(key, fallback));
+
+  switch (archetype) {
+    case 'TRAFFIC': {
+      const avgTicket = scale.price ?? cash('avgTicket', 30);
+      return {
+        kind: 'TRAFFIC',
+        addressableTrafficPerQuarter:
+          scale.addressableTrafficPerQuarter ?? num('addressableTrafficPerQuarter', 150_000),
+        captureRate: scale.captureRate ?? num('captureRate', 0.04),
+        avgTicket,
+        referencePrice: avgTicket,
+        operatingDaysPerQuarter: num('operatingDaysPerQuarter', 91),
+        capacityModel: {
+          kind: 'SEAT_TURNS',
+          seats: scale.seats ?? num('seats', 60),
+          turnsPerDay: scale.turnsPerDay ?? num('turnsPerDay', 2),
+        },
+        peakConcentration: num('peakConcentration', 0.45),
+        skuCount: scale.skuCount ?? num('skuCount', 40),
+        baselineSkuCount: num('baselineSkuCount', 40),
+      };
+    }
+    case 'UTILIZATION': {
+      const rate = scale.price ?? cash('blendedHourlyRate', 150);
+      return {
+        kind: 'UTILIZATION',
+        billableHoursPerHeadPerQuarter: num('billableHoursPerHeadPerQuarter', 480),
+        targetUtilization: num('targetUtilization', 0.7),
+        blendedHourlyRate: rate,
+        referencePrice: rate,
+        // The number services founders most reliably forget. Never 1.0.
+        realizationRate: num('realizationRate', 0.9),
+        demandHoursPerQuarter:
+          scale.demandHoursPerQuarter ?? num('demandHoursPerQuarter', 4_000),
+      };
+    }
+    case 'UNITS_CAC': {
+      const aov = scale.price ?? cash('avgOrderValue', 85);
+      return {
+        kind: 'UNITS_CAC',
+        baseCac: cash('baseCac', 38),
+        cacInflationCoefficient: num('cacInflationCoefficient', 0.35),
+        avgOrderValue: aov,
+        referencePrice: aov,
+        ordersPerNewCustomerFirstQuarter: num('ordersPerNewCustomerFirstQuarter', 1),
+        repeatPurchaseRatePerQuarter: num('repeatPurchaseRatePerQuarter', 0.25),
+        quarterlyCustomerAttrition: num('quarterlyCustomerAttrition', 0.12),
+      };
+    }
+    case 'SUBSCRIPTION': {
+      const arpu = scale.price ?? cash('arpuPerQuarter', 300);
+      return {
+        kind: 'SUBSCRIPTION',
+        baseCac: cash('baseCac', 900),
+        cacInflationCoefficient: num('cacInflationCoefficient', 0.3),
+        arpuPerQuarter: arpu,
+        referencePrice: arpu,
+        quarterlyChurnRate: num('quarterlyChurnRate', 0.03),
+        setupFee: cash('setupFee', 0),
+        netRevenueRetention: num('netRevenueRetention', 1.02),
+        prepayMonths: num('prepayMonths', 0),
+      };
+    }
+    case 'OCCUPANCY': {
+      const rate = scale.price ?? cash('ratePerUnitPerQuarter', 330);
+      return {
+        kind: 'OCCUPANCY',
+        units: scale.units ?? num('units', 500),
+        stabilizedOccupancy: num('stabilizedOccupancy', 0.88),
+        ratePerUnitPerQuarter: rate,
+        referencePrice: rate,
+        concessionsPct: num('concessionsPct', 0.04),
+        ancillaryRevenuePctOfBase: num('ancillaryRevenuePctOfBase', 0.08),
+      };
+    }
+    case 'PROJECT_BACKLOG': {
+      const contract = scale.price ?? cash('avgContractValue', 320_000);
+      return {
+        kind: 'PROJECT_BACKLOG',
+        bidsSubmittedPerQuarter:
+          scale.bidsSubmittedPerQuarter ?? num('bidsSubmittedPerQuarter', 9),
+        winRate: num('winRate', 0.2),
+        avgContractValue: contract,
+        referencePrice: contract,
+        executionCapacityPerQuarter:
+          scale.executionCapacityPerQuarter ?? cash('executionCapacityPerQuarter', 700_000),
+        retainagePct: num('retainagePct', 0.1),
+        retainageReleaseLagQuarters: num('retainageReleaseLagQuarters', 2),
+        progressBillingLagDays: num('progressBillingLagDays', 45),
+        changeOrderPctOfContract: num('changeOrderPctOfContract', 0.06),
+      };
+    }
+  }
+}
+
+/** A rough mature-demand figure, used only to size opening staffing. */
+function plannedDemand(params: ArchetypeParams, template: SeedTemplate): number {
+  const lift = 1 + template.modifierDefaults.marketingMaxLift * (1 - Math.exp(-1));
+  switch (params.kind) {
+    case 'TRAFFIC':
+      return params.addressableTrafficPerQuarter * params.captureRate * lift;
+    case 'UTILIZATION':
+      return params.demandHoursPerQuarter * lift;
+    // Acquisition-driven archetypes have no demand figure to read off the
+    // parameters, so the steady state implied by spend and churn stands in.
+    // Returning zero here would open the business at its minimum block count
+    // and then cap it there — a SaaS staffed for 120 accounts can never serve
+    // more than 120 accounts, because blocks do not auto-scale (§4.3). That is
+    // the under-staffing trap arriving through the front door.
+    case 'UNITS_CAC': {
+      const spend = Number(template.modifierDefaults.baseMarketingSpendPerQuarter);
+      const customers =
+        params.baseCac > 0n && params.quarterlyCustomerAttrition > 0
+          ? spend / Number(params.baseCac) / params.quarterlyCustomerAttrition
+          : 0;
+      return customers * params.repeatPurchaseRatePerQuarter * lift;
+    }
+    case 'SUBSCRIPTION': {
+      const spend = Number(template.modifierDefaults.baseMarketingSpendPerQuarter);
+      if (params.baseCac <= 0n || params.quarterlyChurnRate <= 0) return 0;
+      return (spend / Number(params.baseCac) / params.quarterlyChurnRate) * lift;
+    }
+    case 'OCCUPANCY':
+      return params.units * params.stabilizedOccupancy;
+    case 'PROJECT_BACKLOG':
+      return Number(params.executionCapacityPerQuarter);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cost structure, driven entirely by template data
+// ---------------------------------------------------------------------------
+
+function costsFromTemplate(
+  template: SeedTemplate,
+  archetype: Archetype,
+  demand: number,
+  load: number,
+): CostStructure {
+  const variableWithRevenue: VariableRevenueCost[] = [];
+  const variableWithActivity: VariableActivityCost[] = [];
+  const stepFixed: StepFixedCost[] = [];
+  const fixedPeriod: FixedPeriodCost[] = [];
+
+  const asMoney = (c: CostDefault): Money =>
+    typeof c.value === 'number' ? fromDisplay(c.value) : fromDisplay(c.value);
+  const asRate = (c: CostDefault): number =>
+    typeof c.value === 'number' ? c.value : Number(c.value);
+
+  for (const c of template.costDefaults) {
+    const statementLine = c.statementLine as StatementLine;
+    switch (c.class) {
+      case 'VARIABLE_REVENUE':
+        variableWithRevenue.push({
+          id: c.lineId,
+          label: c.label,
+          class: 'VARIABLE_REVENUE',
+          pctOfRevenue: asRate(c),
+          appliesToStreamIds: 'ALL',
+          statementLine,
+          accruable: c.accruable,
+        });
+        break;
+
+      case 'VARIABLE_ACTIVITY':
+        variableWithActivity.push({
+          id: c.lineId,
+          label: c.label,
+          class: 'VARIABLE_ACTIVITY',
+          costPerUnit: asMoney(c),
+          driver: c.driver ?? ARCHETYPE_DRIVER[archetype],
+          appliesToStreamIds: 'ALL',
+          statementLine,
+          accruable: c.accruable,
+        });
+        break;
+
+      case 'STEP_FIXED': {
+        const driver = c.driver ?? ARCHETYPE_DRIVER[archetype];
+        // Template capacities are authored in the natural unit — transactions,
+        // hours, units — except for the REVENUE driver, where the natural unit
+        // is dollars and the engine works in cents. Read literally, a crew that
+        // executes $450k a quarter looks like 450,000 cents and the model hires
+        // two hundred crews.
+        const capacityPerBlock =
+          driver === 'REVENUE'
+            ? Number(fromDisplay(c.capacityPerBlock ?? 1))
+            : (c.capacityPerBlock ?? 1);
+        const blockCost = asMoney(c);
+        stepFixed.push({
+          id: c.lineId,
+          label: c.label,
+          class: 'STEP_FIXED',
+          blockCostPerQuarter: blockCost,
+          capacity: { driver: driver as 'TRANSACTIONS', capacityPerBlock },
+          appliesToStreamIds: 'ALL',
+          minimumBlocks: c.minimumBlocks,
+          // Open staffed to planned mature demand. Blocks never auto-scale
+          // during play (§4.3) — growing is a player decision with a lead time
+          // — but nobody opens a 64-seat dining room with one cook, and
+          // starting short would bake the under-staffing trap into every
+          // scenario rather than testing for it.
+          currentBlocks: Math.max(
+            c.minimumBlocks,
+            capacityPerBlock > 0 ? Math.ceil(demand / capacityPerBlock) : c.minimumBlocks,
+          ),
+          pendingBlocks: 0,
+          addLeadTimeQuarters: 1,
+          // Default severance is four weeks of the block cost (§4.3).
+          removeSeverancePerBlock: mulRate(blockCost, 4 / 13),
+          isLabor: c.isLabor,
+          statementLine,
+        });
+        break;
+      }
+
+      case 'FIXED_PERIOD':
+        fixedPeriod.push({
+          id: c.lineId,
+          label: c.label,
+          class: 'FIXED_PERIOD',
+          amountPerQuarter: asMoney(c),
+          annualEscalatorPct: c.annualEscalatorPct,
+          startPeriod: 0,
+          renewalBehavior: 'AUTO_RENEW_AT_ESCALATOR',
+          statementLine,
+          accruable: c.accruable,
+          isLabor: c.isLabor,
+          isOwnerComp: false,
+          isPrepaidExpense: c.isPrepaidExpense,
+        });
+        break;
+    }
+  }
+
+  return { variableWithRevenue, variableWithActivity, stepFixed, fixedPeriod, payrollLoadPct: load };
+}
+
+// ---------------------------------------------------------------------------
+
+export function buildModelFromTemplate(options: BuildModelOptions): BusinessModel {
+  const t = options.template;
+  const archetype = options.archetype ?? t.defaultArchetypes[0] ?? 'TRAFFIC';
+  const scale = options.scale ?? {};
+  const sink: AssumptionSink = { next: 0, out: [] };
 
   const streamId = 's1';
-  const marketing = options.marketingSpendPerQuarter ?? t.modifierDefaults.baseMarketingSpendPerQuarter;
-  const avgTicket = options.stream.avgTicket ?? fromDisplay(num('avgTicket', 42));
-  const captureRate = options.stream.captureRate ?? num('captureRate', 0.05);
-  const skuCount = options.stream.skuCount ?? num('skuCount', 40);
+  const params = streamParams(archetype, t, scale);
+  const marketing =
+    options.marketingSpendPerQuarter ?? t.modifierDefaults.baseMarketingSpendPerQuarter;
 
   const stream: RevenueStreamSpec = {
     id: streamId,
     label: options.businessName,
-    archetype: 'TRAFFIC',
-    params: {
-      kind: 'TRAFFIC',
-      addressableTrafficPerQuarter: options.stream.addressableTrafficPerQuarter,
-      captureRate,
-      avgTicket,
-      referencePrice: avgTicket,
-      operatingDaysPerQuarter: num('operatingDaysPerQuarter', 91),
-      capacityModel: {
-        kind: 'SEAT_TURNS',
-        seats: options.stream.seats,
-        turnsPerDay: options.stream.turnsPerDay ?? num('turnsPerDay', 2),
-      },
-      peakConcentration: num('peakConcentration', 0.45),
-      skuCount,
-      baselineSkuCount: num('baselineSkuCount', 40),
-    },
+    archetype,
+    params,
     modifiers: { ...t.modifierDefaults },
     marketingSpendPerQuarter: marketing,
     seasonality: t.seasonality,
     launchPeriod: 0,
   };
 
+  // ── Assumptions for every stream parameter (§10.2) ───────────────────────
   const base = `streams.${streamId}`;
-  assume(assumptions, `${base}.params.addressableTrafficPerQuarter`, 'Trade-area traffic per quarter', options.stream.addressableTrafficPerQuarter, {
-    category: 'REVENUE',
-    unit: 'count',
-    sourceNote: 'Foot and vehicle traffic in the trade area, per site study.',
-    provenance: 'PLAYER_ASSUMED',
-  });
-  assume(assumptions, `${base}.params.captureRate`, 'Capture rate', captureRate, {
-    category: 'REVENUE',
-    unit: 'pct',
-    range: { low: 0.02, high: 0.08 },
-    sourceNote: 'Share of trade-area traffic that transacts in a given quarter.',
-    benchmarkBand: { low: 0.02, high: 0.08, source: 'IBISWorld 72251' },
-  });
-  assume(assumptions, `${base}.params.avgTicket`, 'Average ticket', avgTicket, {
-    category: 'REVENUE',
-    unit: 'USD',
-    sourceNote: 'Blended check average across lunch and dinner service.',
-    benchmarkBand: { low: 22, high: 65, source: 'NRA Restaurant Operations Report' },
-  });
-  assume(assumptions, `${base}.params.referencePrice`, 'Reference price at lock', avgTicket, {
-    category: 'REVENUE',
-    unit: 'USD',
-    sourceNote: 'Elasticity anchor, snapshotted at concept lock.',
-    provenance: 'CATALOG',
-  });
-  assume(assumptions, `${base}.params.operatingDaysPerQuarter`, 'Operating days per quarter', stream.params.kind === 'TRAFFIC' ? stream.params.operatingDaysPerQuarter : 91, {
-    category: 'REVENUE',
-    unit: 'days',
-    range: { low: 60, high: 91 },
-    sourceNote: 'Seven-day service less holiday closures.',
-  });
-  assume(assumptions, `${base}.params.capacityModel.seats`, 'Seats', options.stream.seats, {
-    category: 'CAPEX',
-    unit: 'count',
-    sourceNote: 'Dining room seat count at the planned layout.',
-    provenance: 'PLAYER_SOURCED',
-  });
-  assume(assumptions, `${base}.params.capacityModel.turnsPerDay`, 'Turns per day', options.stream.turnsPerDay ?? num('turnsPerDay', 2), {
-    category: 'REVENUE',
-    unit: 'ratio',
-    range: { low: 1.2, high: 3.5 },
-    sourceNote: 'Seat turns across the service day.',
-    benchmarkBand: { low: 1.2, high: 3.0, source: 'NRA Restaurant Operations Report' },
-  });
-  assume(assumptions, `${base}.params.peakConcentration`, 'Peak-hour concentration', num('peakConcentration', 0.45), {
-    category: 'REVENUE',
-    unit: 'pct',
-    range: { low: 0.3, high: 0.6 },
-    sourceNote: 'Share of demand arriving in peak service hours.',
-  });
-  assume(assumptions, `${base}.params.skuCount`, 'Menu breadth', skuCount, {
-    category: 'REVENUE',
-    unit: 'count',
-    range: { low: 10, high: 300 },
-    sourceNote: 'Menu item count; drives service complexity and throughput.',
-    provenance: 'PLAYER_SOURCED',
-  });
-  assume(assumptions, `${base}.params.baselineSkuCount`, 'Baseline menu breadth', num('baselineSkuCount', 40), {
-    category: 'REVENUE',
-    unit: 'count',
-    sourceNote: 'Template normal breadth; the complexity factor is relative to this.',
-    provenance: 'CATALOG',
-  });
-  for (const [key, value] of Object.entries(t.modifierDefaults)) {
-    assume(assumptions, `${base}.modifiers.${key}`, humanise(key), value as number | Money, {
+  for (const [key, value] of Object.entries(params)) {
+    if (key === 'kind') continue;
+    if (key === 'capacityModel') {
+      for (const [ck, cv] of Object.entries(value as Record<string, unknown>)) {
+        if (ck === 'kind') continue;
+        assume(sink, `${base}.params.capacityModel.${ck}`, humanise(ck), cv as number, {
+          category: 'CAPEX',
+          unit: unitFor(ck, cv as number),
+          sourceNote: `Seed default for ${t.label}.`,
+        });
+      }
+      continue;
+    }
+    assume(sink, `${base}.params.${key}`, humanise(key), value as number | Money, {
       category: 'REVENUE',
-      unit: typeof value === 'bigint' ? 'USD' : 'ratio',
+      unit: unitFor(key, value as number | Money),
+      sourceNote:
+        key === 'referencePrice'
+          ? 'Elasticity anchor, snapshotted at concept lock.'
+          : `Seed default for ${t.label}.`,
+      ...(key === 'referencePrice' ? { provenance: 'CATALOG' as const } : {}),
+    });
+  }
+  for (const [key, value] of Object.entries(t.modifierDefaults)) {
+    assume(sink, `${base}.modifiers.${key}`, humanise(key), value as number | Money, {
+      category: 'REVENUE',
+      unit: unitFor(key, value as number | Money),
       sourceNote: `Seed default for ${t.label}.`,
     });
   }
-  assume(assumptions, `${base}.marketingSpendPerQuarter`, 'Marketing spend per quarter', marketing, {
+  assume(sink, `${base}.marketingSpendPerQuarter`, 'Marketing spend per quarter', marketing, {
     category: 'COST',
     unit: 'USD',
     sourceNote: 'Player-set marketing budget for this stream.',
     provenance: 'PLAYER_ASSUMED',
   });
-  assume(assumptions, `${base}.seasonality`, 'Seasonality profile', 1, {
+  assume(sink, `${base}.seasonality`, 'Seasonality profile', 1, {
     category: 'REVENUE',
     unit: 'ratio',
     sourceNote: 'Quarterly seasonal index, averaging 1.00.',
   });
 
-  // ── Cost structure ───────────────────────────────────────────────────────
+  // ── Costs ───────────────────────────────────────────────────────────────
   const load = payrollLoadPct(t.workersCompPct, t.offersBenefits);
-
-  // Open staffed to planned mature demand rather than to some arbitrary count.
-  // Blocks never auto-scale during play (§4.3) — growing is a player decision
-  // with a lead time — but a founder does not open a 64-seat dining room with
-  // one cook, and starting deliberately short would bake the under-staffing
-  // trap into every scenario rather than testing for it.
-  const matureDemand =
-    options.stream.addressableTrafficPerQuarter *
-    captureRate *
-    (1 + t.modifierDefaults.marketingMaxLift * (1 - Math.exp(-1)));
-
-  const stepFixed: StepFixedCost[] = [
-    makeStepBlock('kitchen_labor', 'Kitchen line', fromDisplay(13_000), 2000, 1, matureDemand),
-    makeStepBlock('front_of_house', 'Front of house', fromDisplay(8_000), 2600, 1, matureDemand),
-  ];
-
-  const costs: CostStructure = {
-    payrollLoadPct: load,
-    variableWithRevenue: [
-      {
-        id: 'food_cost',
-        label: 'Food & beverage cost',
-        class: 'VARIABLE_REVENUE',
-        pctOfRevenue: 0.3,
-        appliesToStreamIds: 'ALL',
-        statementLine: 'COGS',
-        accruable: true,
-      },
-    ],
-    variableWithActivity: [],
-    stepFixed,
-    fixedPeriod: [
-      {
-        id: 'rent',
-        label: 'Rent',
-        class: 'FIXED_PERIOD',
-        amountPerQuarter: mulRate(t.monthlyRent, 3),
-        annualEscalatorPct: 0.03,
-        startPeriod: 0,
-        renewalBehavior: 'AUTO_RENEW_AT_ESCALATOR',
-        statementLine: 'OCCUPANCY',
-        accruable: true,
-        isLabor: false,
-        isOwnerComp: false,
-        isPrepaidExpense: false,
-      },
-      {
-        id: 'management',
-        label: 'General manager',
-        class: 'FIXED_PERIOD',
-        amountPerQuarter: fromDisplay(13_000),
-        annualEscalatorPct: 0.03,
-        startPeriod: 0,
-        renewalBehavior: 'AUTO_RENEW_AT_ESCALATOR',
-        statementLine: 'LABOR',
-        accruable: false,
-        isLabor: true,
-        isOwnerComp: false,
-        isPrepaidExpense: false,
-      },
-    ],
-  };
+  const costs = costsFromTemplate(t, archetype, plannedDemand(params, t), load);
 
   const capex = t.typicalCapex.map((c) => ({
     label: c.label,
@@ -293,9 +466,9 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
 
   const withGuard = injectOmissionGuardLines(costs, {
     template: t,
-    archetypes: ['TRAFFIC'] as Archetype[],
-    hasLocation: true,
-    hasEmployees: true,
+    archetypes: [archetype],
+    hasLocation: t.monthlyRent > 0n,
+    hasEmployees: costs.stepFixed.some((c) => c.isLabor),
     assets: capex.map((c) => ({
       grossCost: mulRate(c.grossCost, c.quantity),
       maintenancePctOfGrossPerYear: DEFAULT_MAINTENANCE_PCT[c.category],
@@ -304,51 +477,50 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
   });
 
   // Every cost line, injected or not, needs a registered assumption (§10.2).
+  const bandFor = (lineId: string): { low: number; high: number; source: string } | undefined =>
+    t.costDefaults.find((c) => c.lineId === lineId)?.benchmarkBand;
+
   for (const cost of withGuard.variableWithRevenue) {
-    assume(assumptions, `costs.${cost.id}.pctOfRevenue`, cost.label, cost.pctOfRevenue, {
+    assume(sink, `costs.${cost.id}.pctOfRevenue`, cost.label, cost.pctOfRevenue, {
       category: 'COST',
       unit: 'pct',
-      sourceNote: `Seed default for ${t.label}.`,
-      ...(cost.id === 'food_cost'
-        ? {
-            benchmarkBand: {
-              low: 0.28,
-              high: 0.32,
-              source: 'NRA Restaurant Operations Report',
-            },
-          }
-        : {}),
+      sourceNote:
+        t.costDefaults.find((c) => c.lineId === cost.id)?.sourceNote ??
+        `Injected by the omission guard for ${t.label}.`,
+      ...(bandFor(cost.id) ? { benchmarkBand: bandFor(cost.id)! } : {}),
     });
   }
   for (const cost of withGuard.variableWithActivity) {
-    assume(assumptions, `costs.${cost.id}.costPerUnit`, cost.label, cost.costPerUnit, {
+    assume(sink, `costs.${cost.id}.costPerUnit`, cost.label, cost.costPerUnit, {
       category: 'COST',
       unit: 'USD',
-      sourceNote: `Seed default for ${t.label}.`,
+      sourceNote: t.costDefaults.find((c) => c.lineId === cost.id)?.sourceNote ?? '',
     });
   }
   for (const cost of withGuard.stepFixed) {
-    assume(assumptions, `costs.${cost.id}.blockCostPerQuarter`, `${cost.label} — cost per block`, cost.blockCostPerQuarter, {
+    const note = t.costDefaults.find((c) => c.lineId === cost.id)?.sourceNote ?? '';
+    assume(sink, `costs.${cost.id}.blockCostPerQuarter`, `${cost.label} — cost per block`, cost.blockCostPerQuarter, {
       category: 'COST',
       unit: 'USD',
-      sourceNote: `Seed default for ${t.label}.`,
+      sourceNote: note,
+      ...(bandFor(cost.id) ? { benchmarkBand: bandFor(cost.id)! } : {}),
     });
-    assume(assumptions, `costs.${cost.id}.capacityPerBlock`, `${cost.label} — capacity per block`, cost.capacity.capacityPerBlock, {
+    assume(sink, `costs.${cost.id}.capacityPerBlock`, `${cost.label} — capacity per block`, cost.capacity.capacityPerBlock, {
       category: 'COST',
       unit: 'count',
       sourceNote: 'Volume one block supports before the next step is required.',
     });
   }
   for (const cost of withGuard.fixedPeriod) {
-    assume(assumptions, `costs.${cost.id}.amountPerQuarter`, cost.label, cost.amountPerQuarter, {
+    assume(sink, `costs.${cost.id}.amountPerQuarter`, cost.label, cost.amountPerQuarter, {
       category: 'COST',
       unit: 'USD',
-      sourceNote: `Seed default for ${t.label}.`,
-      ...(cost.id === 'rent'
-        ? { benchmarkBand: { low: 15_000, high: 60_000, source: 'IBISWorld 72251' } }
-        : {}),
+      sourceNote:
+        t.costDefaults.find((c) => c.lineId === cost.id)?.sourceNote ??
+        `Injected by the omission guard for ${t.label}.`,
+      ...(bandFor(cost.id) ? { benchmarkBand: bandFor(cost.id)! } : {}),
     });
-    assume(assumptions, `costs.${cost.id}.annualEscalatorPct`, `${cost.label} — annual escalator`, cost.annualEscalatorPct, {
+    assume(sink, `costs.${cost.id}.annualEscalatorPct`, `${cost.label} — annual escalator`, cost.annualEscalatorPct, {
       category: 'COST',
       unit: 'pct',
       range: { low: 0, high: 0.05 },
@@ -356,7 +528,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       provenance: 'CATALOG',
     });
   }
-  assume(assumptions, 'costs.payrollLoadPct', 'Payroll load', load, {
+  assume(sink, 'costs.payrollLoadPct', 'Payroll load', load, {
     category: 'COST',
     unit: 'pct',
     range: { low: 0.1, high: 0.32 },
@@ -368,14 +540,14 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
 
   const workingCapital = t.workingCapitalDefaults;
   for (const [key, value] of Object.entries(workingCapital)) {
-    assume(assumptions, `workingCapital.${key}`, humanise(key), value as number, {
+    assume(sink, `workingCapital.${key}`, humanise(key), value as number, {
       category: 'WORKING_CAPITAL',
-      unit: key.endsWith('Days') ? 'days' : key.endsWith('Months') ? 'years' : 'pct',
+      unit: unitFor(key, value as number),
       sourceNote: `Seed default for ${t.label}.`,
     });
   }
   for (const c of capex) {
-    assume(assumptions, `capex.${c.label}.grossCost`, c.label, c.grossCost, {
+    assume(sink, `capex.${c.label}.grossCost`, c.label, c.grossCost, {
       category: 'CAPEX',
       unit: 'USD',
       sourceNote: c.sourceNote,
@@ -405,41 +577,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       permitsAndLegal: t.preOpening.permitsAndLegal,
     },
     monthlyRent: t.monthlyRent,
-    assumptions,
+    assumptions: sink.out,
     openNotes: [],
   };
 }
-
-function makeStepBlock(
-  id: string,
-  label: string,
-  blockCost: Money,
-  capacityPerBlock: number,
-  minimumBlocks: number,
-  plannedDemand: number,
-): StepFixedCost {
-  const currentBlocks = Math.max(minimumBlocks, Math.ceil(plannedDemand / capacityPerBlock));
-  return {
-    id,
-    label,
-    class: 'STEP_FIXED',
-    blockCostPerQuarter: blockCost,
-    capacity: { driver: 'TRANSACTIONS', capacityPerBlock },
-    appliesToStreamIds: 'ALL',
-    minimumBlocks,
-    currentBlocks,
-    pendingBlocks: 0,
-    addLeadTimeQuarters: 1,
-    // Default severance is four weeks of the block cost (§4.3).
-    removeSeverancePerBlock: mulRate(blockCost, 4 / 13),
-    isLabor: true,
-    statementLine: 'LABOR',
-  };
-}
-
-const humanise = (key: string): string =>
-  key
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, (c) => c.toUpperCase())
-    .replace(/Pct$/, '%')
-    .trim();
