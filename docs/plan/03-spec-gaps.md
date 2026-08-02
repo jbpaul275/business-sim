@@ -206,6 +206,77 @@ problem §16 Q4 raises. Add a schema-level bound so it is enforced once.
 
 ---
 
+## Found during implementation
+
+These were not visible from reading alone. Each one produced a real articulation
+failure or a nonsensical run, and each is fixed in `packages/engine`.
+
+## G-12 · `deferredOwnerComp` is missing from ΔNWC
+**Found: M1** · §5.2, §9.4
+
+§5.2 lists AR, retainage, inventory, prepaid, AP, accrued and deferred revenue.
+It omits `deferredOwnerComp`, which §2.4 puts on the balance sheet and §9.4 remedy 4 creates. It is a liability
+that funds operations exactly as deferred revenue does, so the moment the remedy fires,
+`endingCash === beginningCash + CFO + CFI + CFF` stops holding.
+
+**Resolved:** included in ΔNWC.
+
+## G-13 · Deferring owner comp must not also remove the expense
+**Found: M1** · §9.4
+
+The obvious reading of remedy 4 — drop the cost from the period — hands the business the relief twice: once as
+higher net income and again as a liability that releases cash through ΔNWC. Deferring $21k of pay produced $42k
+of cash.
+
+**Resolved:** the expense stays on the P&L and accrues to the liability. §9.4's own words settle it — the
+deferral "accrues as a liability, does not vanish". The work was done; the founder is owed for it.
+
+## G-14 · Debt origination fees have nowhere to land
+**Found: M1** · §8.1, §8.3
+
+§8.3 lists origination fees as a financing cash outflow. §8.1 has no line for them. Model it literally and cash
+leaves with nothing on the other side of the entry: the balance sheet is off by exactly the fee, forever. In a
+run with an SBA loan and a few crisis draws this surfaced as a $500 discrepancy a hundred periods in — long
+after the loan that caused it.
+
+**Resolved:** expensed to the `financingCosts` line added under G-7, then reclassified — added back within
+operating, subtracted within financing. Standard treatment for debt issuance costs; puts the fee where §8.3
+asks for it; ties.
+
+## G-15 · Crisis remedies fund the shortfall exactly, so the ladder never closes
+**Found: M1** · §9.4
+
+Every remedy induces a cost of its own: interest on the draw, an origination fee, a new lease payment. Raising
+exactly the shortfall therefore leaves a smaller shortfall behind. The sequence converges — $5,943 → $137 →
+$3.17 — but never reaches zero inside the three passes §9.4 allows, so a business three dollars short is
+declared insolvent.
+
+**Resolved:** remedies raise the shortfall plus 10% headroom, covering one quarter at the ladder's most
+expensive rate. Nobody draws a revolver to the last cent anyway.
+
+## G-16 · The lender of last resort has no limit, so nothing ever fails
+**Found: M1** · §9.4
+
+Neither emergency debt (remedy 5) nor the household's personal borrowing carries a ceiling in §9.4. Without
+one, a failing business simply accumulates debt at prime + 12% forever and the run never reaches the insolvency
+the spec is explicit the sim should be willing to show. A deliberately under-staffed reference business
+survived all ten years and finished $7.3M underwater, still marked `OPERATING`.
+
+**Resolved:** emergency debt is capped at roughly a year of revenue less existing debt; household borrowing is
+capped at the starting capital, as a proxy for the home equity and credit lines the founder began with. The
+same business now closes in year three with the founder down $297k — the honest end state.
+
+## G-17 · Factoring can sell receivables that do not exist
+**Found: M1** · §9.4
+
+Remedy 3 factors receivables and the AR balance is floored at zero afterwards. If the remedy is sized against
+the post-factoring balance — or against a balance smaller than the amount sold — the clamp silently swallows the
+difference and the cash raised has no offsetting entry.
+
+**Resolved:** the remedy is capped against gross receivables, computed before any factoring is applied.
+
+---
+
 ## Minor items — decide when reached, no recommendation needed
 
 | # | § | Item |

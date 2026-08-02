@@ -1,0 +1,14 @@
+{
+  "name": "@bizsim/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bizsim/money": "workspace:*",
+    "@bizsim/schemas": "workspace:*",
+    "@bizsim/seeds": "workspace:*"
+  }
+}

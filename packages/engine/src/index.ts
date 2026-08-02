@@ -1,0 +1,45 @@
+/**
+ * @bizsim/engine — the deterministic financial engine.
+ *
+ * Pure. No randomness, no Date.now(), no network, no filesystem. A tick is a
+ * pure function of (WorldState, Action[]) → (WorldState, StatementSet,
+ * AssertionResult[]), and that purity is what makes 40-period runs trustworthy
+ * and replay possible.
+ *
+ * The public surface is deliberately small — everything else is internal so the
+ * engine stays replaceable and the replay guarantee stays enforceable.
+ */
+
+export { tick, type TickOptions, type TickResult } from './tick.js';
+export { replay, replayFromGenesis, type ActionLogEntry } from './replay.js';
+export { validateBusinessModel } from './validate.js';
+export {
+  createWorld,
+  createWorldConfig,
+  computeMonthZeroOutlays,
+  clampFreeplay,
+  type CreateWorldInput,
+  type WorldConfigInput,
+} from './opening.js';
+export { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
+export { irr } from './metrics.js';
+
+// Exposed for the CLI, tests, seed calibration and the export's formula
+// emitter, all of which need to reproduce a single figure without running a
+// whole tick.
+export {
+  maturityRamp,
+  marketingMultiplier,
+  priceEffect,
+  serviceComplexityFactor,
+  seasonalityFactor,
+  quarterOfYear,
+} from './modifiers.js';
+export { annuityPayment, underwrite, DEBT_PRODUCTS } from './debt.js';
+export { computeTax, SECTION_179_CAP, SE_TAX_WAGE_BASE } from './tax.js';
+export { quarterlyDepreciation } from './depreciation.js';
+export { maintenanceReservePerQuarter, resolveCapacity } from './costs.js';
+export { deltaNetWorkingCapital, cashConversionCycle } from './workingCapital.js';
+export type { ComputationTrace } from './context.js';
+export type { CapacityResolution } from './costs.js';
+export { buildModelFromTemplate, type BuildModelOptions } from './buildModel.js';

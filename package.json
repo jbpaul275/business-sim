@@ -1,0 +1,26 @@
+{
+  "name": "business-sim",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:slow": "SLOW_TESTS=1 vitest run",
+    "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
+    "check": "pnpm typecheck && pnpm boundaries && pnpm test",
+    "sim": "tsx packages/sim-cli/src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "dependency-cruiser": "^16.9.0",
+    "fast-check": "^3.23.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

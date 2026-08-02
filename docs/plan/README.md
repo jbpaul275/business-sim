@@ -4,6 +4,7 @@ Planning documents for the MVP described in `docs/spec/business-sim-spec.md` (v1
 
 | Doc | Contents |
 |---|---|
+| [STATUS.md](./STATUS.md) | What is built, what is not, and how the reference run compares to Appendix A |
 | [01-architecture.md](./01-architecture.md) | Monorepo layout, package boundaries, numeric conventions, purity enforcement |
 | [02-milestones.md](./02-milestones.md) | M0–M8 breakdown: tasks, exit criteria, sizing, parallel tracks |
 | [03-spec-gaps.md](./03-spec-gaps.md) | Ambiguities and defects in the spec that need a decision before the affected code is written |
