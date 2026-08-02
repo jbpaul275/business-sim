@@ -4,7 +4,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 
 | Milestone | State | Notes |
 |---|---|---|
-| **M0 — Scaffold** | ✅ Done | pnpm workspace, strict TS, `@bizsim/money`, zod schemas, CI, boundary enforcement, `sim` CLI |
+| **M0 — Scaffold** | ✅ Done | pnpm workspace, strict TS, `@bizsim/money`, zod schemas, pre-push verification, boundary enforcement, `sim` CLI |
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | ⬜ Not started | `buildModelFromTemplate` is the engine-side seam the LLM replaces |
@@ -35,6 +35,12 @@ All four gating tests are green:
 106 tests. `pnpm check` runs typecheck, package boundaries and the suite in about four seconds;
 `pnpm test:slow` runs §13.1 at its full 1,000 cases per archetype — 240,000 quarter-ticks — in about
 ninety seconds.
+
+**There is no hosted CI.** GitHub Actions is unavailable for this account, so `.github/workflows/ci.yml`
+has had its automatic triggers removed — an always-red check trains people to ignore red, which is worse
+than no check. The gate is a pre-push hook (`.githooks/pre-push`) running `pnpm check`, wired up by
+`pnpm install`. Nothing downstream catches what it misses, which matters more here than usual: a run where
+the books stop tying looks exactly like a run where they don't, until someone checks.
 
 ## M2 status
 

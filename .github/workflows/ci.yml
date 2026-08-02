@@ -1,9 +1,30 @@
+# Hosted CI is currently INERT.
+#
+# GitHub Actions is unavailable for this account (billing), so every run that
+# dispatched here was failing before a runner was ever assigned — no steps, no
+# logs, just a permanent red X on every pull request. A check that is always red
+# trains people to ignore red, which is worse than having no check at all.
+#
+# So the automatic triggers are removed and this file is kept as configuration
+# rather than deleted: it is correct, and restoring it is a two-line change.
+#
+# The real gate lives in .githooks/pre-push and runs the same three commands
+# locally. See "Verifying changes" in README.md.
+#
+# TO RESTORE once Actions is available again, put back:
+#
+#   on:
+#     push:
+#       branches: [main]
+#     pull_request:
+#
+# and drop the `if:` guard on `property-suite` back to
+# `github.event_name == 'push' || github.event_name == 'schedule'`.
+
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
@@ -27,12 +48,10 @@ jobs:
         run: pnpm test
 
   # §13.1 asks for 1,000 randomized parameter sets per archetype over 40
-  # quarters. That is ~35s today and grows with each archetype, so it runs on a
-  # schedule rather than blocking every PR — the PR-gated suite uses a smaller
-  # sample of the same property.
+  # quarters — 240,000 quarter-ticks, about 90 seconds. Too slow to gate every
+  # push, so it is a separate manual job.
   property-suite:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

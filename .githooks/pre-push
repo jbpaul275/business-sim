@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# The verification gate.
+#
+# GitHub Actions is not available for this account, so there is no hosted CI to
+# catch a regression after the fact. That makes this hook the only thing standing
+# between a broken engine and the default branch — and for this project that
+# matters more than usual: the entire credibility claim rests on the §8.4
+# articulation assertions holding at every period, and a run where the books
+# stop tying looks exactly like a run where they don't, until someone checks.
+#
+# Runs typecheck, the package-boundary rules and the full test suite. About four
+# seconds.
+#
+# To bypass in a genuine emergency:  SKIP_VERIFY=1 git push
+# Prefer not to. Nothing downstream will catch what you skip.
+
+if [ "$SKIP_VERIFY" = "1" ]; then
+  echo "pre-push: SKIP_VERIFY=1 set — skipping verification. Nothing else will check this."
+  exit 0
+fi
+
+echo "pre-push: running pnpm check (typecheck + boundaries + tests)…"
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "pre-push: pnpm not found on PATH. Install it, or set SKIP_VERIFY=1 to bypass."
+  exit 1
+fi
+
+if ! pnpm check; then
+  echo ""
+  echo "pre-push: verification failed — push aborted."
+  echo "          There is no hosted CI to catch this later. Fix it here."
+  exit 1
+fi
+
+echo "pre-push: green."
+exit 0
