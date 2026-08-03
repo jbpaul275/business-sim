@@ -10,7 +10,9 @@ import {
   type ScheduledAction,
   type WorldState,
 } from '@bizsim/schemas';
+import { getSecurity } from '@bizsim/seeds';
 import { setStreamPrice } from './archetypes.js';
+import { priceAt } from './market.js';
 import { netBookValue } from './depreciation.js';
 import { DEBT_PRODUCTS, underwrite } from './debt.js';
 import type { ActionFlows } from './period.js';
@@ -88,6 +90,10 @@ function signIssue(action: Action): string | undefined {
       return action.spec.buildoutCost < 0n ? 'A buildout cannot cost less than nothing.' : undefined;
     case 'DISPOSE_ASSET':
       return action.salePrice < 0n ? 'A sale price cannot be negative.' : undefined;
+    case 'BUY_SECURITY':
+      return action.amount <= 0n ? 'Investing a negative amount is not a sale — use SELL_SECURITY.' : undefined;
+    case 'SELL_SECURITY':
+      return action.shares <= 0 ? 'Selling a negative number of shares is not a purchase.' : undefined;
     default:
       return undefined;
   }
@@ -101,6 +107,11 @@ export interface ApplyContext {
   state: WorldState;
   flows: FlowsByBusiness;
   nextId: () => string;
+  /**
+   * Gains crystallised by sales this quarter, collected here because they are
+   * the household's income and the household settles after every business has.
+   */
+  realizedGains: Money[];
 }
 
 function flowsFor(ctx: ApplyContext, businessId: string): ActionFlows {
@@ -337,6 +348,62 @@ export function applyAction(
       state.household.cash -= action.amount;
       state.household.cumulativeInjections += action.amount;
       flowsFor(ctx, business.id).ownerContributions += action.amount;
+      return events;
+    }
+
+    /**
+     * Passive investment, out of the household's own cash.
+     *
+     * Fractional shares, because the player thinks in dollars — "put $1M in the
+     * index" — and refusing the remainder would be a rule about brokerages
+     * rather than about money. Cost basis is aggregated rather than tracked per
+     * lot: it changes the tax on a partial sale and nothing else, and the
+     * simplification is said out loud on screen.
+     */
+    case 'BUY_SECURITY': {
+      const security = getSecurity(action.ticker);
+      if (!security) return [reject(period, action, `No security called ${action.ticker}.`)];
+      const price = priceAt(security, state.config.marketSeed, period);
+      if (price <= 0n) return [reject(period, action, `${security.ticker} has no price.`)];
+
+      // Clamped, not refused: "you asked for $2M and have $1.4M" is a fact
+      // about the balance, and buying what the cash covers is what was meant.
+      const spend =
+        action.amount > state.household.cash ? state.household.cash : action.amount;
+      if (spend <= 0n) return [reject(period, action, 'The household has no cash to invest.')];
+
+      const shares = Number(spend) / Number(price);
+      state.household.cash -= spend;
+      const existing = state.household.holdings.find((h) => h.ticker === security.ticker);
+      if (existing) {
+        existing.shares += shares;
+        existing.costBasis += spend;
+      } else {
+        state.household.holdings.push({ ticker: security.ticker, shares, costBasis: spend });
+      }
+      return events;
+    }
+
+    case 'SELL_SECURITY': {
+      const security = getSecurity(action.ticker);
+      const holding = state.household.holdings.find((h) => h.ticker === action.ticker.toUpperCase());
+      if (!security || !holding) return [reject(period, action, `You do not hold ${action.ticker}.`)];
+      const price = priceAt(security, state.config.marketSeed, period);
+
+      const shares = Math.min(action.shares, holding.shares);
+      if (shares <= 0) return [reject(period, action, 'Nothing to sell.')];
+      const proceeds = mulRate(price, shares);
+      // Average cost, taken pro rata. The gain is realised now and taxed with
+      // the rest of the household's income this quarter.
+      const basisSold = mulRate(holding.costBasis, shares / holding.shares);
+
+      holding.shares -= shares;
+      holding.costBasis -= basisSold;
+      if (holding.shares <= 1e-9) {
+        state.household.holdings = state.household.holdings.filter((h) => h !== holding);
+      }
+      state.household.cash += proceeds;
+      ctx.realizedGains.push(proceeds - basisSold);
       return events;
     }
 

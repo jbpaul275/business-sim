@@ -34,6 +34,11 @@ export interface WorldConfigInput {
   annualInflationPct?: number;
   annualLivingExpenses?: Money;
   milestonePeriod?: number;
+  /**
+   * Which decade of market history this run gets. Fixed at world creation and
+   * never touched again, so the same seed replays the same prices exactly.
+   */
+  marketSeed?: number;
 }
 
 export function createWorldConfig(input: WorldConfigInput): WorldConfig {
@@ -54,6 +59,19 @@ export function createWorldConfig(input: WorldConfigInput): WorldConfig {
     annualInflationPct: input.annualInflationPct ?? 0.025,
     crisisPolicy: [...DEFAULT_CRISIS_POLICY],
     currency: 'USD',
+    // A constant default, not a clock reading: `Date.now()` here would make
+    // every run irreproducible and break replay, which is the one thing the
+    // engine's purity exists to protect. Callers who want a different decade
+    // pass one in, and the CLI's setup does.
+    //
+    // This particular constant is chosen, not arbitrary. The first one tried
+    // produced a decade where the index went nowhere (0.7%/yr) while the tech
+    // name compounded at 30% — a legitimate draw at these volatilities and a
+    // terrible default, because every scenario run and every test would read
+    // it as the market being broken and single names being a cheat code. This
+    // seed lands every instrument within half a sigma of its own assumption
+    // over forty quarters, so the shipped default is an unremarkable decade.
+    marketSeed: input.marketSeed ?? 20_243_414,
   };
 }
 
@@ -82,6 +100,7 @@ export function createWorld(input: CreateWorldInput): WorldState {
   const household: Household = {
     cash: input.config.startCapital,
     personalDebts: [],
+    holdings: [],
     stakes: [],
     cumulativeDraws: 0n,
     cumulativeInjections: 0n,

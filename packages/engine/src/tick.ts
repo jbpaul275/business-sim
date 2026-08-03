@@ -14,6 +14,7 @@ import {
   type StreamMetrics,
   type WorldState,
 } from '@bizsim/schemas';
+import { getSecurity } from '@bizsim/seeds';
 import { computeDemand, realize, type DemandResult, type RealizeResult } from './archetypes.js';
 import { applyAction, schedule, wasRefused, type FlowsByBusiness } from './actions.js';
 import { failures, runAssertions } from './assertions.js';
@@ -39,6 +40,7 @@ import {
   totalSalvageValue,
 } from './depreciation.js';
 import { computeDerivedMetrics } from './metrics.js';
+import { portfolioValue, priceAt, quarterlyDividend } from './market.js';
 import {
   emptyActionFlows,
   emptyCrisisFlows,
@@ -117,7 +119,8 @@ export function tick(
   const flows: FlowsByBusiness = new Map(
     next.businesses.map((b) => [b.id, emptyActionFlows()]),
   );
-  const applyCtx = { state: next, flows, nextId };
+  const realizedGains: Money[] = [];
+  const applyCtx = { state: next, flows, nextId, realizedGains };
 
   // ── 2. Mature pending actions whose lead time has elapsed ───────────────
   const stillPending = [];
@@ -320,6 +323,7 @@ export function tick(
     taxDistributions: totalTaxDistributions,
     personalTax: totalPersonalTax,
     selfEmploymentTax: totalSelfEmploymentTax,
+    realizedGains: sum(realizedGains),
   });
   events.push(...household.events);
 
@@ -993,6 +997,8 @@ interface HouseholdFlows {
   taxDistributions: Money;
   personalTax: Money;
   selfEmploymentTax: Money;
+  /** Net gain or loss crystallised by security sales this quarter. */
+  realizedGains: Money;
 }
 
 /**
@@ -1011,10 +1017,36 @@ function settleHousehold(
   const events: EngineEvent[] = [];
   const beginningCash = household.cash;
 
+  /**
+   * The portfolio's quarter, before the household's own cash moves.
+   *
+   * Dividends and realised gains are ordinary household income here, taxed at
+   * the personal rate alongside everything else. Real tax law distinguishes
+   * qualified dividends and long-term capital gains, and both would lower this
+   * number — the simplification is stated on screen rather than buried, because
+   * a game that quietly overstates the tax on the passive alternative is
+   * arguing for the business by cheating.
+   */
+  let dividendsReceived = 0n;
+  for (const holding of household.holdings) {
+    const security = getSecurity(holding.ticker);
+    if (!security) continue;
+    dividendsReceived += quarterlyDividend(
+      security,
+      priceAt(security, state.config.marketSeed, period),
+      holding.shares,
+    );
+  }
+  const investmentIncome = dividendsReceived + flows.realizedGains;
+  const investmentTax =
+    investmentIncome > 0n ? mulRate(investmentIncome, state.config.personalTaxRate) : 0n;
+
+  household.cash += dividendsReceived - investmentTax;
   household.cash +=
     flows.taxDistributions - flows.personalTax - flows.selfEmploymentTax;
   household.cash -= flows.livingExpenses + flows.personalDebtService;
-  household.cumulativePersonalTax += flows.personalTax + flows.selfEmploymentTax;
+  household.cumulativePersonalTax +=
+    flows.personalTax + flows.selfEmploymentTax + investmentTax;
 
   if (household.cash < 0n) {
     // Reduced remedy set, floored at 60% of the starting living expenses —
@@ -1088,19 +1120,25 @@ function settleHousehold(
     state.businesses.map((b) => b.balances.contributedCapital + b.balances.retainedEarnings),
   );
   const personalDebt = sum(household.personalDebts.map((d) => d.outstandingPrincipal));
+  const securitiesValue = portfolioValue(state, period);
 
   return {
     statement: {
       beginningCash,
       livingExpenses: flows.livingExpenses,
+      dividendsReceived,
+      realizedGains: flows.realizedGains,
+      securitiesValue,
       distributionsReceived: 0n,
       taxDistributionsReceived: flows.taxDistributions,
-      personalTaxPaid: flows.personalTax,
+      personalTaxPaid: flows.personalTax + investmentTax,
       selfEmploymentTaxPaid: flows.selfEmploymentTax,
       injectionsMade: 0n,
       personalDebtService: flows.personalDebtService,
       endingCash: household.cash,
-      netWorth: household.cash + businessEquity - personalDebt,
+      // A portfolio is net worth as much as a business is. Leaving it out would
+      // make every dollar moved into the market look like a dollar destroyed.
+      netWorth: household.cash + securitiesValue + businessEquity - personalDebt,
     },
     events,
   };

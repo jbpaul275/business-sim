@@ -99,6 +99,12 @@ export interface CashFlowStatement {
 export interface HouseholdStatement {
   beginningCash: Money;
   livingExpenses: Money;
+  /** Dividends collected this quarter, before the tax on them. */
+  dividendsReceived: Money;
+  /** Gains and losses crystallised by a sale this quarter. */
+  realizedGains: Money;
+  /** Market value of everything held at the close. */
+  securitiesValue: Money;
   distributionsReceived: Money;
   taxDistributionsReceived: Money;
   personalTaxPaid: Money;

@@ -14,6 +14,7 @@ import type {
 } from './model.js';
 import type { AssumptionRegister } from './assumptions.js';
 import type { Action } from './actions.js';
+import type { Holding } from './securities.js';
 import type { EngineEvent } from './events.js';
 
 /**
@@ -37,6 +38,15 @@ export interface WorldConfig {
   annualInflationPct: number;
   crisisPolicy: CrisisRemedy[];
   currency: 'USD';
+  /**
+   * The market's one degree of freedom.
+   *
+   * Every price in the run is a pure function of (seed, ticker, period), so
+   * nothing about the market is stored, nothing drifts, and replay of the same
+   * seed reproduces the same path exactly. It is the only randomness anywhere
+   * in the engine and it is not random: it is a hash.
+   */
+  marketSeed: number;
 }
 
 export interface BusinessBalances {
@@ -149,6 +159,8 @@ export interface PersonalDebt extends Debt {
 export interface Household {
   cash: Money;
   personalDebts: PersonalDebt[];
+  /** Passive positions. Empty for a player who never buys any. */
+  holdings: Holding[];
   stakes: { businessId: string; ownershipPct: number; costBasis: Money }[];
   cumulativeDraws: Money;
   cumulativeInjections: Money;

@@ -4,6 +4,7 @@ import { tick, type TickResult } from '@bizsim/engine';
 import type { WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
 import { play } from './play.js';
+import { benchmarkLines } from './portfolio.js';
 import { runSetup } from './setup.js';
 import { openInput } from './input.js';
 import { journalDir, listSessions } from './journal.js';
@@ -390,6 +391,17 @@ async function main(): Promise<void> {
   console.log(
     `Articulation          ${failures === 0 ? '✓ all assertions held at every period' : `✗ ${failures} failures`}`,
   );
+  // Every run now carries its own opportunity cost, batch runs included: a
+  // calibration sweep that shows a template losing to a passive index over ten
+  // years is telling you something about the template.
+  console.log('');
+  for (const line of benchmarkLines(
+    state,
+    final?.statements.household.netWorth ?? 0n,
+    state.currentPeriod,
+  )) {
+    console.log(line);
+  }
   if (failures > 0) process.exit(1);
 }
 

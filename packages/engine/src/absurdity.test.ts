@@ -522,6 +522,7 @@ describe('what the engine does refuse (§11.3 rule 6)', () => {
       state,
       flows: new Map([[business.id, emptyActionFlows()]]),
       nextId: () => 'asset-1',
+      realizedGains: [],
     };
     applyAction(
       ctx,

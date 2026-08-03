@@ -40,6 +40,12 @@ const LOG: ActionLogEntry[] = [
   { period: 1, actions: [{ kind: 'SET_MARKETING_SPEND', streamId: 's1', amountPerQuarter: fromDisplay(14_000) }] },
   { period: 2, actions: [{ kind: 'ADD_STEP_BLOCK', costId: 'kitchen_labor', blocks: 1 }] },
   { period: 4, actions: [{ kind: 'SET_PRICE', streamId: 's1', newPrice: fromDisplay(46) }] },
+  // A market position in the log, because prices are the only thing in the
+  // engine derived from a hash rather than from arithmetic on state. If a
+  // price were ever cached, read from a clock, or drawn from a real PRNG, this
+  // entry is what would make the replay diverge from the live run.
+  { period: 5, actions: [{ kind: 'BUY_SECURITY', ticker: 'IDX', amount: fromDisplay(50_000) }] },
+  { period: 9, actions: [{ kind: 'SELL_SECURITY', ticker: 'IDX', shares: 20 }] },
   {
     period: 6,
     actions: [

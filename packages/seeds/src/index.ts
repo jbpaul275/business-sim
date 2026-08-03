@@ -1,4 +1,5 @@
-import { zSeedTemplate, type SeedTemplate } from '@bizsim/schemas';
+import { zSeedTemplate, zSecurity, type SeedTemplate, type Security } from '@bizsim/schemas';
+import securities from '../data/securities.json' with { type: 'json' };
 import fullServiceRestaurant from '../data/full_service_restaurant.json' with { type: 'json' };
 import professionalServicesFirm from '../data/professional_services_firm.json' with { type: 'json' };
 import ecommerceDtcBrand from '../data/ecommerce_dtc_brand.json' with { type: 'json' };
@@ -48,6 +49,27 @@ export function getSeedTemplate(id: string): SeedTemplate {
 
 export const listSeedTemplates = (): SeedTemplate[] => [...templates.values()];
 export const seedTemplateIds = (): string[] => [...templates.keys()];
+
+/**
+ * The investable catalog — spec §10.3 CATALOG provenance.
+ *
+ * Five instruments, not five hundred. The point is the opportunity cost of the
+ * player's own capital, not a trading game: an index to be measured against, a
+ * dividend payer, a growth name, property at arm's length, and the risk-free
+ * rate. Each carries the reasoning for its numbers, because they are
+ * assumptions a player is entitled to argue with rather than quotes.
+ */
+const catalog = new Map<string, Security>();
+for (const raw of securities) {
+  const parsed = zSecurity.parse(raw);
+  catalog.set(parsed.ticker, parsed);
+}
+
+export const listSecurities = (): Security[] => [...catalog.values()];
+export const getSecurity = (ticker: string): Security | undefined =>
+  catalog.get(ticker.toUpperCase());
+export const benchmarkSecurity = (): Security =>
+  [...catalog.values()].find((s) => s.isBenchmark) ?? [...catalog.values()][0]!;
 
 /**
  * §12.2 requires each quarter's three monthly weights to average that quarter's

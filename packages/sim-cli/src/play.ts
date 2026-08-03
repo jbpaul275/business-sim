@@ -8,7 +8,9 @@ import {
   type TickResult,
 } from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
+import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
+import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
@@ -80,6 +82,10 @@ function describeAction(a: Action): string {
       return `borrow ${toDisplay(a.spec.requestedPrincipal, { showCents: false })}`;
     case 'REPAY_DEBT':
       return `repay ${toDisplay(a.amount, { showCents: false })} of principal`;
+    case 'BUY_SECURITY':
+      return `invest ${toDisplay(a.amount, { showCents: false })} in ${a.ticker}`;
+    case 'SELL_SECURITY':
+      return `sell ${a.shares.toFixed(0)} shares of ${a.ticker}`;
     case 'DRAW_REVOLVER':
       return `draw ${toDisplay(a.amount, { showCents: false })} on the revolver`;
     case 'INJECT_CAPITAL':
@@ -224,6 +230,16 @@ function renderTurn(result: TickResult, business: Business): void {
     console.log(`  ${DIM}${pad(debt.label, 20)}${RESET}${detail} ${DIM}@ ${pct(debt.annualRate)}${RESET}`);
   }
 
+  // The portfolio only takes space on screen once there is one. A player who
+  // never buys anything should never see a line about it.
+  const hh = result.statements.household;
+  if (hh.securitiesValue > 0n) {
+    console.log(
+      `\n  ${DIM}${pad('Portfolio', 22)}${RESET}${toCompact(hh.securitiesValue)}` +
+        `${hh.dividendsReceived > 0n ? ` ${DIM}· ${toCompact(hh.dividendsReceived)} of dividends this quarter${RESET}` : ''}`,
+    );
+  }
+
   const notable = result.events.filter((e) => e.severity !== 'INFO');
   if (notable.length > 0) console.log('');
   for (const e of notable) {
@@ -254,6 +270,10 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}upgrade${RESET} 15% 800k      build something better: +15% to what a customer will pay ${DIM}— +2 quarters${RESET}
   ${BOLD}policy${RESET} revolver,inject,defer,emergency,insolvency
                         reorder the cash-crisis ladder (§9.4)
+
+  ${BOLD}buy${RESET} IDX 500k         put household cash into a security ${DIM}— \`quotes\` lists them${RESET}
+  ${BOLD}sell${RESET} IDX all         sell a position, or a dollar amount of one
+  ${BOLD}quotes${RESET} · ${BOLD}portfolio${RESET}     the catalog, and what you hold
 
   ${BOLD}skip${RESET} <n>              run n quarters with no actions
   ${BOLD}costs${RESET}                 where the money goes, biggest line first
@@ -309,6 +329,7 @@ interface ParseResult {
  * it, finds their question absent, and concludes the tool is not listening.
  */
 type Topic =
+  | 'invest'
   | 'capacity'
   | 'product'
   | 'secondSite'
@@ -335,6 +356,17 @@ type Topic =
  * archetype is named after.
  */
 const TOPIC_PATTERNS: [Topic, RegExp][] = [
+  /**
+   * The other thing money can do.
+   *
+   * Ahead of `debt`, which owns "invest" in the sense of putting money into
+   * the business. A player asking about the stock market is asking the
+   * opposite question — what happens if the money does not go in.
+   */
+  [
+    'invest',
+    /\b(stock|stocks|shares|equities|index|s&p|etf|bonds?|t-?bills?|portfolio|dividend\w*|market returns?|passive|wall street)\b/,
+  ],
   /**
    * Buying a second one, which this build cannot do.
    *
@@ -446,6 +478,7 @@ const elasticityCaveat = (elasticity: number): string =>
 function advise(
   business: Business,
   result: TickResult,
+  world: WorldState,
   question = '',
   memory?: AdvisorMemory,
 ): string[] {
@@ -582,6 +615,30 @@ function advise(
         `volume at today's rate — or hold the volume, raise the rate 10%, and take ` +
         `${toCompact(asRate)} a quarter instead. The game will not tell you a waterpark is worth 10%; ` +
         `that number is yours, and the run is what tests it.`,
+    );
+  }
+
+  /**
+   * "How does this compare to just buying the index?"
+   *
+   * The question the game could not answer for its whole life until now. A
+   * business with idle cash at 0% was being compared against nothing.
+   */
+  if (topic === 'invest') {
+    const index = benchmarkSecurity();
+    const held = positions(world, result.statements.period);
+    const value = held.reduce<Money>((a, p) => a + p.value, 0n);
+    out.push(
+      `\`buy <ticker> <amount>\` invests household cash — \`quotes\` lists the five instruments and ` +
+        `\`portfolio\` shows what you hold${value > 0n ? `, currently ${toCompact(value)}` : ''}. ` +
+        `Business cash has to be \`distribute\`d first, and taxed on the way out.`,
+    );
+    out.push(
+      `The comparison is the point: ${index.label.toLowerCase()} is assumed to return ` +
+        `${((index.expectedAnnualPriceReturn + index.dividendYield) * 100).toFixed(1)}% a year with ` +
+        `${(index.annualVolatility * 100).toFixed(0)}% volatility, and the run is scored against leaving ` +
+        `your whole starting stake in it untouched. Household cash sitting in the current account earns ` +
+        `nothing at all — \`buy TBILL\` is the floor under that.`,
     );
   }
 
@@ -982,7 +1039,7 @@ function remember(
 const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
   'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
-  'upgrade', 'renovate', 'policy',
+  'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
 ]);
 
 /**
@@ -1066,6 +1123,7 @@ function parseCommand(
   line: string,
   business: Business,
   result: TickResult,
+  world: WorldState,
   journal?: Journal,
   memory?: AdvisorMemory,
 ): ParseResult {
@@ -1488,6 +1546,95 @@ function parseCommand(
       };
     }
 
+    /**
+     * "I want to invest my money in coca cola stock."
+     *
+     * Asked in the opening interview and answered, eventually, with a refusal.
+     * The refusal was right about the product and wrong about the need: a
+     * household sitting on cash at 0% is being compared against nothing, and a
+     * business that returned 9% over a decade should have to say so next to
+     * what the index did.
+     *
+     * The money comes out of the HOUSEHOLD, not the business. Company cash has
+     * to be distributed — and taxed — before it can buy anything, which is both
+     * what happens in life and the more useful thing to learn.
+     */
+    case 'quotes':
+    case 'quote': {
+      for (const line of quoteLines(world, result.statements.period)) console.log(`  ${DIM}${line}${RESET}`);
+      return none;
+    }
+
+    case 'portfolio':
+    case 'holdings': {
+      for (const line of portfolioLines(world, result.statements.period)) {
+        console.log(`  ${DIM}${line}${RESET}`);
+      }
+      console.log(
+        `  ${DIM}Household cash ${toCompact(world.household.cash)}. ` +
+          `Dividends and gains are taxed at the personal rate the quarter they land — no ` +
+          `qualified-dividend or long-term rate is modelled, so the passive side is taxed a ` +
+          `little harder here than in life.${RESET}`,
+      );
+      return none;
+    }
+
+    case 'buy': {
+      const ticker = (rest[0] ?? '').toUpperCase();
+      const security = getSecurity(ticker);
+      if (!security) {
+        return fail(
+          `No security called "${rest[0] ?? ''}". \`quotes\` lists them: ` +
+            `${listSecurities().map((s) => s.ticker).join(', ')}.`,
+        );
+      }
+      const amount = parseMoney(rest[1] ?? '');
+      if (amount === undefined) return fail(`buy needs an amount, e.g. \`buy ${ticker} 500k\`.`);
+      const sign = positive(amount, 'buy', 'to sell a position, use `sell <ticker> <amount|all>`.');
+      if (sign) return fail(sign);
+      if (world.household.cash <= 0n) {
+        return fail(
+          'The household has no cash. `distribute <amount>` moves money out of the business first — ' +
+            'and it is taxed on the way.',
+        );
+      }
+      if (amount > world.household.cash) {
+        console.log(
+          `  ${DIM}Household cash is ${toCompact(world.household.cash)}; buying that much instead.${RESET}`,
+        );
+      }
+      return { actions: [{ kind: 'BUY_SECURITY', ticker, amount }] };
+    }
+
+    case 'sell': {
+      const ticker = (rest[0] ?? '').toUpperCase();
+      const held = positions(world, result.statements.period).find((p) => p.ticker === ticker);
+      if (!held) {
+        const owned = positions(world, result.statements.period).map((p) => p.ticker);
+        return fail(
+          owned.length > 0
+            ? `You do not hold ${ticker || 'that'}. You hold: ${owned.join(', ')}.`
+            : 'You do not hold anything. `quotes` lists what there is to buy.',
+        );
+      }
+      const token = (rest[1] ?? '').toLowerCase();
+      if (token === '' ) return fail(`sell needs an amount, e.g. \`sell ${ticker} 100k\` or \`sell ${ticker} all\`.`);
+      if (token === 'all') {
+        return { actions: [{ kind: 'SELL_SECURITY', ticker, shares: held.shares }] };
+      }
+      const amount = parseMoney(token);
+      if (amount === undefined) return fail(`sell needs an amount or \`all\`.`);
+      const sign = positive(amount, 'sell', 'to add to a position, use `buy <ticker> <amount>`.');
+      if (sign) return fail(sign);
+      // Dollars in, shares out: the player thinks in the first and the ledger
+      // keeps the second.
+      const shares =
+        held.value > 0n
+          ? Math.min(held.shares, (held.shares * Number(amount)) / Number(held.value))
+          : held.shares;
+      return { actions: [{ kind: 'SELL_SECURITY', ticker, shares }] };
+    }
+
     case 'policy': {
       const tokens = (rest[0] ?? '').split(',').filter(Boolean);
       const policy: CrisisRemedy[] = [];
@@ -1502,7 +1649,7 @@ function parseCommand(
 
     default:
       if (looksLikeAQuestion(line, verb)) {
-        const answered = advise(business, result, line, memory);
+        const answered = advise(business, result, world, line, memory);
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
         journal?.write({ kind: 'asked', question: line, answered });
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
@@ -1594,6 +1741,14 @@ export async function play(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need was ${toDisplay(business.peakCashNeed)}`,
         );
+        console.log('');
+        for (const line of benchmarkLines(
+          state,
+          last.statements.household.netWorth,
+          state.currentPeriod,
+        )) {
+          console.log(`  ${line}`);
+        }
         break;
       }
       if (state.currentPeriod >= milestonePeriod) {
@@ -1602,6 +1757,16 @@ export async function play(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need ${toDisplay(business.peakCashNeed)} at period ${business.peakCashNeedPeriod}`,
         );
+        // The number the run was missing: what the same money would have done
+        // sitting in an index fund for the same ten years.
+        console.log('');
+        for (const line of benchmarkLines(
+          state,
+          last.statements.household.netWorth,
+          state.currentPeriod,
+        )) {
+          console.log(`  ${line}`);
+        }
         break;
       }
 
@@ -1621,7 +1786,7 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business, last, options.journal, memory);
+        const parsed = parseCommand(line, business, last, state, options.journal, memory);
         if (parsed.message) console.log(parsed.message);
         if (parsed.quit) {
           quit = true;

@@ -1,0 +1,52 @@
+[
+  {
+    "ticker": "IDX",
+    "label": "Broad market index fund",
+    "openingPrice": 48000,
+    "dividendYield": 0.014,
+    "expectedAnnualPriceReturn": 0.075,
+    "annualVolatility": 0.16,
+    "isBenchmark": true,
+    "sourceNote": "A total-market fund at roughly $480 a share. 7.5% price return and a 1.4% yield is a long-run US equity assumption, not a forecast; the volatility is a normal decade rather than a calm one."
+  },
+  {
+    "ticker": "KO",
+    "label": "Large-cap consumer staple",
+    "openingPrice": 6800,
+    "dividendYield": 0.031,
+    "expectedAnnualPriceReturn": 0.04,
+    "annualVolatility": 0.18,
+    "isBenchmark": false,
+    "sourceNote": "A dividend-paying staple in the $60-75 band: most of the return arrives as the cheque rather than the price. Single names carry more volatility than the index and no more expected return, which is the argument against them."
+  },
+  {
+    "ticker": "TECH",
+    "label": "Large-cap technology",
+    "openingPrice": 21000,
+    "dividendYield": 0.005,
+    "expectedAnnualPriceReturn": 0.11,
+    "annualVolatility": 0.3,
+    "isBenchmark": false,
+    "sourceNote": "Higher expected return and nearly double the index's volatility. Over ten years the path matters as much as the average, which is the whole reason volatility is modelled at all."
+  },
+  {
+    "ticker": "REIT",
+    "label": "Diversified REIT",
+    "openingPrice": 9200,
+    "dividendYield": 0.045,
+    "expectedAnnualPriceReturn": 0.025,
+    "annualVolatility": 0.19,
+    "isBenchmark": false,
+    "sourceNote": "Property, at arm's length. Worth comparing against a building the player operates themselves: the same asset class without the staffing, the vacancy or the 3am phone call."
+  },
+  {
+    "ticker": "TBILL",
+    "label": "Treasury bills",
+    "openingPrice": 10000,
+    "dividendYield": 0.042,
+    "expectedAnnualPriceReturn": 0.0,
+    "annualVolatility": 0.0,
+    "isBenchmark": false,
+    "sourceNote": "The risk-free rate, and the honest floor under every decision in the game: idle cash earns this if you put it here and nothing if you leave it in the current account."
+  }
+]

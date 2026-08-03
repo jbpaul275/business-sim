@@ -102,6 +102,15 @@ export const zAction = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('DRAW_REVOLVER'), debtId: z.string(), amount: zMoney }),
   z.object({ kind: z.literal('INJECT_CAPITAL'), businessId: z.string(), amount: zMoney }),
   z.object({ kind: z.literal('DISTRIBUTE'), businessId: z.string(), amount: zMoney }),
+  /**
+   * Passive investment, from the household's own cash.
+   *
+   * Not from the business. A founder who wants to put company money in the
+   * market has to `DISTRIBUTE` it first and pay the tax on the way out, which
+   * is both what actually happens and the more instructive path.
+   */
+  z.object({ kind: z.literal('BUY_SECURITY'), ticker: z.string(), amount: zMoney }),
+  z.object({ kind: z.literal('SELL_SECURITY'), ticker: z.string(), shares: zNonNegative }),
   z.object({ kind: z.literal('EXPAND_CAPACITY'), businessId: z.string(), spec: zCapacitySpec }),
   z.object({
     kind: z.literal('START_BUSINESS'),
@@ -147,6 +156,8 @@ export const LEAD_TIMES: Record<ActionKind, { cost: number; effect: number }> = 
   DISPOSE_ASSET: { cost: 0, effect: 0 },
   RAISE_DEBT: { cost: 0, effect: 1 },
   REPAY_DEBT: { cost: 0, effect: 0 },
+  BUY_SECURITY: { cost: 0, effect: 0 },
+  SELL_SECURITY: { cost: 0, effect: 0 },
   DRAW_REVOLVER: { cost: 0, effect: 0 },
   INJECT_CAPITAL: { cost: 0, effect: 0 },
   DISTRIBUTE: { cost: 0, effect: 0 },
@@ -170,6 +181,8 @@ export const IMMEDIATE_KINDS: ReadonlySet<ActionKind> = new Set<ActionKind>([
   'DISTRIBUTE',
   'REMOVE_STEP_BLOCK',
   'REPAY_DEBT',
+  'BUY_SECURITY',
+  'SELL_SECURITY',
   'SET_CRISIS_POLICY',
   'ADJUST_ASSUMPTION',
   'DISPOSE_ASSET',

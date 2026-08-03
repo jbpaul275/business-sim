@@ -60,6 +60,12 @@ export type JournalEvent =
       monthZero: string;
     }
   | { kind: 'abandoned'; reason: string }
+  /**
+   * The one number that makes a run's market reproducible. Without it a
+   * journal can replay every decision and still disagree about what the index
+   * did, which would make the benchmark unauditable.
+   */
+  | { kind: 'market_seed'; seed: number }
   | {
       kind: 'quarter';
       period: number;

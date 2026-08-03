@@ -426,6 +426,57 @@ describe('asking what to do', () => {
     expect(revenue(withUpgrade)).not.toEqual(revenue(without));
   });
 
+  it('lets the household buy and sell, which it never could', async () => {
+    // "I want to invest my money in coca cola stock" was answered, eventually,
+    // with a refusal. The refusal was right about the product and wrong about
+    // the need.
+    const printed = await transcript(['quotes', 'buy IDX 200k', '', 'portfolio', 'quit'], 'storage');
+    expect(printed).toMatch(/TICKER {2}PRICE/);
+    expect(printed).toMatch(/queued: invest \$200,000 in IDX/);
+    expect(printed).toMatch(/IDX.*sh.*cost/);
+    // The portfolio shows on the turn screen once there is one.
+    expect(printed).toMatch(/Portfolio/);
+  });
+
+  it('says where the money has to come from', async () => {
+    // Company cash cannot buy shares. It has to be distributed first, and taxed
+    // on the way, which is both what happens in life and the useful lesson.
+    const printed = await transcript(
+      ['buy IDX 500k', '', 'buy IDX 500k', '', 'buy IDX 500k', '', 'buy IDX 5m', 'quit'],
+      'storage',
+    );
+    expect(printed).toMatch(/Household cash is|distribute <amount>/);
+  });
+
+  it('will not buy a ticker that does not exist', async () => {
+    const printed = await transcript(['buy NVDA 100k', 'quit'], 'storage');
+    expect(printed).toMatch(/No security called "NVDA"/);
+    expect(printed).toMatch(/IDX/);
+    expect(printed).not.toContain('queued');
+  });
+
+  it('will not sell what is not held', async () => {
+    const printed = await transcript(['sell IDX all', 'quit'], 'storage');
+    expect(printed).toMatch(/do not hold anything/);
+    expect(printed).not.toContain('queued');
+  });
+
+  it('scores the whole run against leaving the money alone', async () => {
+    // The number the game never had. A business that returned 9% over a decade
+    // should have to say so next to what the index did.
+    const printed = await transcript(['skip 40', 'quit'], 'storage');
+    expect(printed).toMatch(/You started with .* and ended with/);
+    expect(printed).toMatch(/The same money in broad market index fund, untouched/);
+    expect(printed).toMatch(/beat (it|you) by/);
+  });
+
+  it('answers a question about the market with the market', async () => {
+    const printed = await transcript(['how does this compare to just buying the index?', 'quit'], 'storage');
+    expect(printed).toMatch(/`buy <ticker> <amount>`/);
+    expect(printed).toMatch(/scored against leaving your whole starting stake/);
+    expect(printed).not.toMatch(/staffed for the building/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);

@@ -515,10 +515,23 @@ export async function runSetup(
    */
   const marketing = template.modifierDefaults.baseMarketingSpendPerQuarter;
 
+  /**
+   * Which decade of market history this run gets.
+   *
+   * The engine cannot read a clock (§1.3), so the seed is chosen out here and
+   * handed in — every price in the run is then a pure function of it, and the
+   * same seed replays the same decade exactly. Varying it per run matters: a
+   * constant would mean every player who ever bought the index lived through
+   * the identical crash, and the benchmark would stop being a benchmark and
+   * start being a fixed opponent.
+   */
+  const marketSeed = Date.now() % 1_000_000_007;
+  journal.write({ kind: 'market_seed', seed: marketSeed });
+
   const config = createWorldConfig(
     capital.custom !== undefined
-      ? { startMode: capital.mode, customCapital: capital.custom }
-      : { startMode: capital.mode },
+      ? { startMode: capital.mode, customCapital: capital.custom, marketSeed }
+      : { startMode: capital.mode, marketSeed },
   );
 
   /**
