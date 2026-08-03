@@ -19,6 +19,8 @@ const isUnusable = (turn: { message: string; cta: string }): boolean =>
   looksGarbled(turn.message) ||
   looksGarbled(turn.cta);
 import {
+  MalformedDraftError,
+  assertDraftShape,
   zConceptDraft,
   zInterviewTurn,
   type ConceptDraft,
@@ -286,7 +288,13 @@ export class AnthropicConceptTransport implements ConceptTransport {
         )
       ).text;
     }
-    return zConceptDraft.parse(JSON.parse(stripFence(text)));
+    let json: unknown;
+    try {
+      json = JSON.parse(stripFence(text));
+    } catch {
+      throw new MalformedDraftError('it was not valid JSON');
+    }
+    return assertDraftShape(json);
   }
 }
 

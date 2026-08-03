@@ -359,14 +359,15 @@ describe('the concept path reaches the same gate as the picker', () => {
       'A place that rents telescopes by the hour on a dark-sky ridge.',
       '24 scopes, about 1400 square feet.',
       '', // nothing to argue with
-      '', // marketing
+      '2', // set the funding myself
       '0', // no loan
       '', // revolver
       '1000', // equity — nowhere near month zero
       'y', // yes, try different financing
+      '2', // again by hand
       '900000', // an SBA loan that actually covers it
       '', // revolver
-      '', // equity — the suggestion, now zero
+      '', // equity
       'y', // commit
     ]);
 
@@ -410,11 +411,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       '24 scopes.',
       'the capture rate is way too low, we get far more foot traffic than that',
       '', // and now leave it alone
-      '', // marketing
-      '900000',
-      '',
-      '',
-      'y',
+      '', // take the proposed funding
+      'y', // commit
     ]);
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -449,7 +447,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       'A telescope rental place on a ridge.',
       '24 scopes.',
       '', // nothing to argue with
-      '', // marketing
+      '2', // set the funding myself
       '0',
       '',
       '900000', // everything
@@ -481,7 +479,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       'A telescope rental place on a ridge.',
       '24 scopes.',
       '', // nothing to argue with
-      '', // marketing
+      '2', // set the funding myself
       '0',
       '',
       '1000',

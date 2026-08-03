@@ -153,7 +153,9 @@ Pick the one whose *constraint* matches what actually limits this business:
 - **OCCUPANCY** — rentable units at some occupancy. Storage, property, parking.
 - **PROJECT_BACKLOG** — bids won, delivered against execution capacity. Contractors, studios.
 
-Say why in \`archetypeRationale\`, in **one sentence**. It is shown to the player, not to a reviewer, so name the archetype and the reason — not the alternatives you considered and rejected. If a business genuinely has two engines — a café that also does catering — that is two streams.
+Say why in \`archetypeRationale\`, in **one sentence**. It is shown to the player, not to a reviewer, so name the archetype and the reason — not the alternatives you considered and rejected.
+
+**Emit exactly one stream.** Multiple streams are not yet modelled, and a second one is silently dropped — so a burger place doing dine-in, drive-thru and delivery apps is *one* TRAFFIC stream with a blended ticket and a capture rate that accounts for all three channels, not three streams. Where the channels differ in economics, put that in the cost lines (delivery commission as a variable line against revenue) and say what you blended in \`openNotes\`. It is the honest answer anyway: they share one kitchen and one queue, which is what actually caps them.
 
 ### Parameter names are fixed
 

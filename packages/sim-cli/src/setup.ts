@@ -1,5 +1,6 @@
-import { fromDisplay, toDisplay, type Money } from '@bizsim/money';
+import { fromDisplay, mulRate, toDisplay, type Money } from '@bizsim/money';
 import {
+  DEBT_PRODUCTS,
   buildModelFromTemplate,
   computeMonthZeroOutlays,
   createWorld,
@@ -281,10 +282,24 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
   console.log(`  ${BOLD}${pad('TOTAL', 42)}${rpad(toDisplay(outlays.total), 16)}${RESET}`);
 
   const equity = model.financingPlan.equityInjection;
-  const debt = model.financingPlan.debtRequests.reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+  // A revolver is a limit, not a drawdown — `openBusiness` sets its outstanding
+  // principal to zero. Adding it here produced "you borrow $100,000" directly
+  // above an opening cash figure that did not include a cent of it.
+  const termDebt = model.financingPlan.debtRequests
+    .filter((d) => d.kind !== 'REVOLVER')
+    .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+  const revolverLimit = model.financingPlan.debtRequests
+    .filter((d) => d.kind === 'REVOLVER')
+    .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
   console.log(
-    `\n  You put in ${BOLD}${toDisplay(equity)}${RESET} and borrow ${BOLD}${toDisplay(debt)}${RESET}.`,
+    `\n  You put in ${BOLD}${toDisplay(equity)}${RESET} and borrow ${BOLD}${toDisplay(termDebt)}${RESET}.`,
   );
+  if (revolverLimit > 0n) {
+    console.log(
+      `  ${DIM}A ${toDisplay(revolverLimit, { showCents: false })} revolver stands behind it,` +
+        ` undrawn — it costs its fee at close and lends only when you are short.${RESET}`,
+    );
+  }
   const cashColour = business.cash <= 0n ? RED : business.cash < fromDisplay(50_000) ? YELLOW : GREEN;
   console.log(`  Opening cash        ${cashColour}${toDisplay(business.cash)}${RESET}`);
   console.log(`  Household keeps     ${toDisplay(world.household.cash)}`);
@@ -358,13 +373,20 @@ export async function runSetup(
     businessName = template.label;
   }
 
-  console.log(`\n${BOLD}MARKETING & FINANCING${RESET}`);
-  const marketing = await ask(
-    input,
-    `  ${pad('Marketing per quarter', 42)}[${toDisplay(template.modifierDefaults.baseMarketingSpendPerQuarter, { showCents: false })}]: `,
-    template.modifierDefaults.baseMarketingSpendPerQuarter,
-    parseMoney,
-  );
+  /**
+   * Marketing is not asked for, and that is the fix rather than an omission.
+   *
+   * "The user doesn't know an appropriate amount of marketing spend per
+   * quarter" — correct, and neither does anything else at this point in the
+   * flow. The figure came out of the draft, where it was reasoned about
+   * alongside the rest of the business. Asking the player to confirm a number
+   * they have no basis for is an intake form pretending to be a decision.
+   *
+   * It is not locked: `marketing 12k` changes it in any quarter, with a P&L on
+   * screen and the response curve visible in the last quarter's revenue. That
+   * is where the call can actually be made.
+   */
+  const marketing = template.modifierDefaults.baseMarketingSpendPerQuarter;
 
   const config = createWorldConfig(
     capital.custom !== undefined
@@ -390,74 +412,120 @@ export async function runSetup(
   let model: BusinessModel | undefined;
   let world: WorldState | undefined;
 
-  for (let attempt = 1; ; attempt++) {
-    // Debt is arranged BEFORE equity, because the equity suggestion has to know
-    // about it. Sized off a debt-free probe, the suggestion missed the
-    // origination fees that only exist once a loan does — so accepting every
-    // default landed the player exactly one origination fee short of opening,
-    // and the gate refused a business the setup had just recommended.
-    const loan = await ask(input, `  ${pad('SBA 7(a) loan', 42)}[$0]: `, 0n, parseMoney);
-    const revolver = await ask(
-      input,
-      `  ${pad('Revolver limit', 42)}[$100,000]: `,
-      fromDisplay(100_000),
-      parseMoney,
-    );
-    const debt = [
-      ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
-      ...(revolver > 0n
-        ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }]
-        : []),
-    ];
+  // Never suggest emptying the household. §2.3 draws living expenses from
+  // household cash every quarter and a founder who put every dollar into the
+  // buildout is personally insolvent by the second one.
+  const livingReserve = fromDisplay(60_000);
+  const investable =
+    config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
 
-    const probe = buildModelFromTemplate({
+  for (let attempt = 1; ; attempt++) {
+    // What opening costs, before anyone has been asked for a number. Everything
+    // below is arithmetic on this, which is the whole point: the player is
+    // being shown a plan, not interrogated for its inputs.
+    const bare = buildModelFromTemplate({
       businessName,
       template,
       archetype,
       scale,
       marketingSpendPerQuarter: marketing,
       equityInjection: 0n,
-      debt,
       ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
     });
-    // A revolver is a limit, not cash at close; only term debt funds month zero.
-    const monthZero = computeMonthZeroOutlays(probe).total;
+    const monthZero = computeMonthZeroOutlays(bare).total;
     // Month zero alone is a knife edge: the first quarter's fixed costs land
     // before any revenue does, so a business funded to exactly its opening
-    // outlay begins on the crisis ladder. Suggest one quarter of fixed operating
-    // cost on top — the buffer a lender would expect to see anyway.
-    const quarterOfFixed = probe.costs.fixedPeriod.reduce<Money>(
+    // outlay begins on the crisis ladder. One quarter of fixed operating cost
+    // on top — the buffer a lender would expect to see anyway.
+    const quarterOfFixed = bare.costs.fixedPeriod.reduce<Money>(
       (a, c) => a + c.amountPerQuarter,
       0n,
     );
     const needed = monthZero + quarterOfFixed;
-    const fundedByDebt = loan;
-    const equityNeeded = needed > fundedByDebt ? needed - fundedByDebt : 0n;
-    // Never suggest emptying the household. §2.3 draws living expenses from
-    // household cash every quarter and a founder who put every dollar into the
-    // buildout is personally insolvent by the second one.
-    const livingReserve = fromDisplay(60_000);
-    const investable =
-      config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
-    const suggestedEquity = equityNeeded < investable ? equityNeeded : investable;
-    // The suggestion capping out at the household's investable cash is itself
-    // the answer to "how much more do I need" — say so rather than letting the
-    // player discover it by being refused.
-    if (equityNeeded > investable) {
-      console.log(
-        `${DIM}  Opening needs about ${toDisplay(needed, { showCents: false })}. Your own` +
-          ` cash covers ${toDisplay(investable, { showCents: false })} of it after leaving` +
-          ` ${toDisplay(livingReserve, { showCents: false })} to live on — the rest has to be` +
-          ` borrowed, or the business has to get smaller.${RESET}`,
+
+    const proposedEquity = needed < investable ? needed : investable;
+    const gap = needed > proposedEquity ? needed - proposedEquity : 0n;
+    // Grossed up for the fee, because a loan does not deliver its own
+    // principal: SBA 7(a) charges 3% at close, so borrowing exactly the gap
+    // lands 3% short. This is what left an earlier run one origination fee
+    // outside a gate the setup had just recommended.
+    const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
+    const proposedLoan = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
+    const proposedRevolver = fromDisplay(100_000);
+
+    let loan: Money;
+    let revolver: Money;
+    let equity: Money;
+
+    /**
+     * One choice instead of three numbers.
+     *
+     * The old screen asked for an SBA loan, a revolver limit and an equity
+     * injection as bare dollar figures. Nobody arrives at a terminal knowing
+     * what revolver limit a veggie burger place should carry, and the
+     * arithmetic that answers it — month zero, a quarter of fixed costs, the
+     * origination fee, what is left after living expenses — is all already
+     * computed right here. Asking was never eliciting information; it was
+     * making the player do the sum by hand and then refusing them when they
+     * got it wrong.
+     *
+     * The numbers are still fully editable. What changed is that the default
+     * is a worked plan rather than a blank field.
+     */
+    console.log(`\n${BOLD}FUNDING${RESET}`);
+    console.log(
+      `${DIM}  Opening costs ${toDisplay(needed, { showCents: false })} — buildout, deposits and` +
+        ` the first quarter of fixed costs before any revenue lands.${RESET}`,
+    );
+    console.log(
+      `${DIM}  You have ${toDisplay(config.startCapital, { showCents: false })}, of which` +
+        ` ${toDisplay(investable, { showCents: false })} is investable after leaving` +
+        ` ${toDisplay(livingReserve, { showCents: false })} to live on.${RESET}\n`,
+    );
+    const plan =
+      proposedLoan > 0n
+        ? `${toDisplay(proposedEquity, { showCents: false })} of your own plus a ` +
+          `${toDisplay(proposedLoan, { showCents: false })} SBA 7(a)`
+        : `${toDisplay(proposedEquity, { showCents: false })} of your own, no debt needed`;
+    console.log(`  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`);
+    console.log(`  2  ${DIM}Set the loan, revolver and equity myself${RESET}`);
+
+    const choice = await ask(input, '> ', 1, (raw) => {
+      const n = parseNumber(raw);
+      return n === 1 || n === 2 ? n : undefined;
+    });
+
+    if (choice === 1) {
+      loan = proposedLoan;
+      revolver = proposedRevolver;
+      equity = proposedEquity;
+    } else {
+      loan = await ask(
+        input,
+        `  ${pad('SBA 7(a) loan', 42)}[${toDisplay(proposedLoan, { showCents: false })}]: `,
+        proposedLoan,
+        parseMoney,
+      );
+      revolver = await ask(
+        input,
+        `  ${pad('Revolver limit', 42)}[${toDisplay(proposedRevolver, { showCents: false })}]: `,
+        proposedRevolver,
+        parseMoney,
+      );
+      equity = await ask(
+        input,
+        `  ${pad('Your own capital into the business', 42)}[${toDisplay(proposedEquity, { showCents: false })}]: `,
+        proposedEquity,
+        parseMoney,
       );
     }
 
-    const equity = await ask(
-      input,
-      `  ${pad('Your own capital into the business', 42)}[${toDisplay(suggestedEquity, { showCents: false })}]: `,
-      suggestedEquity,
-      parseMoney,
-    );
+    const debt = [
+      ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
+      ...(revolver > 0n
+        ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }]
+        : []),
+    ];
 
     // Putting the whole household in is allowed and sometimes correct, but it
     // has to be a decision rather than a side effect of typing a round number.
@@ -561,7 +629,7 @@ export async function runSetup(
       console.log(`${DIM}Nothing committed.${RESET}`);
       return undefined;
     }
-    console.log(`\n${BOLD}MARKETING & FINANCING${RESET} ${DIM}— attempt ${attempt + 1}${RESET}`);
+    console.log(`${DIM}  — attempt ${attempt + 1}${RESET}`);
   }
 
   renderRegister(model);

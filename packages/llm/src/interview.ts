@@ -1,4 +1,4 @@
-import { zConceptDraft, type ConceptDraft, type DraftParam } from './draft.js';
+import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import type { ConceptTransport, InterviewMessage } from './client.js';
@@ -171,7 +171,7 @@ export class ConceptInterview {
     // keeps each request's decoding grammar inside the API's size limit, and it
     // also stops the model juggling seventeen overhead fields while asking
     // where the shop is.
-    const draft = zConceptDraft.parse(await this.transport.draft(this.system, this.transcript));
+    const draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
     return {
       status: 'DRAFTED',
       message: turn.message,
@@ -224,6 +224,20 @@ export function draftIssues(draft: ConceptDraft): string[] {
 
   if (draft.streams.length === 0) {
     issues.push('No revenue stream: the model has nothing to drive revenue from.');
+  }
+  // The mapper reads streams[0] and nothing else, so a second stream is not a
+  // richer model — it is revenue that silently disappears. A veggie burger
+  // place drafted four (dine-in, drive-thru, delivery, catering); the extras
+  // were dropped, and the fourth arrived malformed and took the session with
+  // it. Until multi-stream is real, saying so is better than pretending.
+  if (draft.streams.length > 1) {
+    issues.push(
+      `${draft.streams.length} revenue streams, and only the first is modelled — the rest ` +
+        `would be dropped without appearing anywhere. Fold them into one stream with a ` +
+        `blended price and a volume that covers every channel, and put what you blended in ` +
+        `openNotes. Channel-specific economics belong in the cost lines: a delivery app's ` +
+        `commission is a VARIABLE_REVENUE line, not a separate stream.`,
+    );
   }
 
   for (const [i, stream] of draft.streams.entries()) {

@@ -2,6 +2,7 @@ import {
   AnthropicConceptTransport,
   ConceptInterview,
   ConceptRefusedError,
+  MalformedDraftError,
   UnusableResponseError,
   draftIssues,
   draftToTemplate,
@@ -166,7 +167,7 @@ export async function runConceptInterview(
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);
         return undefined;
       }
-      if (error instanceof UnusableResponseError) {
+      if (error instanceof UnusableResponseError || error instanceof MalformedDraftError) {
         console.log(`\n  ${RED}${wrap(error.message, 74, '')}${RESET}`);
         console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
         return undefined;

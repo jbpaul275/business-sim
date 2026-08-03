@@ -235,3 +235,49 @@ export const zInterviewTurn = z.object({
   readyToDraft: z.boolean(),
 });
 export type InterviewTurn = z.infer<typeof zInterviewTurn>;
+
+/**
+ * The model emitted a draft the schema will not accept.
+ *
+ * Distinct from a corrupted response: this one parsed as JSON and simply had
+ * the wrong shape. It exists so the failure reaches the player as a sentence.
+ * A four-stream draft came back with its fourth stream truncated and the
+ * ZodError went to the terminal verbatim — six `invalid_type` objects with
+ * `path: ["streams", 3, "archetype"]`, under the heading "The interview could
+ * not continue". That is a stack trace wearing a hat: it tells the player
+ * nothing they can act on and buries the one useful fact.
+ */
+export class MalformedDraftError extends Error {
+  constructor(readonly detail: string) {
+    super(
+      `The model's draft could not be read — ${detail}. This is a generation fault, ` +
+        `not a problem with what you described.`,
+    );
+    this.name = 'MalformedDraftError';
+  }
+}
+
+/**
+ * Validate a draft, or fail readably.
+ *
+ * Used on both paths that can produce one: the transport, which parses the
+ * model's text, and the interview, which re-checks whatever a transport hands
+ * it. Either can be the first to see a bad shape, so neither may let a raw
+ * validator error escape.
+ */
+export function assertDraftShape(value: unknown): ConceptDraft {
+  const result = zConceptDraft.safeParse(value);
+  if (result.success) return result.data;
+
+  // The first few paths, in the shape a person reads. Not all of them: one
+  // missing field usually cascades into a dozen.
+  const where = result.error.issues
+    .slice(0, 3)
+    .map((i) => i.path.join('.'))
+    .filter(Boolean);
+  throw new MalformedDraftError(
+    where.length > 0
+      ? `fields were missing or wrong: ${where.join(', ')}`
+      : 'it did not match the schema',
+  );
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ScriptedTransport } from './client.js';
+import { ScriptedTransport, type ConceptTransport } from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
 import { zConceptDraft, zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
@@ -491,6 +491,58 @@ describe('draftIssues', () => {
 
   it('catches a model with nothing driving revenue', () => {
     expect(draftIssues(draft({ streams: [] }))[0]).toContain('No revenue stream');
+  });
+});
+
+describe('a malformed draft is a sentence, not a validator dump', () => {
+  it('reports missing fields in the shape a person reads', async () => {
+    // A truncated fourth stream sent six `invalid_type` objects to the
+    // terminal verbatim — `path: ["streams", 3, "archetype"]` and five more —
+    // under the heading "The interview could not continue". That is a stack
+    // trace wearing a hat.
+    const broken = { ...draft(), streams: [{ label: 'Only a label' }] };
+    const transport: ConceptTransport = {
+      turn: async () => ({ turn: ready('Building it.') }),
+      draft: async () => broken as never,
+    };
+    const interview = new ConceptInterview({ transport });
+
+    await expect(interview.send('A veggie burger place in Toledo.')).rejects.toThrow(
+      /could not be read/,
+    );
+  });
+});
+
+describe('the streams the mapper cannot see', () => {
+  it('rejects a draft with more than one stream, because the rest vanish', () => {
+    // A veggie burger place in Toledo drafted four streams — dine-in,
+    // drive-thru, delivery apps, catering. `draftToTemplate` reads streams[0]
+    // and nothing else, so three of them were revenue that would never appear
+    // anywhere; then the fourth came back malformed and took the session.
+    // Multi-stream is not built, and pretending otherwise is what broke this.
+    const multi = draft({
+      streams: [
+        draft().streams[0]!,
+        { ...draft().streams[0]!, label: 'Drive-thru' },
+      ],
+    });
+    const issues = draftIssues(multi);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('2 revenue streams');
+    // It says what to do instead, because "not supported" is not actionable.
+    expect(issues[0]).toContain('blended price');
+    expect(issues[0]).toContain('VARIABLE_REVENUE');
+  });
+
+  it('leaves a single-stream draft alone', () => {
+    expect(draftIssues(draft())).toEqual([]);
+  });
+
+  it('tells the model that a second stream is silently dropped', () => {
+    // The prompt invited exactly what the mapper could not handle: "if a
+    // business genuinely has two engines, that is two streams."
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Emit exactly one stream');
+    expect(CONCEPT_INTERVIEW_SYSTEM).not.toContain('that is two streams');
   });
 });
 
