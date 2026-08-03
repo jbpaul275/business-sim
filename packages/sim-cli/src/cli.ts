@@ -4,10 +4,12 @@ import { tick, type TickResult } from '@bizsim/engine';
 import type { WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
 import { play } from './play.js';
+import { createConceptTransport, type AdviceTransport } from '@bizsim/llm';
+import { conceptPathAvailable } from './concept.js';
 import { benchmarkLines } from './portfolio.js';
 import { runSetup } from './setup.js';
 import { openInput } from './input.js';
-import { journalDir, listSessions } from './journal.js';
+import { journalDir, listSessions, type Journal } from './journal.js';
 import { summariseFaults } from './faults.js';
 
 /**
@@ -36,15 +38,23 @@ function reportSessions(): void {
   const pad = (s: string, n: number): string =>
     s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n);
 
-  console.log(`\n${BOLD}${pad('WHEN', 18)}${pad('BUILD', 9)}${pad('BUSINESS', 30)}${pad('OUTCOME', 12)}${pad('TURNS', 6)}${pad('QTRS', 6)}COST${RESET}`);
+  // The model is a column, not a footnote. Every other number here is only
+  // interpretable against it: a $0.04 session and a $0.31 session say nothing
+  // about which is better value until you know what answered them.
+  console.log(
+    `\n${BOLD}${pad('WHEN', 18)}${pad('BUILD', 9)}${pad('BUSINESS', 26)}${pad('MODEL', 18)}` +
+      `${pad('OUTCOME', 12)}${pad('TURNS', 6)}${pad('QTRS', 6)}${pad('WAIT', 7)}COST${RESET}`,
+  );
   for (const s of sessions) {
     console.log(
       pad(s.startedAt.slice(0, 16).replace('T', ' '), 18) +
         pad(s.build, 9) +
-        pad(s.businessName ?? '—', 30) +
+        pad(s.businessName ?? '—', 26) +
+        pad(s.models.join('+') || '—', 18) +
         pad(s.outcome, 12) +
         pad(String(s.turns), 6) +
         pad(String(s.quarters), 6) +
+        pad(s.calls > 0 ? `${s.waitedSeconds}s` : '—', 7) +
         (s.costUsd !== undefined ? `$${s.costUsd.toFixed(2)}` : '—'),
     );
   }
@@ -57,6 +67,85 @@ function reportSessions(): void {
       `${turns} turns · $${spent.toFixed(2)} · ` +
       `${sessions.reduce((a, s) => a + s.transientRetries, 0)} retries after an overload${RESET}`,
   );
+
+  /**
+   * The head-to-head, by model — cost, latency and the three quality signals.
+   *
+   * Cost per *committed* session rather than per session, because a cheap model
+   * that gets abandoned half the time is not cheap, it just fails earlier;
+   * averaging its abandonments in with its successes is how a worse model wins
+   * a spreadsheet. Dividing by the runs that reached a business makes a model
+   * pay for its own failures.
+   *
+   * And cost is only half of it. `retried` counts the attempts beyond the first
+   * — an empty turn, a truncated draft, a refused schema — all of which the
+   * session paid for twice. `fabricated` counts the times the mid-game advisor
+   * quoted money the ledger never produced and had to be re-asked, which is the
+   * §1.1 failure and the one nobody can spot by reading the answer.
+   *
+   * Small-n is stated rather than smoothed over. Three sessions is not a
+   * finding, and a table that looks like a result at n=3 will be quoted as one.
+   */
+  interface ModelRow {
+    runs: number;
+    committed: number;
+    cost: number;
+    wait: number;
+    calls: number;
+    retried: number;
+    failed: number;
+    asked: number;
+    fabricated: number;
+    cancelled: number;
+  }
+  const byModel = new Map<string, ModelRow>();
+  for (const s of sessions) {
+    if (s.models.length === 0) continue;
+    const key = s.models.join('+');
+    const row: ModelRow = byModel.get(key) ?? {
+      runs: 0, committed: 0, cost: 0, wait: 0, calls: 0,
+      retried: 0, failed: 0, asked: 0, fabricated: 0, cancelled: 0,
+    };
+    row.runs += 1;
+    if (s.outcome === 'committed') row.committed += 1;
+    row.cost += s.costUsd ?? 0;
+    row.wait += s.waitedSeconds;
+    row.calls += s.calls;
+    row.retried += s.retriedCalls;
+    row.failed += s.failedCalls;
+    row.asked += s.questionsAsked;
+    row.fabricated += s.fabricatedFigures;
+    row.cancelled += s.cancelled;
+    byModel.set(key, row);
+  }
+  if (byModel.size > 0) {
+    const pct = (n: number, d: number): string => (d > 0 ? `${Math.round((n / d) * 100)}%` : '—');
+    console.log(`\n${BOLD}HEAD TO HEAD, BY MODEL${RESET}`);
+    console.log(
+      `${DIM}  ${pad('MODEL', 22)}${pad('RUNS', 6)}${pad('COMMIT', 8)}${pad('$/COMMIT', 10)}` +
+        `${pad('WAIT', 8)}${pad('RETRIED', 9)}${pad('FAILED', 8)}FABRICATED${RESET}`,
+    );
+    for (const [model, r] of [...byModel].sort((a, b) => b[1].runs - a[1].runs)) {
+      console.log(
+        `  ${pad(model, 22)}${pad(String(r.runs), 6)}` +
+          `${pad(pct(r.committed, r.runs), 8)}` +
+          `${pad(r.committed > 0 ? `$${(r.cost / r.committed).toFixed(2)}` : '—', 10)}` +
+          `${pad(`${Math.round(r.wait / r.runs)}s`, 8)}` +
+          `${pad(pct(r.retried, r.calls), 9)}` +
+          `${pad(pct(r.failed, r.calls), 8)}` +
+          `${pct(r.fabricated, r.asked)} of ${r.asked} answers`,
+      );
+    }
+    const total = [...byModel.values()].reduce((a, r) => a + r.runs, 0);
+    if (total < 10) {
+      // Said out loud, because a table always looks like a result. Two runs of
+      // the same idea differ by more than the model does.
+      console.log(
+        `\n${DIM}  ${total} run(s). Not a finding — session-to-session variance on the same` +
+          ` concept\n  is larger than the gap between two competent models. Run more.${RESET}`,
+      );
+    }
+  }
 
   // The faults, ranked. This is the number that says which check is
   // miscalibrated, and it is invisible one session at a time.
@@ -303,7 +392,11 @@ async function main(): Promise<void> {
     try {
       const setup = await runSetup(input);
       if (setup?.committed) {
-        await play(setup.world, { input, ...(setup.journal ? { journal: setup.journal } : {}) });
+        await play(setup.world, {
+          input,
+          ...(setup.journal ? { journal: setup.journal } : {}),
+          ...(turnAdvisor(setup.journal) ? { advisor: turnAdvisor(setup.journal)! } : {}),
+        });
       }
       if (setup?.journal?.path) {
         console.log(`\n\x1b[2mSession recorded at ${setup.journal.path}\x1b[0m`);
@@ -320,7 +413,7 @@ async function main(): Promise<void> {
   }
 
   if (args.interactive) {
-    await play(args.scenario);
+    await play(args.scenario, { ...(turnAdvisor() ? { advisor: turnAdvisor()! } : {}) });
     return;
   }
 
@@ -403,6 +496,40 @@ async function main(): Promise<void> {
     console.log(line);
   }
   if (failures > 0) process.exit(1);
+}
+
+/**
+ * The mid-game model, when there is one.
+ *
+ * Built once and cached: a new transport per question would make a fresh
+ * client, lose the retry state, and split the usage meter into fragments that
+ * add up to nothing. Absent when there is no key, which is a supported way to
+ * play — the deterministic advisor is the whole game without it.
+ *
+ * `BIZSIM_NO_TURN_AI=1` turns it off with a key present, which is how the
+ * before-and-after of any change to it gets compared.
+ */
+let advisorInstance: AdviceTransport | undefined;
+let advisorResolved = false;
+/**
+ * The journal arrives after setup, so it is handed in rather than closed over.
+ *
+ * Advisor calls are the highest-volume call type in a long run — one per
+ * question, every quarter — and until now they recorded nothing at all. They
+ * are also the best candidate for a cheaper model, which is precisely the
+ * decision that needs the numbers.
+ */
+function turnAdvisor(journal?: Journal): AdviceTransport | undefined {
+  if (!advisorResolved) {
+    advisorResolved = true;
+    advisorInstance =
+      conceptPathAvailable() && !process.env['BIZSIM_NO_TURN_AI']
+        ? createConceptTransport({
+            onCall: (record) => journal?.write({ kind: 'call', ...record }),
+          })
+        : undefined;
+  }
+  return advisorInstance;
 }
 
 void main();

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_USAGE, ScriptedTransport, type ConceptTransport } from './client.js';
+import {
+  CancelledError,
+  EMPTY_USAGE,
+  ScriptedTransport,
+  isCancellation,
+  isTransient,
+  type ConceptTransport,
+} from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -36,6 +43,7 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
       seasonality: [0.55, 1.15, 1.55, 0.75],
       marketingSpendPerQuarter: 6_000,
       expectedAnnualRevenue: 900_000,
+      volumeNoun: 'transactions',
     },
   costLines: [
     {
@@ -417,6 +425,44 @@ describe('draftIssues', () => {
     expect(draftIssues(broken)[0]).toContain('capacityPerBlock');
   });
 
+  /**
+   * The free wall. A phone-game draft carried `Customer support (part-time)`
+   * at $0 a block supporting 1,500 subscribers, and every other check passed
+   * it: the class is right, the capacity is positive, the minimum is 1. The
+   * player was then told they were at "34.8% of capacity (1,500)" on a game
+   * sold through an app store — a ceiling that both does not exist and could
+   * have been lifted for nothing by hiring a second free block.
+   */
+  it('rejects a step-fixed block that costs nothing to add', () => {
+    const free = draft({
+      costLines: [
+        {
+          ...draft().costLines[0]!,
+          label: 'Customer support (part-time)',
+          class: 'STEP_FIXED',
+          value: 0,
+          capacityPerBlock: 1_500,
+        },
+      ],
+    });
+    const issues = draftIssues(free);
+    expect(issues).toHaveLength(1);
+    // Both ways out are named, so the retry has somewhere to go.
+    expect(issues[0]).toContain('drop the line');
+    expect(issues[0]).toContain('real quarterly cost');
+  });
+
+  it('leaves a priced block alone however small the price', () => {
+    // A cheap block is a business decision; a free one is a modelling error.
+    // The guard has to tell them apart or it becomes an opinion about wages.
+    const cheap = draft({
+      costLines: [
+        { ...draft().costLines[0]!, class: 'STEP_FIXED', value: 1, capacityPerBlock: 1_500 },
+      ],
+    });
+    expect(draftIssues(cheap)).toEqual([]);
+  });
+
   it('names the missing price parameter instead of defaulting it to zero', () => {
     // The airline run. OCCUPANCY prices under `ratePerUnitPerQuarter` — not a
     // name anyone reaches for describing a seat fare — so the model emitted
@@ -491,6 +537,8 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
     const broken = { ...draft(), stream: { label: 'Only a label' } };
     const transport: ConceptTransport = {
       turn: async () => ({ turn: ready('Building it.') }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => broken as never,
       usage: EMPTY_USAGE,
     };
@@ -570,6 +618,8 @@ describe('how hard the turn worked', () => {
           thinkingTokens: 2_060,
         },
       }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => draft(),
       usage: EMPTY_USAGE,
     };
@@ -591,6 +641,8 @@ describe('how hard the turn worked', () => {
         await new Promise((r) => setTimeout(r, 12));
         return { turn: asks('Right.', 'How many scopes?') };
       },
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => draft(),
       usage: EMPTY_USAGE,
     };
@@ -604,6 +656,8 @@ describe('how hard the turn worked', () => {
     let usage = EMPTY_USAGE;
     const transport: ConceptTransport = {
       turn: async () => ({ turn: ready('Enough to build against.', 'Here it is.') }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => {
         await new Promise((r) => setTimeout(r, 15));
         // What the draft call spent, as the real transport would record it.
@@ -904,5 +958,94 @@ describe('the wire schema', () => {
 
   it('requires readiness to be stated, not inferred from the prose', () => {
     expect(() => zInterviewTurn.parse({ message: 'Where is it?', cta: 'Say where.' })).toThrow();
+  });
+});
+
+/**
+ * Taking back a message you did not mean to send.
+ *
+ * A pasted fragment — "re Blend it out and a" — cost fifty-three seconds and
+ * put a question nobody asked into the transcript with an answer to it
+ * underneath. Every turn after that reasoned against both.
+ */
+describe('undo', () => {
+  const question = (message: string, cta: string): InterviewTurn => ({
+    message,
+    cta,
+    readyToDraft: false,
+  });
+  const transport = (): ConceptTransport => ({
+    turn: async () => ({ turn: question('And where is it?', 'Tell me the town.') }),
+    advise: () => Promise.reject(new Error('no advice in this double')),
+    adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
+    draft: () => Promise.reject(new Error('no draft in this double')),
+    usage: EMPTY_USAGE,
+  });
+
+  it('removes the exchange entirely, so the model never sees it', async () => {
+    const interview = new ConceptInterview({ transport: transport() });
+    await interview.send('A cafe in Buffalo.');
+    await interview.send('re Blend it out and a');
+    expect(interview.transcript).toHaveLength(4);
+
+    expect(interview.undo()).toBe(true);
+    expect(interview.transcript).toHaveLength(2);
+    expect(interview.transcript.map((m) => m.content).join(' ')).not.toContain('Blend it out');
+    // The conversation before it is untouched.
+    expect(interview.transcript[0]!.content).toBe('A cafe in Buffalo.');
+  });
+
+  it('gives the turn back, so correcting a typo does not cost the interview', async () => {
+    const interview = new ConceptInterview({ transport: transport(), maxTurns: 2 });
+    await interview.send('A cafe in Buffalo.');
+    interview.undo();
+    await interview.send('A cafe in Buffalo, 30 seats.');
+    const state = await interview.send('Rent is $4,000.');
+    // Three sends against a two-turn budget, one of them taken back.
+    expect(state.status).not.toBe('EXHAUSTED');
+  });
+
+  it('says so when there is nothing to take back', () => {
+    expect(new ConceptInterview({ transport: transport() }).undo()).toBe(false);
+  });
+});
+
+/**
+ * Ctrl-C during a call.
+ *
+ * The only key that did anything while the model was thinking killed the whole
+ * setup, so the choice was fifty-three seconds of a wrong answer or losing ten
+ * minutes of conversation.
+ */
+describe('cancelling a call', () => {
+  it('leaves the conversation exactly as it was', async () => {
+    const interview = new ConceptInterview({
+      transport: {
+        turn: async () => {
+          const error = new Error('Request was aborted.');
+          error.name = 'APIUserAbortError';
+          throw error;
+        },
+        advise: () => Promise.reject(new Error('no advice')),
+        adjudicate: () => Promise.reject(new Error('no adjudication')),
+        draft: () => Promise.reject(new Error('no draft')),
+        usage: EMPTY_USAGE,
+      },
+    });
+
+    await expect(interview.send('something I did not mean to send')).rejects.toThrow(
+      CancelledError,
+    );
+    // The message is out of the transcript, so the next send is not a duplicate
+    // and the model never answers a conversation that did not happen.
+    expect(interview.transcript).toHaveLength(0);
+  });
+
+  it('is never treated as a busy model', () => {
+    // Retrying a cancellation is the exact opposite of what was asked for.
+    const aborted = new Error('Request was aborted.');
+    aborted.name = 'APIUserAbortError';
+    expect(isTransient(aborted)).toBe(false);
+    expect(isCancellation(aborted)).toBe(true);
   });
 });

@@ -80,7 +80,8 @@ describe('reading sessions back', () => {
       { kind: 'session', build: 'abc1234', startedAt: '2026-01-01T10:00:00Z' },
       { kind: 'turn', index: 0, player: 'a campground', message: 'x', cta: 'y', ms: 1, thinkingTokens: 0, calls: 1 },
       { kind: 'draft', businessName: '320-Acre TN Campground', archetype: 'OCCUPANCY', draft: {}, ms: 58_000 },
-      { kind: 'spend', calls: 6, inputTokens: 45_800, outputTokens: 8_800, thinkingTokens: 0 },
+      { kind: 'call', call: 'turn', provider: 'kimi', model: 'kimi-k3', effort: 'low', ms: 4_000, inputTokens: 6_000, cachedInputTokens: 5_000, outputTokens: 1_100, thinkingTokens: 800, costUsd: 0.0195, ratesKnown: true, attempt: 1, ok: true },
+      { kind: 'call', call: 'draft', provider: 'kimi', model: 'kimi-k3', effort: 'high', ms: 58_000, inputTokens: 9_000, cachedInputTokens: 8_000, outputTokens: 12_000, thinkingTokens: 9_000, costUsd: 0.1854, ratesKnown: true, attempt: 1, ok: true },
       { kind: 'commit', committed: true, equity: '$1,000,000', termDebt: '$3,383', openingCash: '$18,691', monthZero: '$984,691' },
       { kind: 'quarter', period: 0, revenue: '$5,200', ebitda: '-$25,600', cash: '$321', events: ['CASH_CRISIS'] },
       { kind: 'quarter', period: 1, revenue: '$18,300', ebitda: '-$14,900', cash: '$1,200', events: [] },
@@ -92,7 +93,53 @@ describe('reading sessions back', () => {
     expect(s!.turns).toBe(1);
     expect(s!.quarters).toBe(2);
     expect(s!.build).toBe('abc1234');
-    expect(s!.costUsd).toBeGreaterThan(0);
+    expect(s!.costUsd).toBeCloseTo(0.2049, 6);
+    // The three facts a quality-versus-cost comparison across sessions needs,
+    // and which the old session-level `spend` total could not supply.
+    expect(s!.models).toEqual(['kimi-k3']);
+    expect(s!.calls).toBe(2);
+    expect(s!.waitedSeconds).toBe(62);
+  });
+
+  it('counts the quality signals, which cost alone cannot settle', () => {
+    /**
+     * A model is only cheaper if it does the job. `fabricatedFigures` is the
+     * one that matters most: every time the advisor quoted money the ledger
+     * never produced and had to be re-asked. §1.1 forbids the model computing
+     * anything that lands on a statement, and nobody can tell a fabricated
+     * figure from a real one by reading it — so a model that does this more
+     * often is worse in the way hardest to notice and most expensive to miss.
+     */
+    write('2026-02-01-q.jsonl', [
+      { kind: 'session', build: 'q', startedAt: '2026-02-01T10:00:00Z' },
+      { kind: 'call', call: 'draft', provider: 'kimi', model: 'kimi-k3', effort: 'high', ms: 40_000, inputTokens: 9_000, cachedInputTokens: 8_000, outputTokens: 30_000, thinkingTokens: 28_000, costUsd: 0.45, ratesKnown: true, attempt: 1, ok: false, failure: 'BudgetExhaustedError' },
+      { kind: 'call', call: 'draft', provider: 'kimi', model: 'kimi-k3', effort: 'low', ms: 52_000, inputTokens: 9_000, cachedInputTokens: 8_000, outputTokens: 12_000, thinkingTokens: 9_000, costUsd: 0.19, ratesKnown: true, attempt: 2, ok: true },
+      { kind: 'asked', question: 'how do i grow', answered: ['x'] },
+      { kind: 'asked', question: 'should i raise price', answered: ['x'] },
+      { kind: 'advice_corrected', question: 'how do i grow', figures: ['$412k'] },
+      { kind: 'cancelled' },
+    ]);
+    const s = listSessions(dir).find((x) => x.build === 'q')!;
+    expect(s.retriedCalls).toBe(1);
+    expect(s.failedCalls).toBe(1);
+    expect(s.questionsAsked).toBe(2);
+    expect(s.fabricatedFigures).toBe(1);
+    expect(s.cancelled).toBe(1);
+    // The truncated attempt is priced in. It was billed, and a comparison that
+    // drops it makes the model that truncates look like the cheap one.
+    expect(s.costUsd).toBeCloseTo(0.64, 6);
+  });
+
+  it('reports no cost for a session recorded before per-call pricing', () => {
+    // Rather than pricing it against today's rates and presenting a guess about
+    // an unknown model as a measurement.
+    write('2025-12-01-old.jsonl', [
+      { kind: 'session', build: 'old', startedAt: '2025-12-01T10:00:00Z' },
+      { kind: 'spend', calls: 6, inputTokens: 45_800, outputTokens: 8_800, thinkingTokens: 0 },
+    ]);
+    const s = listSessions(dir).find((x) => x.build === 'old');
+    expect(s!.costUsd).toBeUndefined();
+    expect(s!.models).toEqual([]);
   });
 
   it('survives the half-written last line a crash leaves behind', () => {

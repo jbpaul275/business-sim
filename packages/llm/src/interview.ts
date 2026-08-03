@@ -2,6 +2,8 @@ import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import {
+  CancelledError,
+  isCancellation,
   EMPTY_USAGE,
   TransientError,
   isTransient,
@@ -202,6 +204,34 @@ export class ConceptInterview {
     return draft;
   }
 
+  /**
+   * Take back the last exchange.
+   *
+   * Someone pasted half a sentence from somewhere else — "re Blend it out and
+   * a" — and watched the model spend fifty-three seconds producing "One or two
+   * sentences that stay onme's mind." The conversation was then carrying a
+   * question nobody asked and an answer to it, and every later turn was
+   * reasoning against both.
+   *
+   * Dropping the pair is the whole fix. The transcript is the conversation, so
+   * removing the last two entries makes it as if the message was never sent —
+   * which is exactly what the player means by "I didn't mean to send that".
+   */
+  undo(): boolean {
+    if (this.transcript.length === 0) return false;
+    if (this.transcript[this.transcript.length - 1]?.role === 'assistant') {
+      this.transcript.pop();
+    }
+    if (this.transcript[this.transcript.length - 1]?.role === 'user') {
+      this.transcript.pop();
+      // The turn is un-taken as well, or a player who fixes three typos runs
+      // out of interview for having corrected himself.
+      this.turnsTaken = Math.max(0, this.turnsTaken - 1);
+      return true;
+    }
+    return false;
+  }
+
   /** Feed the player's latest message and get the model's next move. */
   async send(playerMessage: string): Promise<InterviewState> {
     // Same invariant on the way in. An empty player line would be rejected by
@@ -243,6 +273,10 @@ export class ConceptInterview {
       // retry of the same message sends it twice, and the model answers a
       // conversation that did not happen.
       this.transcript.pop();
+      // Cancellation unwinds through the same path a transport failure does,
+      // which is what makes it safe: the player's message is already back out
+      // of the transcript by the time anyone sees the error.
+      if (isCancellation(error)) throw new CancelledError();
       throw isTransient(error) ? new TransientError(error) : error;
     }
     this.lastTurn = {
@@ -395,7 +429,32 @@ export function draftIssues(draft: ConceptDraft): string[] {
    *
    * One is a real floor. More than one is a claim worth making explicitly.
    */
+  /**
+   * A ceiling nobody pays for.
+   *
+   * A phone-game draft came back with `Customer support (part-time)` as a
+   * STEP_FIXED line at $0 a block supporting 1,500 subscribers, and the turn
+   * screen dutifully reported "522 subscribers · 34.8% of capacity (1,500)" —
+   * a wall across a business sold through an app store, where the only thing
+   * standing between the player and the next million subscribers was a block
+   * they could have hired for nothing.
+   *
+   * A block that costs nothing is not a constraint, and pretending it is one
+   * is worse than omitting it: the player sees a number that looks like market
+   * size and plans against it. Two honest readings exist and the model has to
+   * pick one — the owner does this job, in which case there is no separate
+   * line, or someone is paid to do it, in which case say what they cost.
+   */
   for (const line of draft.costLines) {
+    if (line.class === 'STEP_FIXED' && line.value <= 0) {
+      issues.push(
+        `'${line.label}' is a STEP_FIXED block costing ${line.value} a quarter, which puts a ` +
+          `ceiling of ${line.capacityPerBlock ?? 0} on the business that costs nothing to lift. ` +
+          `Either the owner does this work at small scale — in which case drop the line entirely, ` +
+          `since their time is already in owner comp — or somebody is paid for it, in which case ` +
+          `give the block its real quarterly cost.`,
+      );
+    }
     if (line.class === 'STEP_FIXED' && (line.minimumBlocks ?? 0) > 1) {
       issues.push(
         `'${line.label}' has a minimum of ${line.minimumBlocks} blocks, which says the business ` +

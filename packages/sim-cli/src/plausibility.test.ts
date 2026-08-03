@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { ConceptDraft } from '@bizsim/llm';
 import {
   buildabilityIssues,
+  capacityCeilingIssues,
   capitalIntensityNote,
   projectMatureRevenue,
   revenueRealityIssues,
+  staffingRealismIssues,
 } from './plausibility.js';
 import { fromDisplay } from '@bizsim/money';
 
@@ -46,6 +48,7 @@ const mcdonalds = (expectedAnnualRevenue: number): ConceptDraft => ({
       seasonality: [0.95, 1.05, 1.05, 0.95],
       marketingSpendPerQuarter: 9_000,
       expectedAnnualRevenue,
+    volumeNoun: 'covers',
     },
   costLines: [
     {
@@ -228,5 +231,104 @@ describe('capital in the ground against what it earns', () => {
 
   it('says nothing when there is no projection to measure against', () => {
     expect(capitalIntensityNote(mcdonalds(0), fromDisplay(20_000_000))).toBeUndefined();
+  });
+});
+
+/**
+ * Staffing that never has to grow.
+ *
+ * A Buffalo brewpub reached $4.4M a year — 370 covers a day — on five staffing
+ * blocks and an owner, and never once needed a sixth. Labour landed at 8% of
+ * revenue where full-service food runs 30-35%, and the single most consequential
+ * decision in an operating business never came up.
+ *
+ * The engine is not wrong and cannot be: §4.3 makes blocks a player decision
+ * and only forces one when demand exceeds what the blocks support. If a block
+ * supports everything, nothing is ever forced. The claim that needs checking
+ * belongs to the draft.
+ */
+describe('staffing that never has to grow', () => {
+  /** The same store, with the crew block sized so one covers everything. */
+  const withCrewCapacity = (capacityPerBlock: number, blockCost = 46_000): ConceptDraft => {
+    const draft = mcdonalds(1_900_000);
+    return {
+      ...draft,
+      costLines: draft.costLines.map((line) =>
+        line.label === 'Crew' ? { ...line, capacityPerBlock, value: blockCost } : line,
+      ),
+    };
+  };
+
+  it('flags a business whose labour never crosses a block boundary', () => {
+    // One crew block covering a million transactions a quarter: the number the
+    // brewpub had, in the shape a draft actually writes it.
+    const issues = staffingRealismIssues(withCrewCapacity(1_000_000, 12_000));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatch(/% of revenue/);
+    expect(issues[0]).toMatch(/covers all/);
+    // It names the mechanism, because that is the part the model can fix.
+    expect(issues[0]).toMatch(/Crew at 1,000,000 per block/);
+    // And it is a warning about a claim, not a verdict about the business.
+    expect(issues[0]).toMatch(/really is that light and the sourceNote should say why/);
+  });
+
+  it('says nothing about a business staffed like its trade', () => {
+    // 40,000 transactions per block at $46k: several blocks at maturity and
+    // labour in a normal band. This is the seeded store and it must stay quiet.
+    expect(staffingRealismIssues(mcdonalds(1_900_000))).toEqual([]);
+  });
+
+  it('does not fire on a genuinely light business, only an impossible one', () => {
+    // The threshold is far below any real trade's band on purpose: it catches
+    // the failure, not a difference of opinion about how lean a shop can run.
+    const lean = staffingRealismIssues(withCrewCapacity(120_000, 46_000));
+    for (const issue of lean) expect(issue).toMatch(/% of revenue/);
+    // Whatever it decides, it decides from the run rather than from the draft's
+    // own claim about itself.
+    expect(staffingRealismIssues(withCrewCapacity(40_000, 46_000))).toEqual([]);
+  });
+});
+
+/**
+ * A business that cannot break even with every unit sold.
+ *
+ * A ready-mix plant needed $871k a quarter to cover its costs and could
+ * physically produce $488k — two trucks, 321 loads, $1,520 a load. It ran four
+ * quarters, hit capacity in one of them, and died owing $1.3M with a personal
+ * guarantee. No decision available to any player closes a gap like that, which
+ * is what makes it a fault in the draft rather than a hard game.
+ */
+describe('a ceiling below the floor', () => {
+  /** The same store with its labour multiplied until no volume can carry it. */
+  const overweight = (blockCost: number): ConceptDraft => {
+    const draft = mcdonalds(1_900_000);
+    return {
+      ...draft,
+      costLines: draft.costLines.map((line) =>
+        line.label === 'Crew' ? { ...line, value: blockCost } : line,
+      ),
+    };
+  };
+
+  it('names the impossibility, in the trade’s own units', () => {
+    const issues = capacityCeilingIssues(overweight(900_000));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatch(/cannot break even at full capacity/);
+    expect(issues[0]).toMatch(/can physically produce/);
+    // The volume is quoted in the word the draft chose, not in "covers".
+    expect(issues[0]).toMatch(/covers at the price you set/);
+  });
+
+  it('names the three things that could be wrong rather than picking one', () => {
+    // The model is the one that knows which. Guessing on its behalf produces a
+    // repair that fixes the number and breaks the concept.
+    const issues = capacityCeilingIssues(overweight(900_000));
+    expect(issues[0]).toMatch(/cost lines are too heavy/);
+    expect(issues[0]).toMatch(/capacity is understated/);
+    expect(issues[0]).toMatch(/price is too low/);
+  });
+
+  it('says nothing about a business that can clear its own costs', () => {
+    expect(capacityCeilingIssues(mcdonalds(1_900_000))).toEqual([]);
   });
 });

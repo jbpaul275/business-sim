@@ -1,27 +1,19 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { looksGarbled } from './garbled.js';
-
-/**
- * A turn that cannot be shown or replayed.
- *
- * Two ways this happens, both seen live. The model returns text that is
- * corrupted — doubled, or two answers interleaved. Or it returns nothing at
- * all: valid JSON, schema-clean, empty strings. The second is the more
- * dangerous, because an empty assistant turn cannot go back into the
- * transcript — the API rejects a whitespace-only content block — so one empty
- * response ends the conversation two turns later with an error about message
- * formatting.
- */
-const isUnusable = (turn: { message: string; cta: string }): boolean =>
-  turn.message.trim().length === 0 ||
-  turn.cta.trim().length === 0 ||
-  looksGarbled(turn.message) ||
-  looksGarbled(turn.cta);
+import { type TurnAdvice, zTurnAdvice } from './advice.js';
+import { type Adjudication, zAdjudication } from './challenge.js';
+import { ZERO_TOKENS, emitCall, type CallKind, type CallSink } from './telemetry.js';
+import {
+  ADJUDICATION_SCHEMA,
+  ADVICE_SCHEMA,
+  DRAFT_AS_PROSE,
+  DRAFT_SCHEMA,
+  TURN_SCHEMA,
+  isUnusable,
+  stripFence,
+} from './wire.js';
 import {
   MalformedDraftError,
   assertDraftShape,
-  zConceptDraft,
   zInterviewTurn,
   type ConceptDraft,
   type InterviewTurn,
@@ -87,6 +79,11 @@ export function addUsage(total: UsageTotal, next: TurnUsage | undefined): UsageT
   };
 }
 
+export interface AdviceResult {
+  advice: TurnAdvice;
+  usage?: TurnUsage;
+}
+
 export interface TurnResult {
   turn: InterviewTurn;
   /**
@@ -105,8 +102,26 @@ export interface TurnResult {
 }
 
 export interface ConceptTransport {
+  /**
+   * Stop the call in flight, if there is one. Optional because a scripted
+   * transport has nothing to stop.
+   */
+  cancel?(): void;
   /** One conversational turn: a question, or a signal that it can now draft. */
   turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult>;
+  /**
+   * One mid-game answer. Cheaper and shorter than an interview turn: the
+   * player is waiting between decisions, not designing a business.
+   */
+  advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult>;
+  /**
+   * One disagreement, settled in isolation — §11.3.
+   *
+   * A single message and no history. The spec is explicit that this call must
+   * not see the conversational thread, and the transport is the thing that
+   * could accidentally supply it, so the isolation lives here.
+   */
+  adjudicate(system: string, input: string): Promise<Adjudication>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
   /**
@@ -120,32 +135,6 @@ export interface ConceptTransport {
    */
   readonly usage: UsageTotal;
 }
-
-/**
- * The SDK ships a `zodOutputFormat` helper, but it is typed against Zod 4 and
- * the rest of this monorepo is on Zod 3. Splitting Zod versions across packages
- * to gain one helper is a bad trade — schemas cross package boundaries here —
- * so schemas are converted to plain JSON Schema and handed to
- * `output_config.format` directly, then parsed with the same Zod 3 schema every
- * other package already uses.
- */
-const jsonSchemaFor = (schema: Parameters<typeof zodToJsonSchema>[0]): Record<string, unknown> =>
-  // Structured outputs require `additionalProperties: false` on every object
-  // and reject `$ref`, so the schema has to be emitted inline.
-  zodToJsonSchema(schema, { $refStrategy: 'none' }) as Record<string, unknown>;
-
-const TURN_SCHEMA = jsonSchemaFor(zInterviewTurn);
-const DRAFT_SCHEMA = jsonSchemaFor(zConceptDraft);
-
-/**
- * The draft asked for as prose, for the fallback path. Constrained decoding is
- * the better mechanism when it is available; this is what we send when the
- * grammar will not compile.
- */
-const DRAFT_AS_PROSE =
-  'Emit the complete concept draft now, as a single JSON object and nothing ' +
-  'else — no prose before or after, no markdown fence. It must match the ' +
-  'schema you were given exactly, including every required field.';
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -197,8 +186,20 @@ export interface AnthropicTransportOptions {
    * thinking, not from length.
    */
   turnEffort?: Effort;
+  /** The mid-game advisor's dials: low and small, because it answers a sentence. */
+  adviceEffort?: Effort;
+  adviceMaxTokens?: number;
   /** Effort for synthesis, where the reasoning genuinely is hard. */
   draftEffort?: Effort;
+  /**
+   * Called once per model call, including retries and fallbacks.
+   *
+   * Every attempt, not every logical call: a draft that exhausts its budget and
+   * retries is two records, because the first one was billed. A meter that
+   * counts only the attempt that worked understates exactly the failures worth
+   * knowing about.
+   */
+  onCall?: CallSink;
 }
 
 const envEffort = (name: string, fallback: Effort): Effort => {
@@ -237,6 +238,26 @@ function isGrammarTooLarge(error: unknown): boolean {
  * factory, and the player was told to start over, which is the one response
  * that is definitely wrong.
  */
+/**
+ * The player pressed Ctrl-C while a call was in flight.
+ *
+ * A separate class from every other failure because it needs the opposite
+ * handling: nothing retries it, nothing apologises for it, and the transcript
+ * rolls back exactly as it does for a transport error. Someone who paste-fumbled
+ * a line and watched a model spend fifty-three seconds on it should get their
+ * prompt back, not three attempts at the same mistake.
+ */
+export class CancelledError extends Error {
+  constructor() {
+    super('Cancelled.');
+    this.name = 'CancelledError';
+  }
+}
+
+export const isCancellation = (error: unknown): boolean =>
+  error instanceof CancelledError ||
+  (error instanceof Error && (error.name === 'AbortError' || error.name === 'APIUserAbortError'));
+
 export class TransientError extends Error {
   constructor(
     override readonly cause: unknown,
@@ -258,10 +279,25 @@ export class TransientError extends Error {
 
 /** Overloaded, rate-limited, or a server fault — none of them the player's doing. */
 export function isTransient(error: unknown): boolean {
+  // A cancellation is not a capacity signal and must never be retried: the
+  // whole point of stopping is that the call does not happen again.
+  if (isCancellation(error)) return false;
   if (error instanceof Anthropic.APIConnectionError) return true;
-  if (error instanceof Anthropic.APIError) {
-    const status = error.status ?? 0;
+  /**
+   * Read structurally rather than by class, so a second provider's SDK gets
+   * the same retry behaviour without this function importing it.
+   *
+   * Both SDKs put the HTTP status on `status`, and a connection error in both
+   * has no status at all — which is why the undefined case is treated as
+   * transient here: a request that never reached a server is the most retryable
+   * failure there is.
+   */
+  if (error !== null && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status?: number }).status;
+    if (status === undefined) return true;
     if (status === 429 || status === 529 || status >= 500) return true;
+    // A 4xx that reached the server is the caller's fault and will fail again.
+    return false;
   }
   return /overloaded_error|rate_limit|api_error|\b(429|502|503|529)\b/i.test(String(error));
 }
@@ -287,12 +323,29 @@ export class AnthropicConceptTransport implements ConceptTransport {
   private readonly draftMaxTokens: number;
   private readonly turnEffort: Effort;
   private readonly draftEffort: Effort;
+  private readonly adviceEffort: Effort;
+  private readonly adviceMaxTokens: number;
+  private readonly onCall: CallSink | undefined;
   /** How often a response came back empty or corrupted. Surfaced, not swallowed. */
   unusableRetries = 0;
   /** Every call this transport has made, including retries and fallbacks. */
   usage: UsageTotal = EMPTY_USAGE;
   /** How often a draft had to be retried with more room. Surfaced, not hidden. */
   budgetRetries = 0;
+  private inFlight: AbortController | undefined;
+
+  /**
+   * Stop whatever is running. Safe to call when nothing is.
+   *
+   * The SDK rejects the in-flight request, which unwinds through the same catch
+   * that handles a transport failure — and `send` already rolls the player's
+   * message back out of the transcript there, so a cancelled turn leaves the
+   * conversation exactly as it was before they typed.
+   */
+  cancel(): void {
+    this.inFlight?.abort();
+    this.inFlight = undefined;
+  }
 
   constructor(options: AnthropicTransportOptions = {}) {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
@@ -331,10 +384,15 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // Overridable without a rebuild, so the speed/quality trade can be tuned
     // by whoever is actually waiting on it.
     this.turnEffort = options.turnEffort ?? envEffort('BIZSIM_TURN_EFFORT', 'medium');
+    this.adviceEffort = options.adviceEffort ?? envEffort('BIZSIM_ADVICE_EFFORT', 'low');
+    this.adviceMaxTokens = options.adviceMaxTokens ?? budget('BIZSIM_ADVICE_MAX_TOKENS', 4_000);
     this.draftEffort = options.draftEffort ?? envEffort('BIZSIM_DRAFT_EFFORT', 'high');
+    this.onCall = options.onCall;
   }
 
   private async complete(
+    kind: CallKind,
+    attempt: number,
     system: string,
     messages: readonly InterviewMessage[],
     schema: Record<string, unknown> | undefined,
@@ -362,62 +420,96 @@ export class AnthropicConceptTransport implements ConceptTransport {
      * changes. Nothing is rendered incrementally: the turn is JSON and half a
      * JSON object on screen is worse than a spinner.
      */
-    const response = await this.client.messages.stream({
-      model,
-      max_tokens: maxTokens,
-      system,
-      // Thinking is on by default on this model and billed either way; the
-      // default `display` of "omitted" just discards the summary. Asking for it
-      // is free and it is what makes `why` possible without a second call.
-      thinking: { type: 'adaptive', display: 'summarized' },
-      output_config: {
-        ...(schema ? { format: { type: 'json_schema' as const, schema } } : {}),
+    /**
+     * One controller per call, so Ctrl-C reaches the request that is actually
+     * running. Kept on the transport because the thing the player interrupts is
+     * "the model", not a promise they have a reference to.
+     */
+    this.inFlight = new AbortController();
+    /**
+     * Timed and priced whatever happens, including when it throws.
+     *
+     * A refusal, a truncated draft and a rate limit all cost wall-clock the
+     * player waited through, and the first two cost tokens as well. Emitting
+     * only on the success path would make the journal's per-call latencies
+     * systematically optimistic, because the failures are the slow ones.
+     */
+    const startedAt = Date.now();
+    let spent: TurnUsage = { ...ZERO_TOKENS };
+    let failure: string | undefined;
+    try {
+      const response = await this.client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        system,
+        // Thinking is on by default on this model and billed either way; the
+        // default `display` of "omitted" just discards the summary. Asking for
+        // it is free and it is what makes `why` possible without a second call.
+        thinking: { type: 'adaptive', display: 'summarized' },
+        output_config: {
+          ...(schema ? { format: { type: 'json_schema' as const, schema } } : {}),
+          effort,
+        },
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      }, { signal: this.inFlight.signal }).finalMessage();
+
+      // Recorded before anything can throw. A call that ran out of budget still
+      // generated — and still billed — every token it produced, and a meter
+      // that only counts successful calls understates the expensive failures by
+      // exactly the amount that makes them worth knowing about.
+      spent = {
+        inputTokens: response.usage.input_tokens,
+        cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
+        outputTokens: response.usage.output_tokens,
+        thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
+      };
+      this.usage = addUsage(this.usage, spent);
+
+      // A refusal is a successful HTTP response with an empty content array, so
+      // reading the result without checking would surface as a confusing null
+      // rather than as what it is.
+      if (response.stop_reason === 'refusal') {
+        throw new ConceptRefusedError(response.stop_details?.explanation ?? undefined);
+      }
+      if (response.stop_reason === 'max_tokens') {
+        throw new BudgetExhaustedError(maxTokens, spent.thinkingTokens);
+      }
+      const text = response.content.find((block) => block.type === 'text')?.text;
+      if (!text) {
+        throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
+      }
+
+      const reasoning = response.content
+        .filter((block) => block.type === 'thinking')
+        .map((block) => block.thinking)
+        .filter((t) => t.trim().length > 0)
+        .join('\n\n');
+
+      return {
+        text,
+        ...(reasoning ? { reasoning } : {}),
+        usage: spent,
+      };
+    } catch (error) {
+      failure = error instanceof Error ? error.name : 'Error';
+      throw error;
+    } finally {
+      emitCall(this.onCall, {
+        call: kind,
+        attempt,
+        provider: 'anthropic',
+        model,
         effort,
-      },
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    }).finalMessage();
-
-    // Recorded before anything can throw. A call that ran out of budget still
-    // generated — and still billed — every token it produced, and a meter that
-    // only counts successful calls understates the expensive failures by
-    // exactly the amount that makes them worth knowing about.
-    const spent: TurnUsage = {
-      inputTokens: response.usage.input_tokens,
-      cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
-      outputTokens: response.usage.output_tokens,
-      thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
-    };
-    this.usage = addUsage(this.usage, spent);
-
-    // A refusal is a successful HTTP response with an empty content array, so
-    // reading the result without checking would surface as a confusing null
-    // rather than as what it is.
-    if (response.stop_reason === 'refusal') {
-      throw new ConceptRefusedError(response.stop_details?.explanation ?? undefined);
+        ms: Date.now() - startedAt,
+        usage: spent,
+        ...(failure ? { failure } : {}),
+      });
     }
-    if (response.stop_reason === 'max_tokens') {
-      throw new BudgetExhaustedError(maxTokens, spent.thinkingTokens);
-    }
-    const text = response.content.find((block) => block.type === 'text')?.text;
-    if (!text) {
-      throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
-    }
-
-    const reasoning = response.content
-      .filter((block) => block.type === 'thinking')
-      .map((block) => block.thinking)
-      .filter((t) => t.trim().length > 0)
-      .join('\n\n');
-
-    return {
-      text,
-      ...(reasoning ? { reasoning } : {}),
-      usage: spent,
-    };
   }
 
+
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
-    let attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
+    let attempt = await this.complete('turn', 1, system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
     // Structured outputs constrain generation against the schema, so this
     // should always hold — but "should" is doing load-bearing work in a
     // sentence about generated JSON.
@@ -429,7 +521,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // question ready in the thinking summary and just failed to emit it.
     if (isUnusable(turn)) {
       this.unusableRetries += 1;
-      attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
+      attempt = await this.complete('turn', 2, system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
       turn = zInterviewTurn.parse(JSON.parse(attempt.text));
       if (isUnusable(turn)) {
         throw new UnusableResponseError(turn.message.trim().length === 0 ? 'empty' : 'garbled');
@@ -459,11 +551,57 @@ export class AnthropicConceptTransport implements ConceptTransport {
     low: 'low',
   };
 
+  /**
+   * A mid-game answer, on a shorter leash than an interview turn.
+   *
+   * Low effort and a small ceiling on purpose: this fires on every question a
+   * player types, the answer is two or three sentences, and the reasoning it
+   * needs is judgement about the world rather than the arithmetic the engine
+   * has already done. An interview turn's budget here would be paying opus
+   * prices to think about a sentence.
+   */
+  async advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult> {
+    const attempt = await this.complete(
+      'advise',
+      1,
+      system,
+      messages,
+      ADVICE_SCHEMA,
+      this.adviceEffort,
+      this.turnModel,
+      this.adviceMaxTokens,
+    );
+    return { advice: zTurnAdvice.parse(JSON.parse(attempt.text)), usage: attempt.usage };
+  }
+
+  /**
+   * One disagreement, settled in isolation — §11.3.
+   *
+   * A single user message carrying the assumption and the claim, and no
+   * history at all. That is not an optimisation: the spec is explicit that this
+   * call must not see the conversational thread, because rapport is what
+   * produces capitulation. The transport is the thing that could accidentally
+   * supply it, so the transport is where the isolation is enforced.
+   */
+  async adjudicate(system: string, input: string): Promise<Adjudication> {
+    const attempt = await this.complete(
+      'adjudicate',
+      1,
+      system,
+      [{ role: 'user', content: input }],
+      ADJUDICATION_SCHEMA,
+      this.turnEffort,
+      this.turnModel,
+      this.turnMaxTokens,
+    );
+    return zAdjudication.parse(JSON.parse(attempt.text));
+  }
+
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
     try {
-      text = (await this.complete(system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel, this.draftMaxTokens)).text;
+      text = (await this.complete('draft', 1, system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel, this.draftMaxTokens)).text;
     } catch (error) {
       if (error instanceof BudgetExhaustedError) {
         // Thinking is billed against the output ceiling, so a draft that
@@ -474,6 +612,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
         this.budgetRetries += 1;
         text = (
           await this.complete(
+            'draft',
+            2,
             system,
             asked,
             DRAFT_SCHEMA,
@@ -492,6 +632,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
         // pass unnoticed".
         text = (
           await this.complete(
+            'draft',
+            2,
             `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
             asked,
             undefined,
@@ -510,13 +652,6 @@ export class AnthropicConceptTransport implements ConceptTransport {
     }
     return assertDraftShape(json);
   }
-}
-
-/** Unconstrained generation likes markdown fences; constrained never emits one. */
-function stripFence(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed.startsWith('```')) return trimmed;
-  return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
 }
 
 /**
@@ -561,6 +696,8 @@ export class UnusableResponseError extends Error {
  */
 export class ScriptedTransport implements ConceptTransport {
   private index = 0;
+  private adviceIndex = 0;
+  private rulingIndex = 0;
   readonly seen: { system: string; messages: InterviewMessage[] }[] = [];
   /** Nothing was spent; a scripted run makes no calls. */
   readonly usage: UsageTotal = EMPTY_USAGE;
@@ -569,6 +706,8 @@ export class ScriptedTransport implements ConceptTransport {
     private readonly turns: readonly InterviewTurn[],
     private readonly drafts: readonly ConceptDraft[] = [],
     private readonly reasoning: readonly string[] = [],
+    private readonly advice: readonly TurnAdvice[] = [],
+    private readonly rulings: readonly Adjudication[] = [],
   ) {}
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
@@ -589,5 +728,25 @@ export class ScriptedTransport implements ConceptTransport {
     const next = this.drafts[0];
     if (!next) throw new Error('ScriptedTransport has no draft to return.');
     return next;
+  }
+
+  async adjudicate(system: string, input: string): Promise<Adjudication> {
+    this.seen.push({ system, messages: [{ role: 'user', content: input }] });
+    const next = this.rulings[this.rulingIndex];
+    if (!next) throw new Error('ScriptedTransport has no ruling to return.');
+    this.rulingIndex += 1;
+    return next;
+  }
+
+  async advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult> {
+    this.seen.push({ system, messages: [...messages] });
+    const next = this.advice[this.adviceIndex];
+    if (!next) {
+      throw new Error(
+        `ScriptedTransport exhausted after ${this.advice.length} advice replies.`,
+      );
+    }
+    this.adviceIndex += 1;
+    return { advice: next };
   }
 }

@@ -128,5 +128,6 @@
   "badDebtPctOfRevenue": 0.018,
   "repairsPctOfRevenue": 0.02,
   "cardProcessingRate": 0.028,
-  "cardMixPct": 0.9
+  "cardMixPct": 0.9,
+  "volumeNoun": "units occupied"
 }

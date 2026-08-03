@@ -8,6 +8,7 @@ import {
   underwrite,
   computeMonthZeroOutlays,
   createWorld,
+  setAtPath,
   createWorldConfig,
   tick,
   validateBusinessModel,
@@ -25,11 +26,21 @@ import {
   type SeedTemplate,
   type WorldState,
 } from '@bizsim/schemas';
-import { listSeedTemplates } from '@bizsim/seeds';
-import type { ConceptTransport } from '@bizsim/llm';
+import { findCatalogItem, listSeedTemplates } from '@bizsim/seeds';
+import {
+  adjudicate,
+  reverseChallenge,
+  type AdjudicationTransport,
+  type ConceptTransport,
+} from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
-import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
-import { capitalIntensityNote } from './plausibility.js';
+import {
+  conceptKeyVar,
+  conceptPathAvailable,
+  runConceptInterview,
+  type ConceptResult,
+} from './concept.js';
+import { capitalIntensityNote, projectFundingGap } from './plausibility.js';
 import { openJournal, type Journal } from './journal.js';
 import { masthead, note, rule } from './ui.js';
 
@@ -214,6 +225,23 @@ async function askScale(
 // Phase 3 — assumption review
 // ---------------------------------------------------------------------------
 
+/** Wrap to the register's own width; the questions run long by design. */
+function wrapText(text: string, width: number, indent: string): string {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    if (line.length + word.length + 1 > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line === '' ? word : `${line} ${word}`;
+    }
+  }
+  if (line !== '') lines.push(line);
+  return lines.join(`\n${indent}`);
+}
+
 function renderRegister(model: BusinessModel): void {
   const assumptions = model.assumptions;
   const byId: Record<string, Assumption> = {};
@@ -259,10 +287,25 @@ function renderRegister(model: BusinessModel): void {
           `${DIM}band ${band?.low}–${band?.high} · ${band?.source ?? ''}${RESET}`,
       );
     }
-    console.log(
-      `\n  ${DIM}Out of band is not wrong — it is a number that has to be earned. The sim${RESET}\n` +
-        `  ${DIM}will ask what makes it true when the adjudication loop lands (§11.3.1).${RESET}`,
-    );
+    /**
+     * §11.3.1 — the register as a reviewer rather than a log.
+     *
+     * Founders are usually most wrong on the cost side: understated labour,
+     * forgotten maintenance, no owner salary, missing insurance. Deterministic
+     * on purpose — §10.5 is explicit that the out-of-band check is engine logic
+     * and not model judgement, so the question it raises is built from the same
+     * arithmetic and has nothing to fabricate.
+     */
+    for (const a of outOfBand.slice(0, 3)) {
+      const asked = reverseChallenge({
+        label: a.label,
+        value: Number(a.isMoney ? Number(a.value) / 100 : a.value),
+        unit: a.unit,
+        ...(a.benchmarkBand ? { benchmarkBand: a.benchmarkBand } : {}),
+        sourceNote: a.sourceNote,
+      });
+      if (asked) console.log(`\n  ${YELLOW}? ${wrapText(asked, 74, '    ')}${RESET}`);
+    }
   }
 
   // PLAYER_ASSUMED ranks BELOW the model's own estimate (§10.3): an unsupported
@@ -313,6 +356,148 @@ function firstQuarterBurn(world: WorldState): Money {
   const ops = cf?.cashFlowFromOperations ?? 0n;
   return ops < 0n ? -ops : 0n;
 }
+
+/**
+ * Arguing with a number, before it is frozen — §11.3.
+ *
+ * This is the loop the register was built for. Everything else in Phase 3 shows
+ * the player what their model rests on; this is where they get to push back,
+ * and where pushing back has to cost something more than saying so.
+ *
+ * The adjudication runs in isolation — the transport sends the assumption and
+ * the claim in a single message with no history, because rapport is what
+ * produces capitulation. And the two rules pressure attacks are settled in code
+ * before the model's ruling is applied at all: a bare assertion reaches the
+ * near edge of its range and stops, and an impossible value is refused however
+ * good the evidence sounds.
+ */
+async function challengeLoop(
+  input: LineSource,
+  model: BusinessModel,
+  transport?: ConceptTransport,
+): Promise<void> {
+  // Worth arguing with first: furthest out of band, then the unsourced.
+  const arguable = [...model.assumptions]
+    .filter((a) => a.outsideBenchmark || !isWellSourced(a.provenance))
+    .sort(
+      (a, b) =>
+        Math.abs(b.benchmarkDeviation ?? 0) - Math.abs(a.benchmarkDeviation ?? 0) ||
+        a.label.localeCompare(b.label),
+    )
+    .slice(0, 12);
+  if (arguable.length === 0) return;
+
+  console.log(
+    `\n  ${DIM}\`challenge <n> <value> [why]\` argues with one of these. A bare number moves it` +
+      ` at most to the\n  edge of its range; a real basis — a quote, a listing, a model number —` +
+      ` moves it properly.${RESET}`,
+  );
+  arguable.forEach((a, i) => {
+    const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
+    console.log(`    ${rpad(String(i + 1), 3)}  ${pad(a.label, 38)}${rpad(value, 12)}  ${DIM}${a.provenance}${RESET}`);
+  });
+
+  while (true) {
+    const raw = await input.next('\n  challenge, or enter to move on > ');
+    if (raw === undefined || raw.trim() === '') return;
+    const [verb = '', indexToken = '', valueToken = '', ...basisWords] = raw.trim().split(/\s+/);
+    if (verb.toLowerCase() !== 'challenge') {
+      console.log(`  ${DIM}\`challenge 3 22000 used unit on MachineryTrader\`, or enter to move on.${RESET}`);
+      continue;
+    }
+
+    const index = Number(indexToken);
+    const target = Number.isInteger(index) ? arguable[index - 1] : undefined;
+    if (!target) {
+      console.log(`  ${RED}Which one? 1 to ${arguable.length}.${RESET}`);
+      continue;
+    }
+    const asserted = target.isMoney ? parseMoney(valueToken) : parseNumber(valueToken);
+    if (asserted === undefined) {
+      console.log(`  ${RED}That is not a number.${RESET}`);
+      continue;
+    }
+
+    const basis = basisWords.join(' ').trim();
+    const asNumber = (v: number | bigint): number => (typeof v === 'bigint' ? Number(v) / 100 : v);
+    const catalog = findCatalogItem(target.label);
+    const settled = await adjudicate(transport ? adjudicationOf(transport) : undefined, {
+      assumption: {
+        label: target.label,
+        value: asNumber(target.value),
+        unit: target.unit,
+        range: { low: asNumber(target.range.low), high: asNumber(target.range.high) },
+        sourceNote: target.sourceNote,
+        provenance: target.provenance,
+        benchmarkBand: target.benchmarkBand
+          ? { low: target.benchmarkBand.low, high: target.benchmarkBand.high }
+          : null,
+      },
+      playerClaim: {
+        assertedValue: asNumber(asserted as number | bigint),
+        statedBasis: basis === '' ? null : basis,
+        evidenceUrl: null,
+      },
+      businessContext: {
+        archetype: model.streams[0]?.archetype ?? 'TRAFFIC',
+        summary: model.businessName,
+      },
+      catalogEntry: catalog
+        ? {
+            label: catalog.label,
+            low: catalog.low,
+            high: catalog.high,
+            tiers: catalog.tiers,
+            source: catalog.source,
+          }
+        : null,
+    });
+
+    console.log(`  ${RULING_COLOUR[settled.ruling]}${settled.ruling}${RESET}  ${wrapText(settled.reasoning, 70, '        ')}`);
+    if (settled.clarifyingQuestion) {
+      console.log(`  ${CYAN}? ${wrapText(settled.clarifyingQuestion, 70, '    ')}${RESET}`);
+    }
+    if (settled.secondOrderEffect) {
+      console.log(`  ${DIM}↳ ${wrapText(settled.secondOrderEffect, 70, '    ')}${RESET}`);
+    }
+
+    if (settled.provenance === 'UNCHANGED') continue;
+
+    const landed = target.isMoney ? fromDisplay(settled.value) : settled.value;
+    // The register is a record OF the model, so both move or neither does.
+    if (!setAtPath(model, target.path, landed)) {
+      console.log(`  ${RED}${target.label} is registered at ${target.path}, which no longer resolves.${RESET}`);
+      continue;
+    }
+    target.challengeHistory.push({
+      period: 0,
+      priorValue: target.value,
+      assertedValue: asserted as number | bigint,
+      statedBasis: basis === '' ? null : basis,
+      ruling: settled.ruling,
+      resultingValue: landed,
+      reasoning: settled.reasoning,
+    });
+    target.value = landed;
+    target.provenance = settled.provenance;
+    console.log(
+      `  ${DIM}${target.label} → ${target.isMoney ? toDisplay(landed as bigint, { showCents: false }) : landed}` +
+        ` · ${settled.provenance}${settled.clamped ? ' (held at the edge of its range)' : ''}${RESET}`,
+    );
+  }
+}
+
+const RULING_COLOUR: Record<string, string> = {
+  CONCEDE: GREEN,
+  PARTIAL: YELLOW,
+  DEFEND: RED,
+  NEED_CLARIFICATION: CYAN,
+};
+
+/** The transport, narrowed to the one method the contract is allowed to use. */
+const adjudicationOf = (transport: ConceptTransport): AdjudicationTransport => ({
+  adjudicate: (system, input) => transport.adjudicate(system, input),
+});
 
 function renderOpening(model: BusinessModel, world: WorldState): void {
   const outlays = computeMonthZeroOutlays(model);
@@ -420,6 +605,46 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
       );
     }
   }
+
+  /**
+   * And then say what that number is.
+   *
+   * The line above told a ready-mix operator that the peak is what to fund
+   * against, and did not tell him what the peak was. He opened with $989,000
+   * raised against a plan that needed $1.6M by its third quarter, and was
+   * insolvent inside a year with $1.3M of personally guaranteed debt following
+   * him home. Every term was computable at this screen.
+   *
+   * Projected with the crisis ladder switched off, because a projection that
+   * lets emergency debt at 19.5% rescue each quarter answers "can this be kept
+   * alive" — a different and much less useful question than "what does it
+   * need".
+   */
+  const raised =
+    model.financingPlan.equityInjection +
+    model.financingPlan.outsideCapital +
+    model.financingPlan.debtRequests.reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+  const gap = projectFundingGap(world, raised);
+  if (gap && gap.shortfall > 0n) {
+    console.log(
+      `\n  ${RED}Run forward, this plan is down ${toDisplay(gap.peak, { showCents: false })} at its ` +
+        `worst — period ${gap.atPeriod} — against the ${toDisplay(gap.raised, { showCents: false })} ` +
+        `you have raised. It is short by ${toDisplay(gap.shortfall, { showCents: false })}.${RESET}`,
+    );
+    console.log(
+      note(
+        'That gap gets funded by the crisis ladder if you open anyway: the revolver first, then' +
+          ' factored receivables, then emergency debt at prime plus twelve with your name on it.' +
+          ' More equity or a bigger loan now is the same money at a fifth of the price.',
+      ),
+    );
+  } else if (gap) {
+    console.log(
+      `\n  ${DIM}Run forward, this plan is down ${toDisplay(gap.peak, { showCents: false })} at its ` +
+        `worst — period ${gap.atPeriod} — inside the ${toDisplay(gap.raised, { showCents: false })} ` +
+        `you have raised.${RESET}`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -490,7 +715,7 @@ export async function runSetup(
     businessName = concept.mapped.businessName;
   } else {
     console.log(
-      `\n${DIM}  No ANTHROPIC_API_KEY, so the conversational path is unavailable and this${RESET}\n` +
+      `\n${DIM}  No ${conceptKeyVar()}, so the conversational path is unavailable and this${RESET}\n` +
         `${DIM}  falls back to picking a template. Set the key to describe a business in${RESET}\n` +
         `${DIM}  your own words instead.${RESET}`,
     );
@@ -935,6 +1160,8 @@ export async function runSetup(
     const heavy = capitalIntensityNote(concept.draft, computeMonthZeroOutlays(model).total);
     if (heavy) console.log(`\n${YELLOW}⚠ ${RESET}${note(heavy).trimStart()}`);
   }
+
+  await challengeLoop(input, model, options?.transport);
 
   console.log(
     `\n${DIM}Committing freezes the model. After this it changes only through the` +

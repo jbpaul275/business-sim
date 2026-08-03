@@ -1,6 +1,7 @@
 import { fromDisplay, mulRate, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
 import {
   marketingMovesDemand,
+  marketingMultiplier,
   maturityRamp,
   priceEffect,
   streamPrice,
@@ -11,6 +12,10 @@ import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@b
 import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
+import { postmortem, runPoint, type RunPoint } from './postmortem.js';
+import { askAdvisor, providerKeyVar, type AdviceTransport } from '@bizsim/llm';
+import { cloneOutlay, saleValue } from '@bizsim/engine';
+import { buildBriefing } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
@@ -105,6 +110,12 @@ function describeAction(a: Action): string {
         : 'more capacity';
       return `${what} for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
     }
+    case 'START_BUSINESS':
+      return a.clone
+        ? `open ${a.clone.name} for ${toDisplay(a.clone.equity, { showCents: false })}`
+        : 'start a business';
+    case 'SELL_BUSINESS':
+      return `sell the business at ${a.multipleOfEbitda ?? DEFAULT_MULTIPLE}× EBITDA`;
     case 'SET_CRISIS_POLICY':
       return `crisis order → ${a.policy.join(', ')}`;
     default:
@@ -119,7 +130,7 @@ const severityColour = (s: EngineEvent['severity']): string =>
 // Rendering
 // ---------------------------------------------------------------------------
 
-function renderTurn(result: TickResult, business: Business): void {
+function renderTurn(result: TickResult, business: Business, world?: WorldState): void {
   const period = result.statements.period;
   const entry = result.statements.byBusiness[business.id];
   const year = Math.floor(period / 4) + 1;
@@ -175,15 +186,28 @@ function renderTurn(result: TickResult, business: Business): void {
    * they agree, and the ceiling takes the space they were wasting.
    */
   for (const s of m.streamMetrics) {
-    const volume = `${Math.round(s.realizedVolume).toLocaleString()} ${VOLUME_UNIT[s.archetype] ?? 'units'}`;
+    const volume =
+      `${Math.round(s.realizedVolume).toLocaleString()} ` +
+      `${business.streams.find((x) => x.id === s.streamId)?.volumeNoun ?? VOLUME_UNIT[s.archetype] ?? 'units'}`;
     let detail: string;
     if (s.lostDemand > 0.5) {
       detail =
         `${YELLOW}at capacity · turned away ` +
         `${Math.round(s.lostDemand).toLocaleString()} of ${Math.round(s.demandVolume).toLocaleString()}${RESET}`;
     } else if (s.capacityVolume !== undefined && s.capacityVolume > 0) {
+      /**
+       * Named as staffing, because that is the only thing it ever was.
+       *
+       * `capacityVolume` is active blocks × capacityPerBlock — a number that
+       * moves the quarter you hire. Printing it as "34.8% of capacity (1,500)"
+       * made it read as the size of the market, and on a phone game sold
+       * through an app store that reading is simply false: there is no ceiling
+       * on subscribers at 1,500, or at 1,500,000. What is true is that the
+       * people currently on payroll cover 1,500 of them, which is a hiring
+       * trigger and not a wall.
+       */
       const used = ratio(fromDisplay(s.realizedVolume), fromDisplay(s.capacityVolume));
-      detail = `${DIM}${pct(used)} of capacity (${Math.round(s.capacityVolume).toLocaleString()})${RESET}`;
+      detail = `${DIM}staffed for ${Math.round(s.capacityVolume).toLocaleString()} (${pct(used)} used)${RESET}`;
     } else {
       // Not a hedge: several archetypes genuinely have no ceiling, and saying
       // so is more honest than implying an unstated one.
@@ -240,6 +264,24 @@ function renderTurn(result: TickResult, business: Business): void {
     );
   }
 
+  /**
+   * The rest of the portfolio, one line, only once there is one.
+   *
+   * A player running four businesses needs to know the other three exist
+   * without leaving the screen for the one they are working on.
+   */
+  const others = (world?.businesses ?? []).filter(
+    (b) => b.id !== business.id && b.status !== 'SOLD' && b.status !== 'CLOSED',
+  );
+  if (others.length > 0) {
+    const consolidated = result.statements.consolidated.incomeStatement;
+    console.log(
+      `\n  ${DIM}${pad('Also running', 22)}${RESET}` +
+        `${others.map((b) => b.name).join(', ')}` +
+        `  ${DIM}· group revenue ${toCompact(consolidated.revenue)}, EBITDA ${toCompact(consolidated.ebitda)}${RESET}`,
+    );
+  }
+
   const notable = result.events.filter((e) => e.severity !== 'INFO');
   if (notable.length > 0) console.log('');
   for (const e of notable) {
@@ -275,11 +317,19 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}sell${RESET} IDX all         sell a position, or a dollar amount of one
   ${BOLD}quotes${RESET} · ${BOLD}portfolio${RESET}     the catalog, and what you hold
 
+  ${BOLD}clone${RESET} 900k <name>     open a second one ${DIM}— \`3x\` for a bigger site, +2 quarters${RESET}
+  ${BOLD}divest${RESET} <n> [multiple]  sell a business ${DIM}— trailing EBITDA × 4 by default${RESET}
+  ${BOLD}businesses${RESET} · ${BOLD}switch${RESET} <n>   the portfolio, and which one you are running
+
   ${BOLD}skip${RESET} <n>              run n quarters with no actions
+  ${BOLD}postmortem${RESET}            what would have had to be true ${DIM}— any time, not just at the end${RESET}
   ${BOLD}costs${RESET}                 where the money goes, biggest line first
   ${BOLD}lines${RESET}                 list step-fixed cost line ids
   ${BOLD}help${RESET} · ${BOLD}quit${RESET}
 `;
+
+/** Matches the engine's own default, so the quote and the sale agree. */
+const DEFAULT_MULTIPLE = 4;
 
 const REMEDY_ALIASES: Record<string, CrisisRemedy> = {
   revolver: 'REVOLVER',
@@ -301,6 +351,8 @@ interface ParseResult {
   skip?: number;
   quit?: boolean;
   message?: string;
+  /** Set by `switch`: which business the next commands are about. */
+  activate?: string;
 }
 
 /**
@@ -329,6 +381,7 @@ interface ParseResult {
  * it, finds their question absent, and concludes the tool is not listening.
  */
 type Topic =
+  | 'postmortem'
   | 'invest'
   | 'capacity'
   | 'product'
@@ -356,6 +409,14 @@ type Topic =
  * archetype is named after.
  */
 const TOPIC_PATTERNS: [Topic, RegExp][] = [
+  /**
+   * "What went wrong?" — §9.4's post-mortem, reached in the words a player
+   * actually uses rather than only through a command they have to know exists.
+   */
+  [
+    'postmortem',
+    /\b(what went wrong|went wrong|what killed|why did (it|this|we)|what happened|post-?mortem|would have had to be true|where did (it|we) go wrong)\b/,
+  ],
   /**
    * The other thing money can do.
    *
@@ -479,6 +540,7 @@ function advise(
   business: Business,
   result: TickResult,
   world: WorldState,
+  history: readonly RunPoint[],
   question = '',
   memory?: AdvisorMemory,
 ): string[] {
@@ -619,6 +681,17 @@ function advise(
   }
 
   /**
+   * "What went wrong?"
+   *
+   * Routed to the same analysis the `postmortem` command prints, because a
+   * player who asks the question in English deserves the answer they would have
+   * got by typing a word they had no way to know about.
+   */
+  if (topic === 'postmortem') {
+    out.push(...postmortem(history, business).lines.filter((l) => l !== ''));
+  }
+
+  /**
    * "How does this compare to just buying the index?"
    *
    * The question the game could not answer for its whole life until now. A
@@ -703,8 +776,8 @@ function advise(
         stream.lostDemand > 0.5
           ? `Demand is not the problem — you turned away ${Math.round(stream.lostDemand).toLocaleString()} ` +
               `this quarter. Capacity is what is binding: \`hire\` or \`expand\`.`
-          : `You are running at ${pct(used)} with ${idle.toLocaleString()} of capacity going unused. ` +
-              `Demand is what is short, not the building.`,
+          : `You are running at ${pct(used)} of what you are staffed for, with ${idle.toLocaleString()} ` +
+              `going unused. Demand is what is short, not your capacity to serve it.`,
       );
     }
   }
@@ -948,11 +1021,12 @@ function advise(
       } else if (used < 0.6) {
         out.push(
           sparePay > 0n
-            ? `You are at ${pct(used)} of capacity: demand is short of what you built, and you are ` +
-                `staffed for the building rather than the demand. \`marketing\` and \`price\` move ` +
+            ? `You are at ${pct(used)} of what you are staffed for: demand is short of what you built, ` +
+                `and you are staffed for the plan rather than the demand. \`marketing\` and \`price\` move ` +
                 `volume; right-sizing the staffing is the half you control this quarter.`
-            : `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
-                `\`marketing\` and \`price\` move volume, and the staffing already matches the volume.`,
+            : `You are at ${pct(used)} of what you are staffed for, so the constraint is demand, not ` +
+                `your capacity to serve it. \`marketing\` and \`price\` move volume, and the staffing ` +
+                `already matches the volume.`,
         );
       }
     }
@@ -1037,9 +1111,10 @@ function remember(
  * are commands, and that set is exactly this.
  */
 const VERBS = new Set([
-  '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
+  '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing', 'postmortem',
   'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
   'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
+  'businesses', 'switch', 'clone', 'divest',
 ]);
 
 /**
@@ -1119,14 +1194,88 @@ function renderCosts(business: Business, result: TickResult): void {
   );
 }
 
-function parseCommand(
+/**
+ * The heading has to come from the verdict, not from where it is printed.
+ *
+ * "WHAT IT RESTED ON" over an analysis that opens "short by $1.4k a quarter"
+ * is the screen contradicting itself in its first two lines.
+ */
+function printPostmortem(history: readonly RunPoint[], business: Business, colour = ''): void {
+  const analysis = postmortem(history, business);
+  const heading =
+    analysis.verdict === 'WORKED' ? 'WHAT IT RESTS ON' : 'WHAT WOULD HAVE HAD TO BE TRUE';
+  console.log(`\n${colour ? DIM : BOLD}${heading}${RESET}`);
+  for (const line of analysis.lines) {
+    console.log(line === '' ? '' : `  ${colour}${line}${colour ? RESET : ''}`);
+  }
+}
+
+/**
+ * The model's half of the answer, and what happens when it cannot be trusted.
+ *
+ * Everything here fails soft. No key, a network error, a budget exhausted, or a
+ * reply that quoted money the ledger never produced — every one of them leaves
+ * the deterministic answer on screen and says nothing further. A game that
+ * stops working because a model was unreachable would be a worse game than one
+ * with no model in it.
+ */
+async function speakToPlayer(
+  advisor: AdviceTransport,
+  world: WorldState,
+  business: Business,
+  result: TickResult,
+  findings: readonly string[],
+  question: string,
+  journal?: Journal,
+): Promise<{ reply: string } | undefined> {
+  try {
+    const briefing = buildBriefing(world, business, result, findings, [...VERBS].filter(Boolean));
+    const outcome = await askAdvisor(advisor, briefing, question, [], () => Date.now());
+    if (!outcome) {
+      // Twice in a row it could not answer without inventing a figure. The
+      // arithmetic is already on screen and is still correct; adding "the model
+      // could not be trusted" to the player's turn helps nobody.
+      journal?.write({ kind: 'advice_refused', question });
+      return undefined;
+    }
+
+    console.log('');
+    const paragraphs = outcome.reply.split('\n').filter((p) => p.trim() !== '');
+    paragraphs.forEach((paragraph, i) => {
+      // The wait, on the last line only. The player asked for this as QA data
+      // and it is the honest label on a pause they just sat through.
+      const timing = i === paragraphs.length - 1 ? ` ${DIM}· ${(outcome.ms / 1000).toFixed(1)}s${RESET}` : '';
+      console.log(`  ${paragraph}${timing}`);
+    });
+
+    // Suggestions are checked against the parser before they are shown. A
+    // command that does not exist, coming from the thing that just recommended
+    // it, is worse than no suggestion at all.
+    const usable = outcome.suggestedCommands.filter((c) => VERBS.has(c.trim().split(/\s+/)[0] ?? ''));
+    if (usable.length > 0) {
+      console.log(`  ${DIM}${usable.map((c) => `\`${c}\``).join(' · ')}${RESET}`);
+    }
+    if (outcome.retriedOn && outcome.retriedOn.length > 0) {
+      journal?.write({ kind: 'advice_corrected', question, figures: outcome.retriedOn });
+    }
+    return { reply: outcome.reply };
+  } catch {
+    // Transport failures are not the player's problem and not their fault.
+    journal?.write({ kind: 'advice_failed', question });
+    return undefined;
+  }
+}
+
+async function parseCommand(
   line: string,
   business: Business,
   result: TickResult,
   world: WorldState,
+  history: readonly RunPoint[],
   journal?: Journal,
   memory?: AdvisorMemory,
-): ParseResult {
+  advisor?: AdviceTransport,
+): Promise<ParseResult> {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
   const streamId = business.streams[0]?.id ?? 's1';
   const none: ParseResult = { actions: [] };
@@ -1156,6 +1305,18 @@ function parseCommand(
     amount !== undefined && amount <= 0n
       ? `A negative \`${verb}\` is not the opposite of ${verb} — ${instead}`
       : undefined;
+
+  /**
+   * A bare `why` is the post-mortem; `why does revenue keep swinging?` is not.
+   *
+   * Making `why` a verb outright would swallow every why-question into the same
+   * answer, which is the exact failure the topic router exists to prevent — so
+   * it is a command only when it is the whole line.
+   */
+  if (verb.toLowerCase() === 'why' && rest.length === 0) {
+    printPostmortem(history, business, DIM);
+    return none;
+  }
 
   switch (verb.toLowerCase()) {
     case '':
@@ -1192,11 +1353,52 @@ function parseCommand(
       return { actions: [{ kind: 'SET_PRICE', streamId, newPrice: value }] };
     }
 
+    /**
+     * "Raising marketing spend doesn't seem to increase sales."
+     *
+     * It did not, and the model was right not to. A brewpub sitting past twice
+     * its half-saturation point went $20k → $50k a quarter and bought about two
+     * percent more demand for thirty thousand dollars, because the response
+     * curve is `1 + maxLift·(1 − e^(−spend/half))` and it had already flattened.
+     *
+     * The engine was correct and the screen was silent, which is the worst
+     * combination available: the player made the decision, waited two quarters,
+     * and drew the conclusion that the lever is broken. The arithmetic is
+     * cheap and it belongs at the moment of the decision, not in a help topic
+     * the player has no reason to open.
+     */
     case 'marketing': {
       const value = parseMoney(rest[0] ?? '');
       if (value === undefined) return fail('marketing needs an amount, e.g. `marketing 12k`.');
       // Zero is a real and sometimes correct choice; below zero is not a choice.
       if (value < 0n) return fail('Marketing spend cannot be negative. `marketing 0` turns it off.');
+
+      const stream = business.streams[0];
+      if (stream) {
+        if (!marketingMovesDemand(stream.params.kind)) {
+          console.log(
+            `  ${YELLOW}Marketing does not move demand for this archetype in the model — the spend ` +
+              `is expensed and demand never reads it. \`marketing 0\` is that money back.${RESET}`,
+          );
+        } else if (value > stream.marketingSpendPerQuarter) {
+          const half = stream.modifiers.halfSaturationSpend;
+          const lift = stream.modifiers.marketingMaxLift;
+          const before = marketingMultiplier(stream.marketingSpendPerQuarter, lift, half);
+          const after = marketingMultiplier(value, lift, half);
+          const gain = before > 0 ? after / before - 1 : 0;
+          const extra = value - stream.marketingSpendPerQuarter;
+          // "Spent" is a judgement about where you are on the curve, not about
+          // how big this particular step was: a $1k rise buying 1% is the
+          // curve behaving, and calling that a dead lever would be wrong.
+          const tapped = half > 0n && value > half * 2n;
+          console.log(
+            `  ${tapped ? YELLOW : DIM}${toCompact(extra)} a quarter more buys about ` +
+              `${(gain * 100).toFixed(1)}% more demand. You are at ${toCompact(stream.marketingSpendPerQuarter)} ` +
+              `against a half-saturation point of ${toCompact(half)}` +
+              `${tapped ? `, and past twice that the curve is flat — this lever is close to spent.` : `.`}${RESET}`,
+          );
+        }
+      }
       return { actions: [{ kind: 'SET_MARKETING_SPEND', streamId, amountPerQuarter: value }] };
     }
 
@@ -1635,6 +1837,139 @@ function parseCommand(
       return { actions: [{ kind: 'SELL_SECURITY', ticker, shares }] };
     }
 
+    /**
+     * "What would have had to be true" — §9.4, mandatory on insolvency and
+     * available on demand at any time, which is the half that matters. A player
+     * who can ask this in period 12 can still act on the answer.
+     */
+    case 'postmortem': {
+      printPostmortem(history, business, DIM);
+      return none;
+    }
+
+    /**
+     * A portfolio, and which of it you are looking at.
+     *
+     * Every operating command means "this business", so with more than one on
+     * the books there has to be a way to say which. `businesses` lists them
+     * with the numbers that decide where attention goes.
+     */
+    case 'businesses': {
+      const live = world.businesses.filter((b) => b.status !== 'SOLD');
+      console.log(`\n  ${BOLD}${pad('BUSINESS', 30)}${rpad('REVENUE', 10)}${rpad('EBITDA', 10)}${rpad('CASH', 10)}${RESET}`);
+      live.forEach((b, i) => {
+        const entry = result.statements.byBusiness[b.id];
+        const marker = b.id === business.id ? '›' : ' ';
+        console.log(
+          `${marker} ${pad(`${i + 1}. ${b.name}`, 30)}` +
+            `${rpad(entry ? toCompact(entry.incomeStatement.revenue) : '—', 10)}` +
+            `${rpad(entry ? toCompact(entry.incomeStatement.ebitda) : '—', 10)}` +
+            `${rpad(toCompact(b.cash), 10)}  ${DIM}${b.status}${RESET}`,
+        );
+      });
+      console.log(
+        `  ${DIM}\`switch <n>\` changes which one your commands are about · ` +
+          `\`clone <money> <name>\` opens another · \`divest <n>\` sells one.${RESET}`,
+      );
+      return none;
+    }
+
+    case 'switch': {
+      const live = world.businesses.filter((b) => b.status !== 'SOLD' && b.status !== 'CLOSED');
+      const token = (rest[0] ?? '').toLowerCase();
+      const byIndex = Number(token);
+      const target =
+        Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= live.length
+          ? live[byIndex - 1]
+          : live.find((b) => b.name.toLowerCase().startsWith(token) && token !== '');
+      if (!target) {
+        return fail(
+          `Which one? ${live.map((b, i) => `${i + 1}. ${b.name}`).join(' · ')}`,
+        );
+      }
+      console.log(`  ${DIM}Now looking at ${target.name}.${RESET}`);
+      return { actions: [], activate: target.id };
+    }
+
+    /**
+     * "I want to use the cash flow from this one to buy a 256 room property in
+     * Des Moines" — §9.5.
+     *
+     * Two numbers and a name, because §9.5's whole claim is that a second site
+     * takes two minutes. Everything else about the concept carries over, and
+     * the clone opens with a ramp floor ten points better than its parent's
+     * because you have done this before.
+     */
+    case 'clone': {
+      const equity = parseMoney(rest[0] ?? '');
+      if (equity === undefined) {
+        return fail('clone needs the money and a name: `clone 900k Des Moines` — optionally `2x` for a bigger site.');
+      }
+      const sign = positive(equity, 'clone', 'a second location costs money to open.');
+      if (sign) return fail(sign);
+
+      // `2x` anywhere in the rest is the size multiplier; the remainder is the
+      // name, so `clone 4m Des Moines 4x` and `clone 4m 4x Des Moines` both work.
+      const scaleToken = rest.find((t) => /^\d+(\.\d+)?x$/i.test(t));
+      const scale = scaleToken ? Number(scaleToken.slice(0, -1)) : 1;
+      const name = rest.slice(1).filter((t) => t !== scaleToken).join(' ').trim();
+      if (name === '') return fail('A second location needs a name: `clone 900k Des Moines`.');
+      if (!(scale > 0)) return fail('The size multiplier has to be more than zero.');
+
+      const needed = cloneOutlay(business, scale);
+      console.log(
+        `  ${DIM}${scale === 1 ? 'The same business' : `${scale}× the size`} in a new place. ` +
+          `Buildout alone is ${toCompact(needed)}; the rest of your ${toCompact(equity)} opens as its cash. ` +
+          `Revenue starts two quarters out.${RESET}`,
+      );
+      if (equity < needed) {
+        return fail(
+          `${toCompact(equity)} does not cover the ${toCompact(needed)} of buildout. Commit more, or use a smaller multiplier.`,
+        );
+      }
+      if (world.household.cash < equity) {
+        return fail(
+          `The household has ${toCompact(world.household.cash)}. \`distribute <amount>\` moves money ` +
+            `out of a business first — and it is taxed on the way.`,
+        );
+      }
+      return {
+        actions: [
+          {
+            kind: 'START_BUSINESS',
+            mode: 'CLONE',
+            cloneFromId: business.id,
+            clone: { name, equity, scale },
+          },
+        ],
+      };
+    }
+
+    /** Selling one. `sell` belongs to securities, so this is its own verb. */
+    case 'divest': {
+      const live = world.businesses.filter((b) => b.status !== 'SOLD' && b.status !== 'CLOSED');
+      const token = (rest[0] ?? '').toLowerCase();
+      const byIndex = Number(token);
+      const target =
+        token === ''
+          ? business
+          : Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= live.length
+            ? live[byIndex - 1]
+            : live.find((b) => b.name.toLowerCase().startsWith(token));
+      if (!target) return fail(`Which one? ${live.map((b, i) => `${i + 1}. ${b.name}`).join(' · ')}`);
+
+      const multiple = Number(rest[1] ?? DEFAULT_MULTIPLE);
+      if (!(multiple > 0)) return fail('The multiple has to be more than zero.');
+      const proceeds = saleValue(target, multiple);
+      console.log(
+        `  ${DIM}${target.name} at ${multiple}× trailing EBITDA is ${toCompact(proceeds)} to the ` +
+          `household after its debt, taxed as a gain. It closes in two quarters.${RESET}`,
+      );
+      return {
+        actions: [{ kind: 'SELL_BUSINESS', businessId: target.id, multipleOfEbitda: multiple }],
+      };
+    }
+
     case 'policy': {
       const tokens = (rest[0] ?? '').split(',').filter(Boolean);
       const policy: CrisisRemedy[] = [];
@@ -1649,9 +1984,27 @@ function parseCommand(
 
     default:
       if (looksLikeAQuestion(line, verb)) {
-        const answered = advise(business, result, world, line, memory);
+        /**
+         * The arithmetic first, always.
+         *
+         * The deterministic findings are exact, free and instant, and they go
+         * on screen whether or not a model is reachable. The model is then
+         * given them and told not to repeat them — so the worst case is the
+         * game exactly as it was before, and the best case is the half the
+         * arithmetic could never reach.
+         */
+        const answered = advise(business, result, world, history, line, memory);
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
-        journal?.write({ kind: 'asked', question: line, answered });
+
+        const spoken = advisor
+          ? await speakToPlayer(advisor, world, business, result, answered, line, journal)
+          : undefined;
+
+        journal?.write({
+          kind: 'asked',
+          question: line,
+          answered: spoken ? [...answered, spoken.reply] : answered,
+        });
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
         return none;
       }
@@ -1665,7 +2018,13 @@ function parseCommand(
 
 export async function play(
   source: string | WorldState,
-  options: { input?: LineSource; milestonePeriod?: number; journal?: Journal } = {},
+  options: {
+    input?: LineSource;
+    milestonePeriod?: number;
+    journal?: Journal;
+    /** Absent means no model in the loop, which is a supported way to play. */
+    advisor?: AdviceTransport;
+  } = {},
 ): Promise<void> {
   const milestonePeriod = options.milestonePeriod ?? 39;
 
@@ -1680,11 +2039,20 @@ export async function play(
   } else {
     state = source;
   }
-  const businessId = state.businesses[0]?.id;
-  if (!businessId) {
+  /**
+   * Which business the turn's commands are about.
+   *
+   * Mutable, because a portfolio has more than one and every operating command
+   * — price, hire, fire, expand — has to mean "this one". `switch` moves it and
+   * a clone lands as the new active business, which is what a player who just
+   * opened one wants to be looking at.
+   */
+  const opening = state.businesses[0];
+  if (!opening) {
     console.error('Scenario has no business.');
     process.exit(1);
   }
+  let businessId: string = opening.id;
 
   console.log(
     `\n${DIM}Opening cash ${toDisplay(state.businesses[0]!.cash)} · ` +
@@ -1710,7 +2078,33 @@ export async function play(
    * summarised at the end, because the sessions worth reading are the ones
    * that end abruptly.
    */
+  /**
+   * Every quarter, kept.
+   *
+   * The post-mortem is arithmetic on the run's history, so the history has to
+   * exist while the run is happening — a summary written at the end cannot say
+   * which period the business was actually lost in.
+   */
+  /**
+   * Per business, because the post-mortem is about one of them.
+   *
+   * "What would have had to be true" for a portfolio is not a question with an
+   * answer; for the cafe in Rochester it is.
+   */
+  const histories = new Map<string, RunPoint[]>();
+  const historyOf = (id: string): RunPoint[] => {
+    const existing = histories.get(id);
+    if (existing) return existing;
+    const fresh: RunPoint[] = [];
+    histories.set(id, fresh);
+    return fresh;
+  };
+
   const record = (result: TickResult): void => {
+    for (const business of state.businesses) {
+      const point = runPoint(result, business);
+      if (point) historyOf(business.id).push(point);
+    }
     const entry = result.statements.byBusiness[businessId];
     if (!entry) return;
     options.journal?.write({
@@ -1726,21 +2120,51 @@ export async function play(
     });
   };
 
+  console.log(
+    options.advisor
+      ? `${DIM}Ask anything in plain English — the numbers come from the engine, the judgement from a model.${RESET}`
+      : `${DIM}Ask anything in plain English. No ${providerKeyVar()}, so answers are the engine's arithmetic alone.${RESET}`,
+  );
+
+  // The scoreboard fires once. After that the run belongs to the player.
+  let pastMilestone = false;
+
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
   record(last);
-  renderTurn(last, state.businesses.find((b) => b.id === businessId)!);
+  renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
 
   try {
     while (true) {
+      // A clone that has matured is the one the player wants to be looking at,
+      // and a business that has been sold or closed cannot be the active one.
+      const active = state.businesses.find((b) => b.id === businessId);
+      if (!active || active.status === 'SOLD') {
+        const next = state.businesses.find((b) => b.status !== 'SOLD' && b.status !== 'CLOSED');
+        if (next) {
+          businessId = next.id;
+          console.log(`\n${DIM}Now running ${next.name}.${RESET}`);
+        }
+      }
       const business = state.businesses.find((b) => b.id === businessId)!;
 
-      if (business.status === 'CLOSED') {
-        console.log(`\n${RED}${BOLD}${business.name} is insolvent and closed.${RESET}`);
+      const survivors = state.businesses.filter(
+        (b) => b.status !== 'CLOSED' && b.status !== 'SOLD',
+      );
+      if (survivors.length === 0) {
+        console.log(
+          `\n${RED}${BOLD}${
+            state.businesses.length > 1 ? 'Every business is gone.' : `${business.name} is insolvent and closed.`
+          }${RESET}`,
+        );
         console.log(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need was ${toDisplay(business.peakCashNeed)}`,
         );
+        // §9.4: mandatory on insolvency. A run that ends with a liquidation
+        // figure tells the player they lost without telling them what would
+        // have had to be different, and the gap between those is the product.
+        printPostmortem(historyOf(business.id), business);
         console.log('');
         for (const line of benchmarkLines(
           state,
@@ -1751,12 +2175,13 @@ export async function play(
         }
         break;
       }
-      if (state.currentPeriod >= milestonePeriod) {
+      if (state.currentPeriod >= milestonePeriod && !pastMilestone) {
         console.log(`\n${BOLD}${GREEN}Ten-year milestone reached.${RESET}`);
         console.log(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need ${toDisplay(business.peakCashNeed)} at period ${business.peakCashNeedPeriod}`,
         );
+        printPostmortem(historyOf(business.id), business);
         // The number the run was missing: what the same money would have done
         // sitting in an index fund for the same ten years.
         console.log('');
@@ -1767,7 +2192,25 @@ export async function play(
         )) {
           console.log(`  ${line}`);
         }
-        break;
+
+        /**
+         * Continue-play — M7's last item.
+         *
+         * Ten years is where the spec stops scoring, not where a business
+         * stops. Ending the run there throws away the most interesting part of
+         * a portfolio that took a decade to assemble, so the milestone is a
+         * scoreboard and the player decides whether it was also a finish line.
+         *
+         * Blank or end-of-input stops, which is what a piped transcript that
+         * has run out means and what a player pressing enter means.
+         */
+        const answer = await input.next(`\n${DIM}Keep going? (enter to stop)${RESET} > `);
+        if (answer === undefined || answer.trim() === '' || answer.trim().toLowerCase() === 'quit') {
+          break;
+        }
+        pastMilestone = true;
+        console.log(`${DIM}Playing on. \`quit\` ends it whenever you like.${RESET}`);
+        continue;
       }
 
       const queued: Action[] = [];
@@ -1786,8 +2229,18 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business, last, state, options.journal, memory);
+        const parsed = await parseCommand(
+          line,
+          business,
+          last,
+          state,
+          historyOf(businessId),
+          options.journal,
+          memory,
+          options.advisor,
+        );
         if (parsed.message) console.log(parsed.message);
+        if (parsed.activate) businessId = parsed.activate;
         if (parsed.quit) {
           quit = true;
           break;
@@ -1850,7 +2303,7 @@ export async function play(
         record(last);
       }
 
-      renderTurn(last, state.businesses.find((b) => b.id === businessId)!);
+      renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
     }
   } finally {
     if (!options.input) input.close();

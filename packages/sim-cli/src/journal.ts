@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { CallRecord } from '@bizsim/llm';
 
 /**
  * Every session, on disk, one line at a time.
@@ -28,6 +29,20 @@ import { join } from 'node:path';
 
 export type JournalEvent =
   | { kind: 'session'; build: string; startedAt: string; startCapital: string }
+  /**
+   * One row per model call — the corpus this whole directory exists to build.
+   *
+   * `call` carries the provider, the model id, the effort tier, wall-clock ms,
+   * all four token counts and the cost. Everything else about a session is
+   * downstream of those: which model produced this run, what it cost, how long
+   * the player waited, and — once there are enough of them — whether a cheaper
+   * model reaches the same outcome.
+   *
+   * Emitted per *attempt*, so a draft that truncated and retried is two rows.
+   * The first one was billed, and a corpus that drops it prices the failures at
+   * zero, which is exactly backwards: the failures are the expensive ones.
+   */
+  | ({ kind: 'call' } & CallRecord)
   | {
       kind: 'turn';
       index: number;
@@ -60,6 +75,9 @@ export type JournalEvent =
       monthZero: string;
     }
   | { kind: 'abandoned'; reason: string }
+  /** The player stopped a call mid-flight. Worth counting: a rate that climbs
+   *  means turns are taking long enough that people give up on them. */
+  | { kind: 'cancelled' }
   /**
    * The one number that makes a run's market reproducible. Without it a
    * journal can replay every decision and still disagree about what the index
@@ -76,6 +94,17 @@ export type JournalEvent =
       events: string[];
     }
   | { kind: 'asked'; question: string; answered: string[] }
+  /**
+   * What the mid-game model did, when it did not simply answer.
+   *
+   * `advice_corrected` is the interesting one at scale: it counts the replies
+   * that quoted money the ledger never produced and had to be re-asked. Nobody
+   * can tell a fabricated figure from a real one by reading it, which means
+   * nobody can tell how often it happens either — unless it is written down.
+   */
+  | { kind: 'advice_corrected'; question: string; figures: string[] }
+  | { kind: 'advice_refused'; question: string }
+  | { kind: 'advice_failed'; question: string }
   | { kind: 'end'; reason: string };
 
 export interface Journal {
@@ -136,10 +165,45 @@ export interface SessionSummary {
   faults: string[];
   transientRetries: number;
   costUsd: number | undefined;
+  /** Every model that answered in this session, in first-seen order. */
+  models: string[];
+  /** Model calls made, including the attempts that failed. */
+  calls: number;
+  /** Seconds of wall clock the player spent waiting on a model. */
+  waitedSeconds: number;
   outcome: 'committed' | 'abandoned' | 'unfinished';
   quarters: number;
   /** Why it ended, when it ended badly. */
   reason: string | undefined;
+
+  /**
+   * The quality side of the comparison, which cost alone cannot settle.
+   *
+   * A model is only cheaper if it does the job. Each of these is a failure the
+   * player either saw or was protected from, counted rather than remembered:
+   *
+   * `retriedCalls` — attempts beyond the first. On a turn that means the reply
+   * came back empty or garbled; on a draft it means the budget ran out or the
+   * model refused the schema. Either way the session paid twice.
+   *
+   * `failedCalls` — attempts that threw. Refusals, exhausted budgets, transport
+   * faults.
+   *
+   * `fabricatedFigures` — the one that matters most. Every time the mid-game
+   * advisor quoted money the ledger never produced and had to be re-asked. §1.1
+   * forbids the model computing anything that lands on a statement, and nobody
+   * can tell a fabricated figure from a real one by reading it — so a model
+   * that does this more often is worse in the way that is hardest to notice and
+   * most expensive to be wrong about.
+   *
+   * `questionsAsked` is the denominator for that rate.
+   */
+  retriedCalls: number;
+  failedCalls: number;
+  questionsAsked: number;
+  fabricatedFigures: number;
+  /** Times the player stopped a reply mid-flight — a proxy for "too slow". */
+  cancelled: number;
 }
 
 export function readSession(file: string): SessionSummary {
@@ -160,7 +224,23 @@ export function readSession(file: string): SessionSummary {
   const draft = events.find((e) => e.kind === 'draft');
   const commit = events.find((e) => e.kind === 'commit');
   const abandoned = events.find((e) => e.kind === 'abandoned');
-  const spend = events.find((e) => e.kind === 'spend');
+  /**
+   * Priced from the per-call records, which carry the model that produced them.
+   *
+   * The previous version multiplied a session token total by $15 and $75 —
+   * hardcoded Opus 4.x list rates, duplicated here on purpose so a script
+   * reading the journal needed nothing else. The duplication was the point and
+   * it was also the bug: those rates went stale, nothing noticed, and every
+   * cost figure `--sessions` has ever printed was roughly threefold high.
+   *
+   * Now the price is computed once, at the call, against the model that
+   * actually answered — and written into the record. Reading it back is
+   * addition. Sessions recorded before this carry no call records and report
+   * no cost, which is the honest answer for a run whose model was never noted.
+   */
+  const calls = events.filter((e) => e.kind === 'call');
+  const models: string[] = [];
+  for (const c of calls) if (!models.includes(c.model)) models.push(c.model);
 
   return {
     file,
@@ -170,17 +250,19 @@ export function readSession(file: string): SessionSummary {
     turns: events.filter((e) => e.kind === 'turn').length,
     faults: events.filter((e) => e.kind === 'fault').flatMap((e) => e.issues),
     transientRetries: events.filter((e) => e.kind === 'transient').length,
-    costUsd: spend ? estimateCost(spend) : undefined,
+    costUsd: calls.length > 0 ? calls.reduce((sum, c) => sum + c.costUsd, 0) : undefined,
+    models,
+    calls: calls.length,
+    waitedSeconds: Math.round(calls.reduce((sum, c) => sum + c.ms, 0) / 1000),
     outcome: commit?.committed ? 'committed' : abandoned ? 'abandoned' : 'unfinished',
     quarters: events.filter((e) => e.kind === 'quarter').length,
     reason: abandoned?.reason,
+    retriedCalls: calls.filter((c) => c.attempt > 1).length,
+    failedCalls: calls.filter((c) => !c.ok).length,
+    questionsAsked: events.filter((e) => e.kind === 'asked').length,
+    fabricatedFigures: events.filter((e) => e.kind === 'advice_corrected').length,
+    cancelled: events.filter((e) => e.kind === 'cancelled').length,
   };
-}
-
-/** Deliberately duplicated from `spend.ts` rather than imported: the journal
- * must stay readable by a script that knows nothing about the rest of this. */
-function estimateCost(s: { inputTokens: number; outputTokens: number }): number {
-  return (s.inputTokens * 15) / 1_000_000 + (s.outputTokens * 75) / 1_000_000;
 }
 
 export function listSessions(dir = journalDir()): SessionSummary[] {

@@ -34,6 +34,8 @@ import { type ConceptDraft, type DraftCostLine, type DraftStream } from './draft
  */
 
 export interface MappedConcept {
+  /** The trade's own word for a unit of volume — loads, covers, rounds. */
+  volumeNoun: string;
   template: SeedTemplate;
   scale: ScaleInput;
   marketingSpendPerQuarter: number;
@@ -323,5 +325,6 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     archetype: stream.archetype,
     legalForm: draft.legalForm,
     businessName: draft.businessName,
+    volumeNoun: stream.volumeNoun,
   };
 }

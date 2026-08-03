@@ -98,6 +98,19 @@ export const zDraftStream = z.object({
    * another has made an error rather than a bold claim.
    */
   expectedAnnualRevenue: z.number(),
+  /**
+   * What one unit of volume is called in this trade.
+   *
+   * A ready-mix plant sells loads, a restaurant serves covers, a clinic sees
+   * visits, a course sells rounds. The engine had one word for all of them —
+   * "covers/day", inherited from the first template anyone wrote — and a
+   * concrete producer's post-mortem told him he needed "12 covers/day".
+   *
+   * Plural, lower case, the word an operator in this business would use on a
+   * whiteboard. It changes nothing the engine computes and everything about
+   * whether the player recognises their own business on the screen.
+   */
+  volumeNoun: z.string().default('transactions'),
 });
 export type DraftStream = z.infer<typeof zDraftStream>;
 

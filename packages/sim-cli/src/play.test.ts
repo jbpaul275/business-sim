@@ -20,10 +20,17 @@ function scriptedInput(lines: readonly string[]): LineSource {
   return { next: async () => lines[i++], close: () => {} };
 }
 
-async function transcript(lines: readonly string[], scenario = 'restaurant'): Promise<string> {
+async function transcript(
+  lines: readonly string[],
+  scenario = 'restaurant',
+  // Four quarters is enough for most of these and keeps them fast. Anything
+  // with a lead time in it — a clone, a buildout — needs the run to outlive the
+  // scoreboard, or the milestone ends it before the decision lands.
+  milestonePeriod = 4,
+): Promise<string> {
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   try {
-    await play(scenario, { input: scriptedInput(lines), milestonePeriod: 4 });
+    await play(scenario, { input: scriptedInput(lines), milestonePeriod });
     return log.mock.calls.map((c) => String(c[0])).join('\n');
   } finally {
     log.mockRestore();
@@ -477,6 +484,155 @@ describe('asking what to do', () => {
     expect(printed).not.toMatch(/staffed for the building/);
   });
 
+  it('explains a failure instead of ending on a liquidation figure', async () => {
+    // §9.4: the post-mortem is mandatory on insolvency. "For a prospective
+    // founder, this is the single most valuable output the product can
+    // generate — it converts a loss into a specific, checkable claim about the
+    // real world." A run used to end with a number and no reason.
+    const printed = await transcript(['fire kitchen_labor 5', '', 'skip 40', 'quit']);
+    expect(printed).toMatch(/WHAT WOULD HAVE HAD TO BE TRUE/);
+    expect(printed).toMatch(/covers\/day to break even/);
+    expect(printed).toMatch(/holds everything else at what it actually was/);
+  });
+
+  it('answers on demand, which is the half that matters', async () => {
+    // A player who can ask this in period 12 can still act on the answer.
+    const printed = await transcript(['skip 2', 'postmortem', 'quit'], 'storage');
+    expect(printed).toMatch(/What (would have had to be true|it rests on)/);
+    expect(printed).toMatch(/to break even/);
+  });
+
+  it('takes the question in English too', async () => {
+    const printed = await transcript(['skip 2', 'what went wrong?', 'quit'], 'storage');
+    expect(printed).toMatch(/to break even/);
+    expect(printed).not.toContain('Unknown command');
+  });
+
+  it('does not let a bare `why` swallow every why-question', async () => {
+    // Making `why` a verb outright routes "why does revenue keep swinging?"
+    // into the post-mortem — the exact failure the topic router exists to stop.
+    const swing = await transcript(['why does revenue keep swinging?', 'quit'], 'ecommerce');
+    expect(swing).toMatch(/seasonal, not a trend/);
+    expect(swing).not.toMatch(/to break even/);
+
+    const bare = await transcript(['why', 'quit'], 'ecommerce');
+    expect(bare).toMatch(/to break even/);
+  });
+
+  it('does not tell a working business what went wrong', async () => {
+    const printed = await transcript(['skip 2', 'postmortem', 'quit'], 'cash-crunch');
+    expect(printed).toMatch(/What it rests on/);
+    expect(printed).toMatch(/clear by/);
+  });
+
+  it('prices a marketing rise at the moment it is made', async () => {
+    // "Raising marketing spend doesn't seem to increase sales." It did not, and
+    // the engine was right not to: past twice the half-saturation point the
+    // response curve is flat, and $30k a quarter more bought about two percent
+    // of demand. The engine was correct and the screen was silent, which is the
+    // worst combination — the player waited two quarters and concluded the
+    // lever was broken.
+    const printed = await transcript(['marketing 50k', 'quit']);
+    expect(printed).toMatch(/more buys about [\d.]+% more demand/);
+    expect(printed).toMatch(/half-saturation point of/);
+    expect(printed).toMatch(/this lever is close to spent/);
+    // Warned, not refused.
+    expect(printed).toContain('queued: marketing');
+  });
+
+  it('does not call a lever spent because the step was small', async () => {
+    // A $1k rise buying 1% is the curve behaving, not a dead lever.
+    const printed = await transcript(['marketing 9k', 'quit']);
+    expect(printed).toMatch(/more buys about/);
+    expect(printed).not.toMatch(/close to spent/);
+  });
+
+  it('says marketing does nothing at all where the archetype ignores it', async () => {
+    const printed = await transcript(['marketing 50k', 'quit'], 'storage');
+    expect(printed).toMatch(/does not move demand for this archetype/);
+    expect(printed).toContain('queued: marketing');
+  });
+
+  it('opens a second one, and shows both', async () => {
+    // "I want to use the cash flow from this one to buy a 256 room property in
+    // Des Moines" was answered with "you are at 57.6% of capacity" for most of
+    // this project's life.
+    const printed = await transcript(
+      ['distribute 900k', '', 'clone 900k Rochester', '', '', '', 'businesses', 'quit'],
+      'restaurant',
+      12,
+    );
+    expect(printed).toMatch(/queued: open Rochester for \$900,000/);
+    expect(printed).toMatch(/Rochester/);
+    // Both on the books, with the active one marked.
+    expect(printed).toMatch(/1\. Reference Restaurant/);
+    expect(printed).toMatch(/2\. Rochester/);
+    // And the turn screen says the other one exists without leaving this one.
+    expect(printed).toMatch(/Also running/);
+    expect(printed).toMatch(/group revenue/);
+  });
+
+  it('quotes the buildout before the money moves', async () => {
+    const printed = await transcript(
+      ['distribute 2m', '', 'clone 2m Rochester 3x', 'quit'],
+      'restaurant',
+    );
+    expect(printed).toMatch(/3× the size/);
+    expect(printed).toMatch(/Buildout alone is/);
+    expect(printed).toMatch(/Revenue starts two quarters out/);
+  });
+
+  it('will not open one the household cannot pay for', async () => {
+    const printed = await transcript(['clone 50m Rochester', 'quit'], 'restaurant');
+    expect(printed).toMatch(/The household has/);
+    expect(printed).toMatch(/`distribute <amount>`/);
+    expect(printed).not.toContain('queued: open');
+  });
+
+  it('needs a name, because a portfolio of unnamed copies is unusable', async () => {
+    const printed = await transcript(['clone 900k', 'quit'], 'restaurant');
+    expect(printed).toMatch(/needs a name|needs the money and a name/);
+    expect(printed).not.toContain('queued: open');
+  });
+
+  it('switches which business the commands are about', async () => {
+    const printed = await transcript(
+      ['distribute 900k', '', 'clone 900k Rochester', '', '', '', 'switch 2', 'price 50', 'quit'],
+      'restaurant',
+      12,
+    );
+    expect(printed).toMatch(/Now looking at Rochester/);
+    expect(printed).toMatch(/queued: price/);
+  });
+
+  it('sells one, on its own verb', async () => {
+    // `sell` belongs to securities. A portfolio needs its own word or the two
+    // collide on the one command a player is most likely to get wrong.
+    const printed = await transcript(
+      ['distribute 900k', '', 'clone 900k Rochester', '', '', '', 'divest 2', 'quit'],
+      'restaurant',
+      12,
+    );
+    expect(printed).toMatch(/trailing EBITDA/);
+    expect(printed).toMatch(/It closes in two quarters/);
+    expect(printed).toMatch(/queued: sell the business/);
+  });
+
+  it('keeps playing past the milestone when asked', async () => {
+    // Ten years is where the spec stops scoring, not where a business stops.
+    const printed = await transcript(['skip 40', 'yes', 'quit'], 'restaurant');
+    expect(printed).toMatch(/Ten-year milestone reached/);
+    // The question itself is a prompt rather than a printed line, so what is
+    // observable is the answer to it.
+    expect(printed).toMatch(/Playing on/);
+  });
+
+  it('stops at the milestone on a blank line', async () => {
+    const printed = await transcript(['skip 40', '', 'quit'], 'restaurant');
+    expect(printed).toMatch(/Ten-year milestone reached/);
+    expect(printed).not.toMatch(/Playing on/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);
@@ -490,8 +646,12 @@ describe('asking what to do', () => {
     // is short — and it is also carrying staff the volume does not need, which
     // is the half the player controls this quarter.
     const printed = await transcript(['what do i do now?', 'quit']);
-    expect(printed).toMatch(/of capacity/);
-    expect(printed).toMatch(/staffed for the building rather than the demand/);
+    expect(printed).toMatch(/of what you are staffed for/);
+    expect(printed).toMatch(/staffed for the plan rather than the demand/);
+    // Never "the building". The ceiling is active blocks × capacityPerBlock —
+    // a staffing number, not a physical one — and calling it a building is how
+    // a phone game got told it was at "34.8% of capacity (1,500)".
+    expect(printed).not.toMatch(/the building/);
   });
 
   it('says nothing the ledger does not', async () => {

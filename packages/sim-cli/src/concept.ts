@@ -1,21 +1,30 @@
 import {
-  AnthropicConceptTransport,
   ConceptInterview,
+  createConceptTransport,
+  providerKeyPresent,
+  providerKeyVar,
   BudgetExhaustedError,
   ConceptRefusedError,
   TransientError,
+  isCancellation,
   MalformedDraftError,
   UnusableResponseError,
   draftIssues,
   draftToTemplate,
   type ConceptDraft,
+  type CallRecord,
   type ConceptTransport,
   type MappedConcept,
 } from '@bizsim/llm';
 import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
-import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
+import {
+  buildabilityIssues,
+  capacityCeilingIssues,
+  revenueRealityIssues,
+  staffingRealismIssues,
+} from './plausibility.js';
 import { accent, note, rule, speech, youPrompt } from './ui.js';
 import { spendLine } from './spend.js';
 import { faultLine } from './faults.js';
@@ -69,9 +78,15 @@ function wrap(text: string, width = 76, indent = '  '): string {
  * True when a live model is reachable. Checked rather than assumed so the CLI
  * can fall back to the structured path with an explanation instead of dying
  * with a stack trace on a missing key.
+ *
+ * Which key that is now depends on the provider — see `providerName`. The check
+ * used to name `ANTHROPIC_API_KEY` here and in two other places, which is how a
+ * provider switch turns into a bug hunt.
  */
-export const conceptPathAvailable = (): boolean =>
-  Boolean(process.env['ANTHROPIC_API_KEY'] ?? process.env['ANTHROPIC_AUTH_TOKEN']);
+export const conceptPathAvailable = (): boolean => providerKeyPresent();
+
+/** The variable to export, for the message shown when there is not one. */
+export const conceptKeyVar = (): string => providerKeyVar();
 
 /**
  * How hard the last turn worked, for the line under the model's answer.
@@ -120,12 +135,60 @@ export async function runConceptInterview(
     ),
   );
   console.log(
-    `${DIM}  \`why\` after any answer shows the reasoning behind it. Ctrl-C to abandon setup.${RESET}\n`,
+    `${DIM}  \`why\` shows the reasoning · \`undo\` takes back your last message ·` +
+      ` Ctrl-C stops a reply${RESET}\n`,
   );
 
   let spinner = { stop: () => {}, label: (_: string) => {} };
+  /**
+   * Every model call, on disk as it happens.
+   *
+   * Kept in memory too, because the end-of-interview spend line prices the same
+   * records — one source, so the number on screen and the number in the corpus
+   * cannot disagree about what a session cost.
+   */
+  const calls: CallRecord[] = [];
+  const live =
+    transport ??
+    createConceptTransport({
+      onCall: (record) => {
+        calls.push(record);
+        journal?.write({ kind: 'call', ...record });
+      },
+    });
+
+  /**
+   * Ctrl-C while the model is thinking stops the model, not the session.
+   *
+   * Someone pasted a fragment by accident and then had no way to take it back:
+   * the only key that does anything during a call killed the whole setup, so
+   * the choice was fifty-three seconds of a wrong answer or losing ten minutes
+   * of conversation. Neither is a choice anyone should be offered.
+   *
+   * The handler is installed only around the call. Outside one, Ctrl-C keeps
+   * its usual meaning — readline owns it, and abandoning setup is still one
+   * keystroke away.
+   */
+  const whileCalling = async <T>(work: () => Promise<T>): Promise<T> => {
+    let stopped = false;
+    const onSigint = (): void => {
+      if (stopped) {
+        // Twice means they mean the session, not the call.
+        process.exit(130);
+      }
+      stopped = true;
+      live.cancel?.();
+    };
+    process.on('SIGINT', onSigint);
+    try {
+      return await work();
+    } finally {
+      process.off('SIGINT', onSigint);
+    }
+  };
+
   const interview = new ConceptInterview({
-    transport: transport ?? new AnthropicConceptTransport(),
+    transport: live,
     onDrafting: () => spinner.label('building the model'),
     // The templates are offered as a convenience, not a menu: the model uses
     // one only when its cost structure genuinely fits, and otherwise emits its
@@ -209,10 +272,28 @@ export async function runConceptInterview(
       continue;
     }
 
+    /**
+     * "I didn't mean to send that."
+     *
+     * A pasted fragment — "re Blend it out and a" — cost fifty-three seconds
+     * and put a question nobody asked into the transcript, with an answer to it
+     * underneath. Every turn after that was reasoning against both. Taking the
+     * pair back out is the whole fix.
+     */
+    if (/^(undo|back|oops|scratch that)\b/i.test(reply)) {
+      console.log(
+        interview.undo()
+          ? `  ${DIM}Taken back. The conversation is where it was before that message.${RESET}`
+          : `  ${DIM}Nothing to take back yet.${RESET}`,
+      );
+      reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
+      continue;
+    }
+
     let state;
-    spinner = waiting('thinking');
+    spinner = waiting(process.stdout.isTTY ? 'thinking · Ctrl-C to stop' : 'thinking');
     try {
-      state = await interview.send(reply);
+      state = await whileCalling(() => interview.send(reply));
     } catch (error) {
       spinner.stop();
       /**
@@ -225,6 +306,21 @@ export async function runConceptInterview(
        * memory and `send` rolls the unanswered message back out of it, so the
        * same reply can simply go again.
        */
+      /**
+       * Ctrl-C during a call stops the call, not the session.
+       *
+       * `send` has already rolled the message back out of the transcript by the
+       * time this runs, so the conversation is exactly as it was — which means
+       * the right thing to do is hand back the prompt and say nothing else.
+       * Retrying a cancellation would be the opposite of what was asked for.
+       */
+      if (isCancellation(error)) {
+        console.log(`  ${DIM}Stopped. Nothing was sent — your last message is not in the conversation.${RESET}`);
+        journal?.write({ kind: 'cancelled' });
+        reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
+        continue;
+      }
+
       if (error instanceof TransientError) {
         transientFailures += 1;
         if (transientFailures <= MAX_TRANSIENT) {
@@ -370,9 +466,21 @@ export async function runConceptInterview(
     // claim about a shadow of the real fault, printed above it. One root cause
     // per round: the model fixes the price, and the revenue check gets a
     // meaningful number to check on the next pass.
-    const structural = [...draftIssues(state.draft), ...buildabilityIssues(state.draft)];
+    // A business that cannot break even with every unit sold is structural in
+    // the only sense that matters: no decision downstream closes the gap. It
+    // belongs with the faults that stop a draft, not with the warnings.
+    const structural = [
+      ...draftIssues(state.draft),
+      ...buildabilityIssues(state.draft),
+      ...capacityCeilingIssues(state.draft),
+    ];
+    // Both plausibility checks share the repair round when nothing structural
+    // is wrong: a business whose revenue is right and whose staffing never
+    // grows has one fault, not none, and the model can fix both at once.
     const issues =
-      structural.length > 0 ? structural : revenueRealityIssues(state.draft);
+      structural.length > 0
+        ? structural
+        : [...revenueRealityIssues(state.draft), ...staffingRealismIssues(state.draft)];
     if (issues.length > 0 && repairs < MAX_REPAIRS) {
       repairs += 1;
       /**
@@ -407,7 +515,11 @@ export async function runConceptInterview(
       console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
       return undefined;
     }
-    for (const issue of revenueRealityIssues(state.draft)) {
+    for (const issue of [
+      ...revenueRealityIssues(state.draft),
+      ...staffingRealismIssues(state.draft),
+      ...capacityCeilingIssues(state.draft),
+    ]) {
       console.log(`\n  ${YELLOW}⚠ ${wrap(issue, 70, '    ').trimStart()}${RESET}`);
     }
 
@@ -457,7 +569,7 @@ export async function runConceptInterview(
     // number ticking up while someone decides what to build changes what they
     // build, and this is a design tool before it is a budget.
     journal?.write({ kind: 'spend', ...interview.usage });
-    const spent = spendLine(interview.usage);
+    const spent = spendLine(calls);
     if (spent) console.log(`\n${note(spent)}`);
 
     return { mapped: draftToTemplate(state.draft), draft: state.draft };

@@ -1,89 +1,129 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import type { UsageTotal } from '@bizsim/llm';
-import { costOf, rates, spendLine } from './spend.js';
+import { describe, expect, it } from 'vitest';
+import { costOf, rateFor, type CallRecord } from '@bizsim/llm';
+import { spendLine, totalSpend } from './spend.js';
 
 /**
  * The question that produced this file was "roughly how much is each of these
  * ideation sessions costing?", and the honest answer at the time was that
- * nothing measured it. What is tested here is that the meter counts the term
- * that dominates — thinking, billed at the output rate — and that the rates it
- * multiplies by can be corrected without a rebuild.
+ * nothing measured it. The question that produced this version is "which model
+ * is cheapest for the job", and a session total cannot answer it — so what is
+ * tested here is that the split survives: per call type, per model, including
+ * the attempts that failed.
  */
 
-const env = { ...process.env };
-afterEach(() => {
-  process.env = { ...env };
-});
+const call = (over: Partial<CallRecord> = {}): CallRecord => {
+  const base = {
+    call: 'turn' as const,
+    provider: 'kimi',
+    model: 'kimi-k3',
+    effort: 'low',
+    ms: 4_000,
+    inputTokens: 6_000,
+    cachedInputTokens: 5_000,
+    outputTokens: 1_200,
+    thinkingTokens: 950,
+    attempt: 1,
+    ok: true,
+    ...over,
+  };
+  const { rates, known } = rateFor(base.model);
+  return { ...base, costUsd: costOf(base, rates), ratesKnown: known };
+};
 
 /** Roughly one observed session: five turns and a draft. */
-const session: UsageTotal = {
-  calls: 6,
-  inputTokens: 38_000,
-  cachedInputTokens: 0,
-  outputTokens: 21_000,
-  thinkingTokens: 17_000,
-};
+const session: CallRecord[] = [
+  call(),
+  call(),
+  call(),
+  call(),
+  call(),
+  call({ call: 'draft', effort: 'high', ms: 74_000, outputTokens: 18_000, thinkingTokens: 14_000 }),
+];
 
 describe('what a session cost', () => {
   it('bills thinking at the output rate, because that is where the money is', () => {
-    // 17k of the 21k output tokens are thinking. Comparing the output halves
-    // rather than the totals, because input is a constant floor under both and
-    // would flatter a meter that got this wrong.
-    const inputOnly = costOf({ ...session, outputTokens: 0 });
-    const visible = costOf({ ...session, outputTokens: 4_000 }) - inputOnly;
-    const withThinking = costOf(session) - inputOnly;
-    expect(withThinking).toBeCloseTo(visible * (21 / 4), 6);
-    // And it really is the larger half of the bill.
-    expect(withThinking).toBeGreaterThan(inputOnly * 2);
+    const inputOnly = totalSpend([call({ outputTokens: 0, thinkingTokens: 0 })]).costUsd;
+    const visible = totalSpend([call({ outputTokens: 250, thinkingTokens: 0 })]).costUsd - inputOnly;
+    const withThinking = totalSpend([call()]).costUsd - inputOnly;
+    // 1,200 output tokens against 250, so the output half is 4.8× the size.
+    expect(withThinking).toBeCloseTo(visible * (1_200 / 250), 6);
   });
 
   it('counts cached input at the cache rate', () => {
     // The ~5,100-token system prompt goes out on every call, so whether it is
     // cached is most of the difference between the input halves of two
     // otherwise identical sessions.
-    const cold = costOf(session);
-    const warm = costOf({ ...session, cachedInputTokens: 30_000 });
+    const cold = totalSpend([call({ cachedInputTokens: 0 })]).costUsd;
+    const warm = totalSpend([call({ cachedInputTokens: 5_000 })]).costUsd;
     expect(warm).toBeLessThan(cold);
     expect(warm).toBeGreaterThan(0);
   });
 
-  it('takes its rates from the environment, so a stale price can be corrected', () => {
-    // A price baked into a binary goes stale silently and then quotes a
-    // confident wrong number for a year.
-    process.env['BIZSIM_PRICE_INPUT'] = '3';
-    process.env['BIZSIM_PRICE_OUTPUT'] = '15';
-    expect(rates()).toMatchObject({ input: 3, output: 15 });
-    expect(costOf(session)).toBeCloseTo((38_000 * 3 + 21_000 * 15) / 1_000_000, 6);
+  it('prices each call by its own model rather than averaging the session', () => {
+    /**
+     * The reason this moved off a session total. A run that answers turns on a
+     * cheap model and drafts on an expensive one has two prices in it, and one
+     * blended rate makes both of them wrong — in the direction that hides
+     * whether the routing was worth doing.
+     */
+    const mixed = totalSpend([
+      call({ model: 'kimi-k2.6' }),
+      call({ call: 'draft', model: 'claude-opus-5', provider: 'anthropic' }),
+    ]);
+    const cheapOnly = totalSpend([call({ model: 'kimi-k2.6' })]).costUsd;
+    const dearOnly = totalSpend([
+      call({ call: 'draft', model: 'claude-opus-5', provider: 'anthropic' }),
+    ]).costUsd;
+    expect(mixed.costUsd).toBeCloseTo(cheapOnly + dearOnly, 10);
+    expect(dearOnly).toBeGreaterThan(cheapOnly * 5);
+    expect(mixed.models).toEqual(['kimi-k2.6', 'claude-opus-5']);
   });
 
-  it('ignores a rate that is not a positive number', () => {
-    for (const bad of ['', 'free', '-4', '0', 'NaN']) {
-      process.env['BIZSIM_PRICE_OUTPUT'] = bad;
-      expect(rates().output, bad).toBe(75);
-    }
+  it('splits by call type, which is what a routing decision needs', () => {
+    const s = totalSpend(session);
+    expect(s.byKind.turn.calls).toBe(5);
+    expect(s.byKind.draft.calls).toBe(1);
+    // The shape the whole argument rests on: one draft outweighs five turns.
+    expect(s.byKind.draft.costUsd).toBeGreaterThan(s.byKind.turn.costUsd);
+    expect(s.byKind.adjudicate.calls).toBe(0);
   });
 
-  it('reports the split rather than one opaque figure', () => {
+  it('keeps the wall clock, which the rates do not show', () => {
+    // Latency is the half of a routing decision that a price list cannot price.
+    // A model that is half the cost and four times the wait is not cheaper.
+    expect(totalSpend(session).ms).toBe(5 * 4_000 + 74_000);
+  });
+
+  it('counts a failed attempt, because it was still billed', () => {
+    const truncated = call({ call: 'draft', ok: false, failure: 'BudgetExhaustedError' });
+    const s = totalSpend([truncated, call({ call: 'draft' })]);
+    expect(s.calls).toBe(2);
+    expect(s.costUsd).toBeGreaterThan(totalSpend([call({ call: 'draft' })]).costUsd);
+  });
+
+  it('flags an unpriced model instead of reporting it as free', () => {
+    // A guessed rate is a number someone quotes in a pricing conversation
+    // without knowing it was invented. Zero and visibly missing is safer, and
+    // the tokens are on the record either way so it can be repriced later.
+    const s = totalSpend([call({ model: 'some-new-model-v9' })]);
+    expect(s.unpriced).toBe(1);
+    expect(s.costUsd).toBe(0);
+    expect(spendLine([call({ model: 'some-new-model-v9' })])).toContain('unpriced model');
+  });
+
+  it('names the models, because a cost with no model cannot be compared', () => {
     const line = spendLine(session)!;
     expect(line).toContain('6 model calls');
-    expect(line).toContain('38.0k in');
-    expect(line).toContain('21.0k out');
+    expect(line).toContain('kimi-k3');
     expect(line).toMatch(/\$\d+\.\d\d/);
+    expect(line).toContain('s waiting');
     // The share that was thinking is the actionable half: it is the number
     // that says whether `effort` or the prompt is the dial to turn.
-    expect(line).toContain('81% of output was thinking');
+    expect(line).toMatch(/\d+% of output was thinking/);
   });
 
   it('says nothing when no call was made', () => {
     // A scripted run, or a template-picker session with no model at all.
-    expect(
-      spendLine({
-        calls: 0,
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-        thinkingTokens: 0,
-      }),
-    ).toBeUndefined();
+    expect(spendLine([])).toBeUndefined();
   });
 });

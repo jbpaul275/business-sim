@@ -144,5 +144,6 @@
   "badDebtPctOfRevenue": 0.008,
   "repairsPctOfRevenue": 0.003,
   "cardProcessingRate": 0.028,
-  "cardMixPct": 0.1
+  "cardMixPct": 0.1,
+  "volumeNoun": "billable hours"
 }

@@ -1,8 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_USAGE, ScriptedTransport, draftToTemplate, type ConceptDraft } from '@bizsim/llm';
-import { buildModelFromTemplate, validateBusinessModel } from '@bizsim/engine';
+import {
+  buildModelFromTemplate,
+  createWorld,
+  createWorldConfig,
+  setAtPath,
+  validateBusinessModel,
+} from '@bizsim/engine';
 import { isThin, runSetup } from './setup.js';
-import { START_CAPITAL, FREEPLAY_CAPITAL_CAP } from '@bizsim/schemas';
+import { projectFundingGap } from './plausibility.js';
+import { findCatalogItem, getSeedTemplate } from '@bizsim/seeds';
+import { START_CAPITAL, FREEPLAY_CAPITAL_CAP, type WorldState } from '@bizsim/schemas';
 import { clampFreeplay } from '@bizsim/engine';
 import { fromDisplay } from '@bizsim/money';
 import type { LineSource } from './input.js';
@@ -52,6 +60,7 @@ const draft: ConceptDraft = {
       seasonality: [0.9, 1.0, 1.2, 0.9],
       marketingSpendPerQuarter: 4_000,
       expectedAnnualRevenue: 480_000,
+      volumeNoun: 'covers',
     },
   costLines: [
     {
@@ -254,6 +263,7 @@ describe('the concept path reaches the same gate as the picker', () => {
           seasonality: [1.0, 1.05, 0.9, 1.05],
           marketingSpendPerQuarter: 18_000,
           expectedAnnualRevenue: 2_600_000,
+          volumeNoun: 'covers',
         },
       costLines: [
         {
@@ -397,6 +407,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       turn: async () => ({
         turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
       }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => {
         asked += 1;
         return (asked === 1 ? broken : draft) as ConceptDraft;
@@ -787,5 +799,110 @@ describe('the starting tiers', () => {
   it('still caps free play at a billion', () => {
     expect(clampFreeplay(fromDisplay(5_000_000_000))).toBe(FREEPLAY_CAPITAL_CAP);
     expect(clampFreeplay(fromDisplay(250_000_000))).toBe(fromDisplay(250_000_000));
+  });
+});
+
+/**
+ * The number the commit screen already says is the one to fund against.
+ *
+ * §5.4: month zero is not the peak — the peak comes when you are open and still
+ * losing money. The gate said exactly that to a ready-mix operator and then did
+ * not tell him what the number was. He opened with $989,000 raised against a
+ * plan that needed $1.6M by its third quarter, and was insolvent inside a year
+ * with $1.3M of personally guaranteed debt following him home.
+ */
+describe('what the plan actually needs', () => {
+  const thinWorld = (equity: number, debt: number): WorldState => {
+    const model = buildModelFromTemplate({
+      businessName: 'Underfunded',
+      template: getSeedTemplate('full_service_restaurant'),
+      scale: { seats: 120, turnsPerDay: 2, addressableTrafficPerQuarter: 40_000, captureRate: 0.02, price: fromDisplay(24) },
+      equityInjection: fromDisplay(equity),
+      ...(debt > 0
+        ? { debt: [{ kind: 'SBA_7A' as const, principal: fromDisplay(debt), termQuarters: 40 }] }
+        : {}),
+    });
+    return createWorld({
+      id: 'thin',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model],
+    });
+  };
+
+  it('projects the peak with the crisis ladder switched off', () => {
+    // A projection that lets emergency debt at 19.5% rescue each quarter
+    // answers "can this be kept alive", which is a different and much less
+    // useful question than "what does it need".
+    const world = thinWorld(400_000, 300_000);
+    const gap = projectFundingGap(world, fromDisplay(700_000));
+    expect(gap).toBeDefined();
+    // The peak is the cumulative unfinanced gap, so it exceeds month zero.
+    expect(gap!.peak).toBeGreaterThan(world.businesses[0]!.peakCashNeed);
+    expect(gap!.atPeriod).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reports a shortfall when the plan needs more than was raised', () => {
+    const gap = projectFundingGap(thinWorld(400_000, 300_000), fromDisplay(700_000));
+    expect(gap!.shortfall).toBe(gap!.peak - fromDisplay(700_000));
+  });
+
+  it('reports no shortfall when the money is genuinely there', () => {
+    const gap = projectFundingGap(thinWorld(400_000, 300_000), fromDisplay(50_000_000));
+    expect(gap!.shortfall).toBeLessThan(0n);
+  });
+});
+
+/**
+ * The freezer argument — §11.3's own example, end to end.
+ *
+ * "The player says 'I think that machine costs $10k, not $60k' and the model
+ * replies 'Good point — $10k it is.' It would fold identically if the player
+ * had said $500."
+ *
+ * M4's exit criterion is that this argument produces the discriminating
+ * question or the clamp, and never the capitulation.
+ */
+describe('arguing with the register (§11.3)', () => {
+  const modelWithFreezer = () => {
+    const model = buildModelFromTemplate({
+      businessName: 'Argued',
+      template: getSeedTemplate('full_service_restaurant'),
+      scale: { seats: 64, turnsPerDay: 2, price: fromDisplay(42) },
+      equityInjection: fromDisplay(500_000),
+    });
+    return model;
+  };
+
+  it('writes an adjudicated value into the model, not just the register', () => {
+    // The register is a record OF the model. Before this, winning an argument
+    // changed a line in a document and nothing in the business.
+    const model = modelWithFreezer();
+    const ticket = model.assumptions.find((a) => a.path === 'streams.s1.params.avgTicket')!;
+    expect(setAtPath(model, ticket.path, fromDisplay(51))).toBe(true);
+    const params = model.streams[0]!.params;
+    if (params.kind !== 'TRAFFIC') throw new Error('shape');
+    expect(params.avgTicket).toBe(fromDisplay(51));
+  });
+
+  it('finds the catalog entry a cost line is about', () => {
+    // Matched on the words the model used, because the line was written by
+    // something describing a business and the catalog by someone describing an
+    // item.
+    expect(findCatalogItem('Batch freezer, floor model')?.id).toBe('batch_freezer');
+    expect(findCatalogItem('Walk-in cooler and condenser')?.id).toBe('walk_in_cooler');
+    // The longest keyword wins: "walk-in cooler" beats "cooler".
+    expect(findCatalogItem('Reach-in cooler')?.id).not.toBe('walk_in_cooler');
+    expect(findCatalogItem('Something nobody catalogued')).toBeUndefined();
+  });
+
+  it('carries tiers, which is what makes rule 3 answerable', () => {
+    // "$10k or $60k" is an argument. "Countertop 3-quart or floor 20-quart" is
+    // a question with an answer, and the answer settles the number.
+    const freezer = findCatalogItem('batch freezer')!;
+    expect(freezer.tiers.length).toBeGreaterThan(1);
+    expect(freezer.tiers.map((t) => t.tier).join(' ')).toMatch(/countertop/);
+    // And every range says where it came from.
+    expect(freezer.source.length).toBeGreaterThan(20);
   });
 });

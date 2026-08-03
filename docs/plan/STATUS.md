@@ -8,10 +8,10 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
-| **M4 — Challenge loop** | ⬜ Not started | Same |
-| **M5 — Turn loop + actions** | 🟡 Partial | §9.1 Phases 0-5 playable via `pnpm sim --new`: capital choice, business design, assumption review, commit gate, quarterly operate. `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
+| **M4 — Challenge loop** | 🟡 Mostly | The §11.3 contract, isolated from the thread, with rules 1 and 6 enforced in code rather than requested. Adversarial fixtures and the sycophancy regression are in the suite. `ADJUST_ASSUMPTION` now writes through to the model, which it never did. Reverse challenge (§11.3.1) fires on out-of-band assumptions. Cost catalog is a first tranche (16 items), not D-2's ~500 |
+| **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` not started; `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
-| **M7 — Multi-business** | 🟡 Partial | Consolidation and household roll-up work; `DELEGATE`/`RECLAIM` implemented; clone not started |
+| **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
 
 ## M1 exit criteria
@@ -124,8 +124,16 @@ draft. Phase 3 still reviews every registered assumption with its provenance and
 confidence; Phase 4 is still a real gate — a business that cannot fund its own month zero is
 refused rather than opened with negative cash.
 
-With no `ANTHROPIC_API_KEY` set, setup says so and falls back to the template picker. The
-picker is what you get when there is no model to talk to, not a co-equal alternative.
+The model behind that conversation is **Kimi K3** — `export MOONSHOT_API_KEY=...` and nothing
+else. Anthropic remains a supported provider and is used when only `ANTHROPIC_API_KEY` is set;
+`BIZSIM_LLM_PROVIDER` forces one either way. The reasoning is cost: see
+[05-provider-migration.md](./05-provider-migration.md), which also records the two things this
+switch has *not* yet been through — a real session on the meter, and a live call proving
+Moonshot accepts the request the transport builds. Every LLM path here is still verified
+against stubs.
+
+With neither key set, setup says so and falls back to the template picker. The picker is what
+you get when there is no model to talk to, not a co-equal alternative.
 
 What the conversation replaces is the *input method*, not the phases. A drafted concept
 becomes a **synthetic seed template** and goes through `buildModelFromTemplate` like any
@@ -160,11 +168,23 @@ which the reference model omitted — the same reason its year three sat above b
 
 - **Six more seed templates**, to reach the twelve §4.7 asks for: quick-service food, retail shop, coffee
   shop, marketing agency, trades contractor, gym/fitness studio.
+- **The rest of the cost catalog.** D-2 scopes ~500 items across twelve templates; sixteen are in, chosen to
+  give the adjudication contract real ranges and real tiers to argue from. The mechanism is done and the
+  content accretes — but until an item is in the catalog, rule 1 clamps against the draft's own estimated
+  range, which is a weaker claim than the rule is meant to make.
+- **Retrieval (§16 Q1).** `PriceRetrieval` is defined and unimplemented. With web access the argument stops
+  being the model's priors against the player's and becomes a question about current listings.
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.
 - **The UI.** The three-pane shell in [01-architecture.md §7](./01-architecture.md) is unstarted.
-- **`START_BUSINESS` and `SELL_BUSINESS`** reject with an `ACTION_REJECTED` event rather than half-working.
+- **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which
+  cannot run inside a pure tick. CLONE covers the case §9.5 says should take two minutes; a genuinely
+  different second business is a new run today.
+- **A clone re-prompting for each parameter that differs.** §9.5 lists location, rent, traffic, wage rate,
+  buildout and unit count; this build takes one size multiplier covering all of them.
+- **`TurnNarration` (§11.5).** The quarterly screen is still engine output with no prose over it. A model
+  now answers questions mid-game (§11.4), but it does not narrate the result of a quarter.
 
 ## Simplifications taken, and where they are recorded
 
@@ -177,6 +197,7 @@ Each is commented at the point it applies:
 | Crisis remedies raise a 10% headroom rather than the exact shortfall | `tick.ts` |
 | The in-state event log is a rolling 200-event window; persistence owns history | `tick.ts` |
 | Runtime state is plain TS, not zod — only the trust boundaries are parsed | `state.ts` |
+| The funding-gap projection runs 8 quarters, not the full 40 | `plausibility.ts` |
 
 ## Spec gaps
 

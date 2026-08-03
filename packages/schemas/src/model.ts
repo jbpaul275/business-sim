@@ -217,8 +217,29 @@ export const zRevenueStream = z.object({
    * See docs/plan/03-spec-gaps.md G-5.
    */
   dsoDaysOverride: zNonNegative.optional(),
+  /**
+   * What one unit of this stream's volume is called.
+   *
+   * A ready-mix plant sells loads, a restaurant serves covers, a clinic sees
+   * visits. Every screen had one word for all of them — "covers/day", inherited
+   * from the first template anyone wrote — and a concrete producer's
+   * post-mortem told him he needed "12 covers/day" to break even. The engine
+   * computes nothing from this; it is what makes the arithmetic recognisable as
+   * being about the player's own business.
+   */
+  volumeNoun: z.string().default('transactions'),
 });
 export type RevenueStreamSpec = z.infer<typeof zRevenueStream>;
+
+/** The archetype's default when nothing better is known (§3.8's binding unit). */
+export const DEFAULT_VOLUME_NOUN: Record<z.infer<typeof zArchetype>, string> = {
+  TRAFFIC: 'transactions',
+  UTILIZATION: 'billable hours',
+  UNITS_CAC: 'orders',
+  SUBSCRIPTION: 'subscribers',
+  OCCUPANCY: 'units occupied',
+  PROJECT_BACKLOG: 'contracts',
+};
 
 export interface RevenueStream extends RevenueStreamSpec {
   state: StreamState;

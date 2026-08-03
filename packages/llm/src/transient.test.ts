@@ -56,6 +56,8 @@ describe('the model being busy', () => {
           }
           return { turn: { message: 'Ohio works.', cta: 'How many lines?', readyToDraft: false } };
         },
+        advise: () => Promise.reject(new Error('no advice in this double')),
+        adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
         draft: async () => {
           throw new Error('not reached');
         },
@@ -85,6 +87,8 @@ describe('a draft that fails on a busy model', () => {
         turn: async () => ({
           turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
         }),
+        advise: () => Promise.reject(new Error('no advice in this double')),
+        adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
         draft: async () => {
           drafts += 1;
           if (drafts === 1) throw new Error('{"type":"error","error":{"type":"overloaded_error"}}');
@@ -116,6 +120,8 @@ describe('a draft that fails on a busy model', () => {
         turn: async () => {
           throw new Error('{"type":"error","error":{"type":"overloaded_error"}}');
         },
+        advise: () => Promise.reject(new Error('no advice in this double')),
+        adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
         draft: async () => DRAFT,
         usage: { calls: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
       },
@@ -151,6 +157,7 @@ const DRAFT: ConceptDraft = {
     seasonality: [1, 1, 1, 1],
     marketingSpendPerQuarter: 400_000,
     expectedAnnualRevenue: 40_000_000,
+    volumeNoun: 'subscribers',
   },
   costLines: [
     {

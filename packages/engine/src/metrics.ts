@@ -99,7 +99,10 @@ function breakEvenVolume(
       const days = primary.params.operatingDaysPerQuarter;
       return {
         breakEvenVolume: {
-          unit: 'covers/day',
+          // Not "covers". A ready-mix plant's post-mortem told its owner he
+          // needed "12 covers/day" of concrete, because the first template
+          // anyone wrote was a restaurant and its word became everyone's.
+          unit: `${primary.volumeNoun}/day`,
           value: days > 0 ? (metrics.realizedVolume * revenueRatio) / days : 0,
         },
       };
@@ -121,9 +124,16 @@ function breakEvenVolume(
     case 'PROJECT_BACKLOG':
       return { breakEvenVolume: { unit: 'win rate', value: primary.params.winRate * revenueRatio } };
     case 'SUBSCRIPTION':
-      return { breakEvenVolume: { unit: 'subscribers', value: metrics.realizedVolume * revenueRatio } };
+      return {
+        breakEvenVolume: { unit: primary.volumeNoun, value: metrics.realizedVolume * revenueRatio },
+      };
     case 'UNITS_CAC':
-      return { breakEvenVolume: { unit: 'orders/quarter', value: metrics.realizedVolume * revenueRatio } };
+      return {
+        breakEvenVolume: {
+          unit: `${primary.volumeNoun}/quarter`,
+          value: metrics.realizedVolume * revenueRatio,
+        },
+      };
   }
 }
 
