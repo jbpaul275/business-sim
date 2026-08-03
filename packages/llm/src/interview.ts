@@ -77,7 +77,18 @@ export class ConceptInterview {
 
   /** Feed the player's latest message and get the model's next move. */
   async send(playerMessage: string): Promise<InterviewState> {
-    this.transcript.push({ role: 'user', content: playerMessage });
+    // Same invariant on the way in. An empty player line would be rejected by
+    // the API just as readily, and blaming the model for it would be wrong.
+    const said = playerMessage.trim();
+    if (!said) {
+      return {
+        status: 'ASKING',
+        message: '',
+        cta: 'Say something about the business and I will pick it up from there.',
+        transcript: this.transcript,
+      };
+    }
+    this.transcript.push({ role: 'user', content: said });
 
     if (this.turnsTaken >= this.maxTurns) {
       return {
@@ -93,7 +104,16 @@ export class ConceptInterview {
     const { turn, reasoning } = await this.transport.turn(this.system, this.transcript);
     this.lastReasoning = reasoning;
     this.turnsTaken += 1;
-    this.transcript.push({ role: 'assistant', content: `${turn.message}\n\n${turn.cta}` });
+    // Never let a whitespace-only turn into the transcript. The API rejects a
+    // content block with no non-whitespace text, so an empty reply does not
+    // fail where it happens — it fails on the *next* call, with an error about
+    // message formatting and no trace of the empty turn that caused it. The
+    // transport retries these, but the invariant belongs here too: this is the
+    // thing that owns the transcript.
+    const spoken = [turn.message, turn.cta].map((t) => t.trim()).filter(Boolean).join('\n\n');
+    if (spoken) {
+      this.transcript.push({ role: 'assistant', content: spoken });
+    }
 
     if (wordCount(turn.message) > VERBOSE_TURN_WORDS) {
       this.verboseTurns += 1;

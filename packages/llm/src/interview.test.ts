@@ -180,6 +180,37 @@ describe('ConceptInterview', () => {
     expect(drafted.cta).toBe('Press enter.');
   });
 
+  it('never lets a whitespace-only turn into the transcript', async () => {
+    // A hotel interview died here. The model returned an empty message and cta;
+    // the transcript took "" + "\n\n" + "" as the assistant turn, and the NEXT
+    // call was rejected — "text content blocks must contain non-whitespace
+    // text" — so the failure surfaced one turn away from its cause.
+    const transport = new ScriptedTransport([
+      { message: '   ', cta: '  ', readyToDraft: false },
+      asks('Still here.', 'How many rooms?'),
+    ]);
+    const interview = new ConceptInterview({ transport });
+
+    await interview.send('A hotel under $25k a key.');
+    await interview.send('Des Moines, maybe.');
+
+    for (const entry of interview.transcript) {
+      expect(entry.content.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not blame the model for an empty player line', async () => {
+    const transport = new ScriptedTransport([asks('Where is it?')]);
+    const interview = new ConceptInterview({ transport });
+
+    const state = await interview.send('   ');
+    expect(state.status).toBe('ASKING');
+    expect(state.cta).toContain('Say something about the business');
+    // No call was made and nothing empty was recorded.
+    expect(transport.seen).toHaveLength(0);
+    expect(interview.transcript).toHaveLength(0);
+  });
+
   it('keeps the reasoning it already paid for', async () => {
     // Thinking is billed whether or not the summary comes back, and the default
     // discards it. Keeping it means "why did you say that?" costs nothing — the

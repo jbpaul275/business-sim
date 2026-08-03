@@ -2,7 +2,7 @@ import {
   AnthropicConceptTransport,
   ConceptInterview,
   ConceptRefusedError,
-  GarbledResponseError,
+  UnusableResponseError,
   draftIssues,
   draftToTemplate,
   type ConceptDraft,
@@ -88,6 +88,17 @@ export async function runConceptInterview(
   });
 
   let reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+  /**
+   * Consecutive blank replies before giving up.
+   *
+   * `ask` cannot distinguish "pressed enter" from "stdin is closed" — both
+   * arrive as an empty string. Looping on either spins forever: piped input
+   * runs out, every subsequent read returns empty, and the process allocates
+   * transcript state until it is killed. Two blanks is generous for a human
+   * and immediate enough for a closed pipe.
+   */
+  let blanks = 0;
+  const MAX_BLANKS = 2;
 
   /**
    * `why` shows the reasoning behind the last turn.
@@ -111,6 +122,18 @@ export async function runConceptInterview(
   };
 
   for (;;) {
+    if (!reply.trim()) {
+      blanks += 1;
+      if (blanks > MAX_BLANKS) {
+        console.log(`\n  ${DIM}No input — abandoning setup. Nothing was committed.${RESET}`);
+        return undefined;
+      }
+      console.log(`  ${DIM}Say something about the business, or Ctrl-C to abandon setup.${RESET}`);
+      reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+      continue;
+    }
+    blanks = 0;
+
     if (/^(why|explain)\b/i.test(reply)) {
       showReasoning();
       reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
@@ -126,7 +149,7 @@ export async function runConceptInterview(
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);
         return undefined;
       }
-      if (error instanceof GarbledResponseError) {
+      if (error instanceof UnusableResponseError) {
         console.log(`\n  ${RED}${wrap(error.message, 74, '')}${RESET}`);
         console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
         return undefined;
@@ -144,9 +167,9 @@ export async function runConceptInterview(
       return undefined;
     }
 
-    console.log(`\n${wrap(state.message)}`);
+    if (state.message.trim()) console.log(`\n${wrap(state.message)}`);
     console.log(`\n${BOLD}${wrap(state.cta, 74)}${RESET}`);
-    if (interview.lastReasoning) {
+    if (state.message.trim() && interview.lastReasoning) {
       console.log(`  ${DIM}(\`why\` to see how it got there)${RESET}`);
     }
     console.log('');

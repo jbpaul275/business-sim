@@ -1,6 +1,23 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { looksGarbled } from './garbled.js';
+
+/**
+ * A turn that cannot be shown or replayed.
+ *
+ * Two ways this happens, both seen live. The model returns text that is
+ * corrupted — doubled, or two answers interleaved. Or it returns nothing at
+ * all: valid JSON, schema-clean, empty strings. The second is the more
+ * dangerous, because an empty assistant turn cannot go back into the
+ * transcript — the API rejects a whitespace-only content block — so one empty
+ * response ends the conversation two turns later with an error about message
+ * formatting.
+ */
+const isUnusable = (turn: { message: string; cta: string }): boolean =>
+  turn.message.trim().length === 0 ||
+  turn.cta.trim().length === 0 ||
+  looksGarbled(turn.message) ||
+  looksGarbled(turn.cta);
 import {
   zConceptDraft,
   zInterviewTurn,
@@ -107,8 +124,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
   private readonly model: string;
   private readonly maxTokens: number;
   private readonly effort: NonNullable<AnthropicTransportOptions['effort']>;
-  /** How often a response came back corrupted. Surfaced, not swallowed. */
-  garbledRetries = 0;
+  /** How often a response came back empty or corrupted. Surfaced, not swallowed. */
+  unusableRetries = 0;
 
   constructor(options: AnthropicTransportOptions = {}) {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
@@ -180,16 +197,16 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // sentence about generated JSON.
     let turn = zInterviewTurn.parse(JSON.parse(attempt.text));
 
-    // A response can be schema-valid and still arrive corrupted — seen live as
-    // every token doubled, and as two different answers interleaved character
-    // by character. Nothing here can fix that; declining to show it and asking
-    // again is cheap, and the alternative is prose the player cannot read.
-    if (looksGarbled(turn.message) || looksGarbled(turn.cta)) {
-      this.garbledRetries += 1;
+    // A response can be schema-valid and still be unusable — corrupted, or
+    // simply empty. Nothing here can fix either; declining it and asking again
+    // is cheap. The retry usually works: in the live case the model had its
+    // question ready in the thinking summary and just failed to emit it.
+    if (isUnusable(turn)) {
+      this.unusableRetries += 1;
       attempt = await this.complete(system, messages, TURN_SCHEMA);
       turn = zInterviewTurn.parse(JSON.parse(attempt.text));
-      if (looksGarbled(turn.message) || looksGarbled(turn.cta)) {
-        throw new GarbledResponseError(turn.message);
+      if (isUnusable(turn)) {
+        throw new UnusableResponseError(turn.message.trim().length === 0 ? 'empty' : 'garbled');
       }
     }
 
@@ -248,18 +265,20 @@ export class ConceptRefusedError extends Error {
 }
 
 /**
- * The model returned text that is corrupted rather than merely wrong — doubled
- * or interleaved — twice in a row. Named so the CLI can say what happened
- * instead of showing the mess or blaming the player's description.
+ * The model returned nothing usable twice running. Named so the CLI can say
+ * what happened rather than showing the mess, or blaming the description.
  */
-export class GarbledResponseError extends Error {
-  constructor(readonly sample: string) {
+export class UnusableResponseError extends Error {
+  constructor(readonly kind: 'empty' | 'garbled') {
     super(
-      'The model returned garbled text twice in a row (tokens doubled or two ' +
-        'answers interleaved). This is a generation fault, not a problem with ' +
-        'what you described.',
+      kind === 'empty'
+        ? 'The model returned an empty reply twice in a row. This is a generation ' +
+          'fault, not a problem with what you described.'
+        : 'The model returned garbled text twice in a row (tokens doubled, or two ' +
+          'answers interleaved). This is a generation fault, not a problem with ' +
+          'what you described.',
     );
-    this.name = 'GarbledResponseError';
+    this.name = 'UnusableResponseError';
   }
 }
 
