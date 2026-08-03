@@ -9,7 +9,10 @@ import { conceptPathAvailable } from './concept.js';
 import { benchmarkLines } from './portfolio.js';
 import { runSetup } from './setup.js';
 import { openInput } from './input.js';
+import { readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { journalDir, listSessions, type Journal } from './journal.js';
+import { consentNotice, consentTier, uploadSession, uploadTarget } from './upload.js';
 import { summariseFaults } from './faults.js';
 
 /**
@@ -192,6 +195,104 @@ function reportSessions(): void {
   console.log(`\n${DIM}Raw events: ${journalDir()}/*.jsonl${RESET}`);
 }
 
+/**
+ * Send what has been recorded, and say exactly what went.
+ *
+ * Separate from the game loop on purpose. An upload that happens silently at
+ * the end of a session is one nobody can inspect before it leaves; running it
+ * as its own command means the first thing anyone does is see the consent
+ * notice and the count, with the option to not run it again.
+ *
+ * Ids are derived from the file path rather than random, so re-running this is
+ * idempotent all the way down: the same session uploads to the same primary
+ * key, and the insert conflicts away rather than duplicating.
+ */
+async function uploadRecorded(): Promise<void> {
+  const DIM = '\x1b[2m';
+  const RESET = '\x1b[0m';
+  const tier = consentTier();
+  const notice = consentNotice(tier);
+
+  if (tier === 'none') {
+    console.log(
+      `Nothing is sent anywhere. Set BIZSIM_TELEMETRY=on for the numbers, and\n` +
+        `additionally BIZSIM_TELEMETRY_TRANSCRIPTS=on for the text — see --help.`,
+    );
+    return;
+  }
+  if (!uploadTarget()) {
+    console.log('No SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY set, so there is nowhere to send.');
+    return;
+  }
+  console.log(`\n${notice}\n`);
+
+  let files: string[];
+  try {
+    files = readdirSync(journalDir())
+      .filter((f) => f.endsWith('.jsonl'))
+      .sort()
+      .map((f) => join(journalDir(), f));
+  } catch {
+    console.log(`No recorded sessions in ${journalDir()}.`);
+    return;
+  }
+
+  let sent = 0;
+  let calls = 0;
+  let transcripts = 0;
+  const failures: string[] = [];
+  for (const file of files) {
+    // A stable id per file: re-running this uploads the same rows to the same
+    // keys rather than a second copy of a session already sent.
+    const id = sessionId(file);
+    try {
+      const result = await uploadSession(file, id);
+      if (result.uploaded) {
+        sent += 1;
+        calls += result.calls;
+        transcripts += result.transcripts;
+      }
+    } catch (error) {
+      failures.push(`${basename(file)}: ${(error as Error).message}`);
+    }
+  }
+
+  console.log(
+    `${sent} session(s) sent · ${calls} model call(s)` +
+      (tier === 'transcripts' ? ` · ${transcripts} transcript row(s)` : ''),
+  );
+  // Named, not swallowed. A silent partial upload is a corpus with holes in it
+  // and no record of where they are.
+  for (const f of failures.slice(0, 5)) console.log(`${DIM}  failed — ${f}${RESET}`);
+  if (failures.length > 5) console.log(`${DIM}  …and ${failures.length - 5} more${RESET}`);
+}
+
+/**
+ * A stable, non-identifying id for a session file.
+ *
+ * FNV-1a over the filename, which already carries an ISO timestamp and a slug,
+ * rendered as a UUID. Deliberately not a per-install identifier: a stable id
+ * across sessions is a tracking decision, and comparing two models does not
+ * need one.
+ */
+function sessionId(file: string): string {
+  const name = basename(file);
+  let h = 0x811c9dc5;
+  const bytes: number[] = [];
+  for (let i = 0; i < 16; i++) {
+    for (let j = 0; j < name.length; j++) {
+      h ^= name.charCodeAt(j) + i;
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    bytes.push(h & 0xff);
+  }
+  const hex = bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return (
+    `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-` +
+    `8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+  );
+}
+
 interface Args {
   scenario: string;
   periods: number;
@@ -200,6 +301,8 @@ interface Args {
   interactive: boolean;
   /** Report on recorded sessions rather than running one. */
   sessions: boolean;
+  /** Send recorded sessions to the configured endpoint, if consent allows. */
+  upload: boolean;
   /** Full setup — §9.1 Phases 0-4 — then play what you designed. */
   newGame: boolean;
   help: boolean;
@@ -220,11 +323,23 @@ Options
   --periods <n>          quarters to run (default: 40)
   --print <mode>         summary | statements | bands | events (default: summary)
   --sessions             what past runs did: outcome, turns, faults, cost
+  --upload               send recorded sessions to the configured endpoint
   --help, -h             this
 
 Sessions are recorded to .bizsim/sessions as JSONL, one file per run, flushed
 per event so a crash keeps everything up to it. BIZSIM_NO_JOURNAL=1 turns it
 off; BIZSIM_JOURNAL_DIR moves it.
+
+Nothing leaves this machine unless you say so. Two separate opt-ins, because
+they are two different things to agree to:
+
+  BIZSIM_TELEMETRY=on              the numbers — tokens, timings, cost, which
+                                   model, whether you committed. No free text.
+  BIZSIM_TELEMETRY_TRANSCRIPTS=on  additionally the words: what you typed, the
+                                   drafted concept, the model's reasoning.
+
+The second is never implied by the first. Both need SUPABASE_URL and
+SUPABASE_PUBLISHABLE_KEY set; without them nothing is sent anywhere.
 `;
 
 function parseArgs(argv: string[]): Args {
@@ -234,6 +349,7 @@ function parseArgs(argv: string[]): Args {
     print: 'summary',
     interactive: false,
     sessions: false,
+    upload: false,
     newGame: false,
     help: false,
   };
@@ -253,6 +369,8 @@ function parseArgs(argv: string[]): Args {
       args.interactive = true;
     } else if (arg === '--sessions') {
       args.sessions = true;
+    } else if (arg === '--upload') {
+      args.upload = true;
     } else if (arg === '--new') {
       args.newGame = true;
     } else if (arg === '--help' || arg === '-h') {
@@ -435,6 +553,11 @@ async function main(): Promise<void> {
 
   if (args.sessions) {
     reportSessions();
+    return;
+  }
+
+  if (args.upload) {
+    await uploadRecorded();
     return;
   }
 
