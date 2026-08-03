@@ -21,10 +21,35 @@ interface Args {
   interactive: boolean;
   /** Full setup — §9.1 Phases 0-4 — then play what you designed. */
   newGame: boolean;
+  help: boolean;
 }
 
+const USAGE = `sim — business simulator
+
+  pnpm sim --new                                  design a business, then run it
+  pnpm sim --play --scenario <name>               skip setup, play a seeded scenario
+  pnpm sim --scenario <name> --print bands        batch run, for calibration
+
+Options
+  --new                  §9.1 Phases 0-4: capital, concept, scale, financing,
+                         assumption review, commit gate — then play it
+  --play, --interactive  quarterly turn loop against a seeded scenario
+  --scenario <name>      ${Object.keys(SCENARIOS).join(', ')}
+                         (default: restaurant)
+  --periods <n>          quarters to run (default: 40)
+  --print <mode>         summary | statements | bands | events (default: summary)
+  --help, -h             this
+`;
+
 function parseArgs(argv: string[]): Args {
-  const args: Args = { scenario: 'restaurant', periods: 40, print: 'summary', interactive: false, newGame: false };
+  const args: Args = {
+    scenario: 'restaurant',
+    periods: 40,
+    print: 'summary',
+    interactive: false,
+    newGame: false,
+    help: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = argv[i + 1];
@@ -41,6 +66,8 @@ function parseArgs(argv: string[]): Args {
       args.interactive = true;
     } else if (arg === '--new') {
       args.newGame = true;
+    } else if (arg === '--help' || arg === '-h') {
+      args.help = true;
     }
   }
   return args;
@@ -181,6 +208,21 @@ function printBands(results: TickResult[]): void {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.help) {
+    console.log(USAGE);
+    return;
+  }
+
+  if (!(args.scenario in SCENARIOS)) {
+    // Silently falling back to the default scenario makes a typo look like a
+    // calibration result, which is the one thing this harness must not do.
+    console.error(
+      `Unknown scenario '${args.scenario}'. Available: ${Object.keys(SCENARIOS).join(', ')}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   if (args.newGame) {
     const input = await openInput();
