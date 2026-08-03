@@ -4,6 +4,8 @@ import { tick, type TickResult } from '@bizsim/engine';
 import type { WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
 import { play } from './play.js';
+import { AnthropicConceptTransport, type AdviceTransport } from '@bizsim/llm';
+import { conceptPathAvailable } from './concept.js';
 import { benchmarkLines } from './portfolio.js';
 import { runSetup } from './setup.js';
 import { openInput } from './input.js';
@@ -303,7 +305,11 @@ async function main(): Promise<void> {
     try {
       const setup = await runSetup(input);
       if (setup?.committed) {
-        await play(setup.world, { input, ...(setup.journal ? { journal: setup.journal } : {}) });
+        await play(setup.world, {
+          input,
+          ...(setup.journal ? { journal: setup.journal } : {}),
+          ...(turnAdvisor() ? { advisor: turnAdvisor()! } : {}),
+        });
       }
       if (setup?.journal?.path) {
         console.log(`\n\x1b[2mSession recorded at ${setup.journal.path}\x1b[0m`);
@@ -320,7 +326,7 @@ async function main(): Promise<void> {
   }
 
   if (args.interactive) {
-    await play(args.scenario);
+    await play(args.scenario, { ...(turnAdvisor() ? { advisor: turnAdvisor()! } : {}) });
     return;
   }
 
@@ -403,6 +409,30 @@ async function main(): Promise<void> {
     console.log(line);
   }
   if (failures > 0) process.exit(1);
+}
+
+/**
+ * The mid-game model, when there is one.
+ *
+ * Built once and cached: a new transport per question would make a fresh
+ * client, lose the retry state, and split the usage meter into fragments that
+ * add up to nothing. Absent when there is no key, which is a supported way to
+ * play — the deterministic advisor is the whole game without it.
+ *
+ * `BIZSIM_NO_TURN_AI=1` turns it off with a key present, which is how the
+ * before-and-after of any change to it gets compared.
+ */
+let advisorInstance: AdviceTransport | undefined;
+let advisorResolved = false;
+function turnAdvisor(): AdviceTransport | undefined {
+  if (!advisorResolved) {
+    advisorResolved = true;
+    advisorInstance =
+      conceptPathAvailable() && !process.env['BIZSIM_NO_TURN_AI']
+        ? new AnthropicConceptTransport()
+        : undefined;
+  }
+  return advisorInstance;
 }
 
 void main();

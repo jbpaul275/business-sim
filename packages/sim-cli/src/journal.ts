@@ -76,6 +76,17 @@ export type JournalEvent =
       events: string[];
     }
   | { kind: 'asked'; question: string; answered: string[] }
+  /**
+   * What the mid-game model did, when it did not simply answer.
+   *
+   * `advice_corrected` is the interesting one at scale: it counts the replies
+   * that quoted money the ledger never produced and had to be re-asked. Nobody
+   * can tell a fabricated figure from a real one by reading it, which means
+   * nobody can tell how often it happens either — unless it is written down.
+   */
+  | { kind: 'advice_corrected'; question: string; figures: string[] }
+  | { kind: 'advice_refused'; question: string }
+  | { kind: 'advice_failed'; question: string }
   | { kind: 'end'; reason: string };
 
 export interface Journal {

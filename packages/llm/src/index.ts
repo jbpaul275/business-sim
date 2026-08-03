@@ -1,3 +1,4 @@
+export * from './advice.js';
 export * from './draft.js';
 export * from './prompt.js';
 export * from './client.js';

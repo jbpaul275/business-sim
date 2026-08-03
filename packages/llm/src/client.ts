@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { looksGarbled } from './garbled.js';
+import { zTurnAdvice, type TurnAdvice } from './advice.js';
 
 /**
  * A turn that cannot be shown or replayed.
@@ -87,6 +88,11 @@ export function addUsage(total: UsageTotal, next: TurnUsage | undefined): UsageT
   };
 }
 
+export interface AdviceResult {
+  advice: TurnAdvice;
+  usage?: TurnUsage;
+}
+
 export interface TurnResult {
   turn: InterviewTurn;
   /**
@@ -107,6 +113,11 @@ export interface TurnResult {
 export interface ConceptTransport {
   /** One conversational turn: a question, or a signal that it can now draft. */
   turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult>;
+  /**
+   * One mid-game answer. Cheaper and shorter than an interview turn: the
+   * player is waiting between decisions, not designing a business.
+   */
+  advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
   /**
@@ -136,6 +147,7 @@ const jsonSchemaFor = (schema: Parameters<typeof zodToJsonSchema>[0]): Record<st
 
 const TURN_SCHEMA = jsonSchemaFor(zInterviewTurn);
 const DRAFT_SCHEMA = jsonSchemaFor(zConceptDraft);
+const ADVICE_SCHEMA = jsonSchemaFor(zTurnAdvice);
 
 /**
  * The draft asked for as prose, for the fallback path. Constrained decoding is
@@ -197,6 +209,9 @@ export interface AnthropicTransportOptions {
    * thinking, not from length.
    */
   turnEffort?: Effort;
+  /** The mid-game advisor's dials: low and small, because it answers a sentence. */
+  adviceEffort?: Effort;
+  adviceMaxTokens?: number;
   /** Effort for synthesis, where the reasoning genuinely is hard. */
   draftEffort?: Effort;
 }
@@ -287,6 +302,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
   private readonly draftMaxTokens: number;
   private readonly turnEffort: Effort;
   private readonly draftEffort: Effort;
+  private readonly adviceEffort: Effort;
+  private readonly adviceMaxTokens: number;
   /** How often a response came back empty or corrupted. Surfaced, not swallowed. */
   unusableRetries = 0;
   /** Every call this transport has made, including retries and fallbacks. */
@@ -331,6 +348,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // Overridable without a rebuild, so the speed/quality trade can be tuned
     // by whoever is actually waiting on it.
     this.turnEffort = options.turnEffort ?? envEffort('BIZSIM_TURN_EFFORT', 'medium');
+    this.adviceEffort = options.adviceEffort ?? envEffort('BIZSIM_ADVICE_EFFORT', 'low');
+    this.adviceMaxTokens = options.adviceMaxTokens ?? budget('BIZSIM_ADVICE_MAX_TOKENS', 4_000);
     this.draftEffort = options.draftEffort ?? envEffort('BIZSIM_DRAFT_EFFORT', 'high');
   }
 
@@ -459,6 +478,27 @@ export class AnthropicConceptTransport implements ConceptTransport {
     low: 'low',
   };
 
+  /**
+   * A mid-game answer, on a shorter leash than an interview turn.
+   *
+   * Low effort and a small ceiling on purpose: this fires on every question a
+   * player types, the answer is two or three sentences, and the reasoning it
+   * needs is judgement about the world rather than the arithmetic the engine
+   * has already done. An interview turn's budget here would be paying opus
+   * prices to think about a sentence.
+   */
+  async advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult> {
+    const attempt = await this.complete(
+      system,
+      messages,
+      ADVICE_SCHEMA,
+      this.adviceEffort,
+      this.turnModel,
+      this.adviceMaxTokens,
+    );
+    return { advice: zTurnAdvice.parse(JSON.parse(attempt.text)), usage: attempt.usage };
+  }
+
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
@@ -561,6 +601,7 @@ export class UnusableResponseError extends Error {
  */
 export class ScriptedTransport implements ConceptTransport {
   private index = 0;
+  private adviceIndex = 0;
   readonly seen: { system: string; messages: InterviewMessage[] }[] = [];
   /** Nothing was spent; a scripted run makes no calls. */
   readonly usage: UsageTotal = EMPTY_USAGE;
@@ -569,6 +610,7 @@ export class ScriptedTransport implements ConceptTransport {
     private readonly turns: readonly InterviewTurn[],
     private readonly drafts: readonly ConceptDraft[] = [],
     private readonly reasoning: readonly string[] = [],
+    private readonly advice: readonly TurnAdvice[] = [],
   ) {}
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
@@ -589,5 +631,17 @@ export class ScriptedTransport implements ConceptTransport {
     const next = this.drafts[0];
     if (!next) throw new Error('ScriptedTransport has no draft to return.');
     return next;
+  }
+
+  async advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult> {
+    this.seen.push({ system, messages: [...messages] });
+    const next = this.advice[this.adviceIndex];
+    if (!next) {
+      throw new Error(
+        `ScriptedTransport exhausted after ${this.advice.length} advice replies.`,
+      );
+    }
+    this.adviceIndex += 1;
+    return { advice: next };
   }
 }

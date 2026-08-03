@@ -397,6 +397,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       turn: async () => ({
         turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
       }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
       draft: async () => {
         asked += 1;
         return (asked === 1 ? broken : draft) as ConceptDraft;

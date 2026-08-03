@@ -12,6 +12,8 @@ import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
 import { postmortem, runPoint, type RunPoint } from './postmortem.js';
+import { askAdvisor, type AdviceTransport } from '@bizsim/llm';
+import { buildBriefing } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
@@ -1158,7 +1160,63 @@ function printPostmortem(history: readonly RunPoint[], business: Business, colou
   }
 }
 
-function parseCommand(
+/**
+ * The model's half of the answer, and what happens when it cannot be trusted.
+ *
+ * Everything here fails soft. No key, a network error, a budget exhausted, or a
+ * reply that quoted money the ledger never produced — every one of them leaves
+ * the deterministic answer on screen and says nothing further. A game that
+ * stops working because a model was unreachable would be a worse game than one
+ * with no model in it.
+ */
+async function speakToPlayer(
+  advisor: AdviceTransport,
+  world: WorldState,
+  business: Business,
+  result: TickResult,
+  findings: readonly string[],
+  question: string,
+  journal?: Journal,
+): Promise<{ reply: string } | undefined> {
+  try {
+    const briefing = buildBriefing(world, business, result, findings, [...VERBS].filter(Boolean));
+    const outcome = await askAdvisor(advisor, briefing, question, [], () => Date.now());
+    if (!outcome) {
+      // Twice in a row it could not answer without inventing a figure. The
+      // arithmetic is already on screen and is still correct; adding "the model
+      // could not be trusted" to the player's turn helps nobody.
+      journal?.write({ kind: 'advice_refused', question });
+      return undefined;
+    }
+
+    console.log('');
+    const paragraphs = outcome.reply.split('\n').filter((p) => p.trim() !== '');
+    paragraphs.forEach((paragraph, i) => {
+      // The wait, on the last line only. The player asked for this as QA data
+      // and it is the honest label on a pause they just sat through.
+      const timing = i === paragraphs.length - 1 ? ` ${DIM}· ${(outcome.ms / 1000).toFixed(1)}s${RESET}` : '';
+      console.log(`  ${paragraph}${timing}`);
+    });
+
+    // Suggestions are checked against the parser before they are shown. A
+    // command that does not exist, coming from the thing that just recommended
+    // it, is worse than no suggestion at all.
+    const usable = outcome.suggestedCommands.filter((c) => VERBS.has(c.trim().split(/\s+/)[0] ?? ''));
+    if (usable.length > 0) {
+      console.log(`  ${DIM}${usable.map((c) => `\`${c}\``).join(' · ')}${RESET}`);
+    }
+    if (outcome.retriedOn && outcome.retriedOn.length > 0) {
+      journal?.write({ kind: 'advice_corrected', question, figures: outcome.retriedOn });
+    }
+    return { reply: outcome.reply };
+  } catch {
+    // Transport failures are not the player's problem and not their fault.
+    journal?.write({ kind: 'advice_failed', question });
+    return undefined;
+  }
+}
+
+async function parseCommand(
   line: string,
   business: Business,
   result: TickResult,
@@ -1166,7 +1224,8 @@ function parseCommand(
   history: readonly RunPoint[],
   journal?: Journal,
   memory?: AdvisorMemory,
-): ParseResult {
+  advisor?: AdviceTransport,
+): Promise<ParseResult> {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
   const streamId = business.streams[0]?.id ?? 's1';
   const none: ParseResult = { actions: [] };
@@ -1711,9 +1770,27 @@ function parseCommand(
 
     default:
       if (looksLikeAQuestion(line, verb)) {
+        /**
+         * The arithmetic first, always.
+         *
+         * The deterministic findings are exact, free and instant, and they go
+         * on screen whether or not a model is reachable. The model is then
+         * given them and told not to repeat them — so the worst case is the
+         * game exactly as it was before, and the best case is the half the
+         * arithmetic could never reach.
+         */
         const answered = advise(business, result, world, history, line, memory);
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
-        journal?.write({ kind: 'asked', question: line, answered });
+
+        const spoken = advisor
+          ? await speakToPlayer(advisor, world, business, result, answered, line, journal)
+          : undefined;
+
+        journal?.write({
+          kind: 'asked',
+          question: line,
+          answered: spoken ? [...answered, spoken.reply] : answered,
+        });
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
         return none;
       }
@@ -1727,7 +1804,13 @@ function parseCommand(
 
 export async function play(
   source: string | WorldState,
-  options: { input?: LineSource; milestonePeriod?: number; journal?: Journal } = {},
+  options: {
+    input?: LineSource;
+    milestonePeriod?: number;
+    journal?: Journal;
+    /** Absent means no model in the loop, which is a supported way to play. */
+    advisor?: AdviceTransport;
+  } = {},
 ): Promise<void> {
   const milestonePeriod = options.milestonePeriod ?? 39;
 
@@ -1802,6 +1885,12 @@ export async function play(
     });
   };
 
+  console.log(
+    options.advisor
+      ? `${DIM}Ask anything in plain English — the numbers come from the engine, the judgement from a model.${RESET}`
+      : `${DIM}Ask anything in plain English. No ANTHROPIC_API_KEY, so answers are the engine's arithmetic alone.${RESET}`,
+  );
+
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
   record(last);
@@ -1867,7 +1956,16 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business, last, state, history, options.journal, memory);
+        const parsed = await parseCommand(
+          line,
+          business,
+          last,
+          state,
+          history,
+          options.journal,
+          memory,
+          options.advisor,
+        );
         if (parsed.message) console.log(parsed.message);
         if (parsed.quit) {
           quit = true;
