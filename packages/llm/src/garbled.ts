@@ -98,8 +98,31 @@ function hasRepeatedRun(text: string, run = 40): boolean {
   return false;
 }
 
+/**
+ * A reply that begins mid-word.
+ *
+ * The fourth live corruption merged word boundaries rather than duplicating or
+ * interleaving: "sethe practical ceiling" for "Set the practical ceiling", and
+ * "a muchantially bigger crew" for "a much more substantially bigger crew".
+ * Every earlier signal scores zero on it — nothing repeats, nothing is
+ * doubled, no markup leaks — because the damage is a dropped boundary rather
+ * than added text.
+ *
+ * This catches only the case where the merge lands on the first word, which is
+ * a fraction of the shape. It earns its place because the evidence is
+ * unambiguous rather than statistical: this prompt asks for prose, and prose
+ * does not open in lower case. Nothing in the corpus of good answers does.
+ *
+ * Mid-sentence merges are not caught, and are not catchable without a
+ * dictionary. A heuristic guessing at whether "muchantially" is a word would
+ * throw away real answers containing real unusual words, which costs more than
+ * the corruption does.
+ */
+const OPENS_MID_WORD = /^\s*\p{Ll}/u;
+
 export function looksGarbled(text: string): boolean {
   if (STRAY_MARKUP.test(text)) return true;
+  if (OPENS_MID_WORD.test(text)) return true;
   if (adjacentDuplicateRate(text) > 0.12) return true;
   if (hasRepeatedRun(text)) return true;
   const repeats = text.split(/\s+/).filter((w) => hasInternalRepeat(w)).length;

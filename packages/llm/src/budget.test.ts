@@ -67,17 +67,20 @@ describe('running out of output budget', () => {
     const transport = new AnthropicConceptTransport({ apiKey: 'test', draftEffort: 'high' });
     (transport as unknown as { client: unknown }).client = {
       messages: {
-        create: async (req: { max_tokens: number; output_config: { effort: string } }) => {
+        // Streamed, because a budget large enough to finish a draft is a
+        // budget large enough that the SDK refuses to run it unstreamed.
+        stream: (req: { max_tokens: number; output_config: { effort: string } }) => {
           calls.push({ max_tokens: req.max_tokens, effort: req.output_config.effort });
           const usage = { input_tokens: 7_000, output_tokens: req.max_tokens };
-          if (calls.length === 1) {
-            return { stop_reason: 'max_tokens', content: [], usage };
-          }
-          return {
-            stop_reason: 'end_turn',
-            content: [{ type: 'text', text: JSON.stringify(MINIMAL_DRAFT) }],
-            usage: { ...usage, output_tokens: 3_000 },
-          };
+          const message =
+            calls.length === 1
+              ? { stop_reason: 'max_tokens', content: [], usage }
+              : {
+                  stop_reason: 'end_turn',
+                  content: [{ type: 'text', text: JSON.stringify(MINIMAL_DRAFT) }],
+                  usage: { ...usage, output_tokens: 3_000 },
+                };
+          return { finalMessage: async () => message };
         },
       },
     };
@@ -93,6 +96,34 @@ describe('running out of output budget', () => {
     // billed for, and a meter that skips the expensive failures is useless.
     expect(transport.usage.calls).toBe(2);
     expect(transport.usage.outputTokens).toBeGreaterThan(30_000);
+  });
+
+  it('streams every call, so a large budget is not itself a failure', async () => {
+    // "Streaming is required for operations that may take longer than 10
+    // minutes" ended a session on the turn after the player said yes — caused
+    // by raising the draft budget to stop drafts truncating. The two
+    // constraints are in direct tension and streaming is what resolves them.
+    const transport = new AnthropicConceptTransport({ apiKey: 'test' });
+    let streamed = false;
+    (transport as unknown as { client: unknown }).client = {
+      messages: {
+        stream: () => {
+          streamed = true;
+          return {
+            finalMessage: async () => ({
+              stop_reason: 'end_turn',
+              content: [{ type: 'text', text: JSON.stringify(MINIMAL_DRAFT) }],
+              usage: { input_tokens: 100, output_tokens: 100 },
+            }),
+          };
+        },
+        create: () => {
+          throw new Error('must not use the unstreamed path');
+        },
+      },
+    };
+    await transport.draft('system', [{ role: 'user', content: 'A traveling circus.' }]);
+    expect(streamed).toBe(true);
   });
 
   it('steps effort down by one rather than to the floor', () => {

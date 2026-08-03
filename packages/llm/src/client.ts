@@ -292,7 +292,27 @@ export class AnthropicConceptTransport implements ConceptTransport {
     model: string,
     maxTokens: number,
   ): Promise<{ text: string; reasoning?: string; usage: TurnUsage }> {
-    const response = await this.client.messages.create({
+    /**
+     * Streamed, always.
+     *
+     * The SDK refuses a non-streaming request whose `max_tokens` implies a
+     * generation that could exceed ten minutes:
+     *
+     *   Streaming is required for operations that may take longer than 10 minutes.
+     *
+     * Raising the draft budget to 32,000 to stop drafts truncating mid-object
+     * walked straight into that ceiling and ended a session on the turn after
+     * the player said "yes". The two constraints are in direct tension — a
+     * budget large enough to finish the draft is a budget large enough to
+     * require streaming — and streaming resolves it rather than trading one
+     * failure for the other.
+     *
+     * `finalMessage()` assembles the same Message the non-streaming call
+     * returned, with the same `stop_reason` and `usage`, so nothing below here
+     * changes. Nothing is rendered incrementally: the turn is JSON and half a
+     * JSON object on screen is worse than a spinner.
+     */
+    const response = await this.client.messages.stream({
       model,
       max_tokens: maxTokens,
       system,
@@ -305,7 +325,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
         effort,
       },
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    });
+    }).finalMessage();
 
     // Recorded before anything can throw. A call that ran out of budget still
     // generated — and still billed — every token it produced, and a meter that

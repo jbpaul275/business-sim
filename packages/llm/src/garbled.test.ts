@@ -66,6 +66,18 @@ describe('looksGarbled', () => {
     expect(looksGarbled(restated)).toBe(true);
   });
 
+  it('catches a reply that begins mid-word', () => {
+    // The fourth live shape, on a traveling circus: word boundaries dropped
+    // rather than text duplicated, so every earlier signal scores zero.
+    expect(
+      looksGarbled(
+        'sethe practical ceiling: two-pole big top, roughly 1,500-2,000 seats, up in ' +
+          "three to four hours with a dozen crew. Go three or four poles for 3,000+ and " +
+          "you're into a full-day raising and a muchantially bigger crew.",
+      ),
+    ).toBe(true);
+  });
+
   it('leaves ordinary answers alone', () => {
     const real = [
       'Most seats per dollar at that budget is an MD-82/83 — roughly 155-170 seats, and tired airframes have traded near scrap value.',
@@ -105,6 +117,13 @@ describe('looksGarbled', () => {
     expect(looksGarbled('The GmbH filed with the BaFin; JPMorgan and BlackRock both passed.')).toBe(
       false,
     );
+  });
+
+  it('does not flag a lower-case opening that is genuinely how it starts', () => {
+    // The cost of this signal. A model that legitimately opens with a
+    // lower-cased brand loses a good answer and a round trip, so it is worth
+    // knowing exactly which shapes pay it.
+    expect(looksGarbled('iPhone-era strip centres still live on the drive-thru.')).toBe(true);
   });
 
   it('does not flag short answers, where the signals are meaningless', () => {
