@@ -19,6 +19,7 @@ where anyone with access can read it.
 Kimi is the same shape:
 
 ```sh
+pnpm install                       # the Kimi transport added `openai` as a dependency
 export MOONSHOT_API_KEY=sk-...     # your shell, not the repo, not a config file
 pnpm sim --new
 ```
@@ -243,6 +244,7 @@ today's rates as if the model were known.
 Kimi against Anthropic, on the same concept. Both keys exported; one variable moves.
 
 ```sh
+pnpm install                       # `openai` arrived with the Kimi transport
 export MOONSHOT_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 
