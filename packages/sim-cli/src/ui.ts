@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+
 /**
  * The frame around the game.
  *
@@ -111,6 +113,41 @@ export function box(lines: readonly string[]): string {
 }
 
 /**
+ * Which build this is.
+ *
+ * Every session gets pasted back for diagnosis, and three times now the answer
+ * has been "that fix is pushed but not pulled" — deduced from which corruption
+ * got through, which is a poor way to establish something a line of text can
+ * state. A transcript should say what it came from.
+ *
+ * Best effort by design: no git, no repo, a tarball — it prints nothing rather
+ * than failing. A missing stamp is a smaller problem than a crash on startup.
+ */
+function buildStamp(): string | undefined {
+  try {
+    // Statically imported, not `require`d: under tsx the module graph is ESM,
+    // `require` is not defined, and the whole function silently took its
+    // best-effort catch on every real run while passing under vitest — which
+    // does define it. A guard that only works in the test is not a guard.
+    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1_000,
+    }).trim();
+    if (!sha) return undefined;
+    const dirty =
+      execFileSync('git', ['status', '--porcelain'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 1_000,
+      }).trim().length > 0;
+    return `build ${sha}${dirty ? '+local changes' : ''}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The masthead. Printed once, before anything asks for anything.
  *
  * The second line is the product's actual claim rather than a tagline, because
@@ -119,9 +156,11 @@ export function box(lines: readonly string[]): string {
  * idea.
  */
 export function masthead(): string {
+  const stamp = buildStamp();
   return box([
     bold('BUSINESS SIMULATOR'),
     dim('Every number carries its source. Nothing is real until you commit.'),
+    ...(stamp ? [dim(stamp)] : []),
   ]);
 }
 

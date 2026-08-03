@@ -78,6 +78,32 @@ describe('looksGarbled', () => {
     ).toBe(true);
   });
 
+  it('catches several attempts spliced with no sentence breaks', () => {
+    // Verbatim, from a food-truck session. Two or three drafts of the same
+    // answer run together: a lower-case opening, a sentence boundary with the
+    // space eaten, and a trailing run of full stops.
+    expect(
+      looksGarbled(
+        'the demand right — who buys? Farmers markets, breweries, office parks, ' +
+          'festivals? Position matters most for capture.what the daily traffic looks ' +
+          'like. Location strategy drives everything: a brewery lot on a Friday night ' +
+          'is a different business from a weekday office park....',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not flag punctuation that legitimately has no space after it', () => {
+    // The cost of the sentence-boundary signal, checked rather than assumed.
+    for (const text of [
+      'Rent is $3.50 a square foot, e.g. a 900 sq.ft unit at $3,150.',
+      'Their site is at example.com and the filing is on sec.gov.',
+      'Roughly 1.5 turns a day vs. 2.2 for a drive-thru.',
+      'The FDD Item 6 lists it; see franchise.org for the current one.',
+    ]) {
+      expect(looksGarbled(text), text).toBe(false);
+    }
+  });
+
   it('leaves ordinary answers alone', () => {
     const real = [
       'Most seats per dollar at that budget is an MD-82/83 — roughly 155-170 seats, and tired airframes have traded near scrap value.',

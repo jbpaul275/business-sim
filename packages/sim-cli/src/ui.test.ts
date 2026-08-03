@@ -79,6 +79,18 @@ describe('the frame holds its shape', () => {
     for (const line of marked) expect(line).toContain('▏');
   });
 
+  it('stamps the build, so a pasted transcript says what it came from', () => {
+    // Three sessions in a row were diagnosed by inferring the build from which
+    // corruption got through. A line of text can just say it.
+    expect(masthead()).toMatch(/build [0-9a-f]{7,}/);
+  });
+
+  it('keeps its shape with the stamp on it', () => {
+    // The stamp is another line in the box and has to pad like any other.
+    const lines = masthead().split('\n');
+    expect(new Set(lines.map(visibleWidth)).size).toBe(1);
+  });
+
   it('drops colour when the output is not a terminal', () => {
     // A pasted transcript is how this gets debugged, and a transcript full of
     // raw escape codes is not one.

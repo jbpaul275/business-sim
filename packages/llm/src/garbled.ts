@@ -120,9 +120,21 @@ function hasRepeatedRun(text: string, run = 40): boolean {
  */
 const OPENS_MID_WORD = /^\s*\p{Ll}/u;
 
+/**
+ * A sentence ending and the next beginning with no space between them.
+ *
+ * "Position matters most for capture.what the daily traffic looks like" — the
+ * same boundary-dropping corruption, landing mid-reply where the opening
+ * signal cannot see it. Both runs are required to be four letters or more,
+ * which excludes the shapes that legitimately look like this: `e.g.`, `sq.ft`,
+ * decimals, and hostnames, whose suffixes are almost all shorter than that.
+ */
+const RUNS_SENTENCES_TOGETHER = /\p{Ll}{4,}\.\p{Ll}{4,}/u;
+
 export function looksGarbled(text: string): boolean {
   if (STRAY_MARKUP.test(text)) return true;
   if (OPENS_MID_WORD.test(text)) return true;
+  if (RUNS_SENTENCES_TOGETHER.test(text)) return true;
   if (adjacentDuplicateRate(text) > 0.12) return true;
   if (hasRepeatedRun(text)) return true;
   const repeats = text.split(/\s+/).filter((w) => hasInternalRepeat(w)).length;
