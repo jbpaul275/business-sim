@@ -62,13 +62,78 @@ const MONEY_SCALE_KEYS = new Set<string>(['executionCapacityPerQuarter', 'price'
  * whatever the domain calls it; `ScaleInput.price` is the single slot it lands
  * in.
  */
-const PRICE_KEY: Record<DraftStream['archetype'], string> = {
+export const PRICE_KEY: Record<DraftStream['archetype'], string> = {
   TRAFFIC: 'avgTicket',
   UTILIZATION: 'blendedHourlyRate',
   UNITS_CAC: 'avgOrderValue',
   SUBSCRIPTION: 'arpuPerQuarter',
   OCCUPANCY: 'ratePerUnitPerQuarter',
   PROJECT_BACKLOG: 'avgContractValue',
+};
+
+/**
+ * Exactly what each archetype reads, by the name the engine reads it under.
+ *
+ * This has to be published to the model, because the names are not guessable
+ * from the domain. An airline's seat fare is `ratePerUnitPerQuarter` — nobody
+ * would arrive at that unprompted, and the first live OCCUPANCY concept did
+ * not: it emitted a sensibly-named fare parameter, the mapper found no
+ * `ratePerUnitPerQuarter`, and the price silently became zero.
+ *
+ * Anything the model omits falls back to the engine's own default, which is
+ * fine. The price is the exception — a stream with no price has no revenue —
+ * and `draftIssues` treats a missing one as a hard error rather than a default.
+ */
+export const ARCHETYPE_PARAMS: Record<DraftStream['archetype'], readonly string[]> = {
+  TRAFFIC: [
+    'avgTicket',
+    'addressableTrafficPerQuarter',
+    'captureRate',
+    'operatingDaysPerQuarter',
+    'seats',
+    'turnsPerDay',
+    'floorAreaSqFt',
+    'peakConcentration',
+    'skuCount',
+    'baselineSkuCount',
+  ],
+  UTILIZATION: [
+    'blendedHourlyRate',
+    'demandHoursPerQuarter',
+    'billableHoursPerHeadPerQuarter',
+    'targetUtilization',
+    'realizationRate',
+  ],
+  UNITS_CAC: [
+    'avgOrderValue',
+    'baseCac',
+    'cacInflationCoefficient',
+    'ordersPerNewCustomerFirstQuarter',
+    'repeatPurchaseRatePerQuarter',
+    'quarterlyCustomerAttrition',
+  ],
+  SUBSCRIPTION: [
+    'arpuPerQuarter',
+    'baseCac',
+    'cacInflationCoefficient',
+    'quarterlyChurnRate',
+    'setupFee',
+    'netRevenueRetention',
+    'prepayMonths',
+  ],
+  OCCUPANCY: [
+    'ratePerUnitPerQuarter',
+    'units',
+    'stabilizedOccupancy',
+    'concessionsPct',
+    'ancillaryRevenuePctOfBase',
+  ],
+  PROJECT_BACKLOG: [
+    'avgContractValue',
+    'bidsSubmittedPerQuarter',
+    'winRate',
+    'executionCapacityPerQuarter',
+  ],
 };
 
 const toCents = (dollars: number): bigint => BigInt(Math.round(dollars * 100));
@@ -129,9 +194,10 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
         : param.value;
     }
   }
-  // The template's own default has to agree with the scale knob, or the
-  // engine seeds one number and the register records another.
-  streamParamDefaults[priceKey] = streamParamDefaults[priceKey] ?? 0;
+  // Deliberately no fallback. Defaulting a missing price to zero is what
+  // turned an OCCUPANCY airline into MISSING_REFERENCE_PRICE four screens
+  // later, with nothing pointing at the cause. `draftIssues` rejects the draft
+  // before it gets here, while the model can still be asked to fix it.
 
   const o = draft.overheads;
   const input: SeedTemplateInput = {

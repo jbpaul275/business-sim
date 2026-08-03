@@ -315,6 +315,49 @@ describe('draftIssues', () => {
     expect(draftIssues(broken)[0]).toContain('capacityPerBlock');
   });
 
+  it('names the missing price parameter instead of defaulting it to zero', () => {
+    // The airline run. OCCUPANCY prices under `ratePerUnitPerQuarter` — not a
+    // name anyone reaches for describing a seat fare — so the model emitted
+    // something sensible, the mapper found no match, and the price silently
+    // became zero. It surfaced four screens later as MISSING_REFERENCE_PRICE
+    // with nothing pointing at the cause.
+    const airline = draft({
+      streams: [
+        {
+          ...draft().streams[0]!,
+          archetype: 'OCCUPANCY',
+          params: [
+            {
+              name: 'farePerSeat',
+              value: 84,
+              low: 60,
+              high: 110,
+              sourceNote: 'Launch fare, one-way.',
+              provenance: 'PLAYER_SOURCED',
+            },
+          ],
+        },
+      ],
+    });
+    const issues = draftIssues(airline);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('ratePerUnitPerQuarter');
+    // And it says what the archetype does read, so the retry can succeed.
+    expect(issues[0]).toContain('units');
+  });
+
+  it('rejects a price of zero rather than modelling a business with no revenue', () => {
+    const free = draft({
+      streams: [
+        {
+          ...draft().streams[0]!,
+          params: [{ ...draft().streams[0]!.params[0]!, value: 0 }],
+        },
+      ],
+    });
+    expect(draftIssues(free)[0]).toContain('no price has no revenue');
+  });
+
   it('catches a model with nothing driving revenue', () => {
     expect(draftIssues(draft({ streams: [] }))[0]).toContain('No revenue stream');
   });
@@ -338,6 +381,16 @@ describe('the prompt carries D-5', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('what makes it true');
     // The joint-claim case: high price OK, high capture OK, both is a question.
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('only absurd in combination');
+  });
+
+  it('publishes the exact parameter names, because they are not guessable', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('ratePerUnitPerQuarter');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('avgTicket');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Parameter names are fixed');
+  });
+
+  it('asks for one sentence of archetype rationale, not a defence', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('not the alternatives you considered and rejected');
   });
 
   it('forbids borrowing a template that does not fit', () => {

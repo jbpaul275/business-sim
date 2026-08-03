@@ -212,7 +212,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       expect(printed).toContain('Telescope rental by the hour');
       // The player was told why it has no bands, rather than being shown
       // borrowed ones.
-      expect(printed).toContain('No seed template fits this concept');
+      expect(printed).toContain('No template fits');
       // And the assumption register was put in front of them (Phase 3).
       expect(printed).toContain('ASSUMPTIONS');
 

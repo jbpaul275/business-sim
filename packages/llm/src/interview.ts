@@ -1,5 +1,6 @@
 import { zConceptDraft, type ConceptDraft, type DraftParam } from './draft.js';
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
+import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import type { ConceptTransport, InterviewMessage } from './client.js';
 
 /**
@@ -185,6 +186,22 @@ export function draftIssues(draft: ConceptDraft): string[] {
       paramsToRecord(stream.params);
     } catch (error) {
       issues.push(`${where}: ${(error as Error).message}`);
+    }
+
+    // The one parameter with no sensible default. Every archetype prices under
+    // a different name and none of them are guessable from the domain — an
+    // airline's seat fare is `ratePerUnitPerQuarter` — so say which is missing
+    // rather than letting it default to zero and fail validation later.
+    const priceKey = PRICE_KEY[stream.archetype];
+    const price = stream.params.find((p) => p.name === priceKey);
+    if (!price) {
+      issues.push(
+        `${where}: ${stream.archetype} needs a '${priceKey}' parameter — that is the price ` +
+          `the engine reads. Known parameters for this archetype: ` +
+          `${ARCHETYPE_PARAMS[stream.archetype].join(', ')}.`,
+      );
+    } else if (price.value <= 0) {
+      issues.push(`${where}: '${priceKey}' is ${price.value}; a stream with no price has no revenue.`);
     }
     for (const p of stream.params) {
       if (p.low > p.high) issues.push(`${where}: parameter '${p.name}' has low above high.`);

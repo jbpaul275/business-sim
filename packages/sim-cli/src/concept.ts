@@ -173,32 +173,45 @@ export async function runConceptInterview(
   }
 }
 
-/** What the model estimated rather than learned, shown before the register. */
+/** How many open notes to show before the rest go behind `notes`. */
+const NOTES_SHOWN = 3;
+
+/**
+ * The concept, as briefly as it can honestly be put.
+ *
+ * Everything the model produced is kept; what is *shown* is the top of it. A
+ * first live draft printed eight open notes at three lines each plus a
+ * paragraph justifying the archetype against the two it rejected — accurate,
+ * and a wall of text between the player and their numbers. The rejected
+ * alternatives are the model's working, not the player's finding.
+ */
 export function renderConceptNotes(draft: ConceptDraft): void {
   console.log(`\n${BOLD}${draft.businessName}${RESET}`);
   console.log(wrap(draft.summary));
 
   const stream = draft.streams[0];
   if (stream) {
-    console.log(`\n  ${DIM}Revenue archetype${RESET}  ${stream.archetype}`);
-    console.log(wrap(stream.archetypeRationale, 74, '    '));
+    // First sentence only: "why this archetype", not "and here is why not the
+    // other five", which is reasoning the player did not ask for.
+    const reason = stream.archetypeRationale.split(/(?<=\.)\s+/)[0] ?? '';
+    console.log(`\n  ${DIM}Revenue archetype${RESET}  ${stream.archetype}  ${DIM}${reason}${RESET}`);
   }
 
   if (draft.seedTemplateId === null) {
     console.log(
-      `\n  ${DIM}${wrap(
-        'No seed template fits this concept, so its cost lines were estimated ' +
-          'directly and it carries no benchmark bands. That is deliberate: an ' +
-          'inherited band would flag every line against numbers that do not ' +
-          'describe this business.',
-        74,
-        '',
-      )}${RESET}`,
+      `  ${DIM}No template fits, so cost lines were estimated directly and carry no` +
+        ` benchmark bands.${RESET}`,
     );
   }
 
   if (draft.openNotes.length > 0) {
-    console.log(`\n  ${YELLOW}Least certain, and the first things worth arguing with:${RESET}`);
-    for (const note of draft.openNotes) console.log(wrap(`- ${note}`, 74, '    '));
+    console.log(`\n  ${YELLOW}Worth arguing with first:${RESET}`);
+    for (const note of draft.openNotes.slice(0, NOTES_SHOWN)) {
+      console.log(wrap(`- ${note}`, 74, '    '));
+    }
+    const hidden = draft.openNotes.length - NOTES_SHOWN;
+    if (hidden > 0) {
+      console.log(`  ${DIM}...and ${hidden} more — every one is in the register below.${RESET}`);
+    }
   }
 }

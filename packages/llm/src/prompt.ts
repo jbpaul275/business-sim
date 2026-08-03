@@ -1,3 +1,5 @@
+import { ARCHETYPE_PARAMS } from './toTemplate.js';
+
 /**
  * The concept interview's system prompt.
  *
@@ -16,7 +18,7 @@
  * *concepts* — and that every number it invents is labelled as invented.
  */
 
-export const CONCEPT_INTERVIEW_SYSTEM = `You are the concept interviewer for a financial simulator. A person is describing a business they are thinking about building. Your job is to turn what they tell you into a complete, structured financial model — by asking them questions, one at a time, until you have enough.
+const CONCEPT_INTERVIEW_TEMPLATE = `You are the concept interviewer for a financial simulator. A person is describing a business they are thinking about building. Your job is to turn what they tell you into a complete, structured financial model — by asking them questions, one at a time, until you have enough.
 
 You never compute anything that appears on a financial statement. A deterministic engine does that. You establish the *inputs*: what the business is, what drives its revenue, what it costs to run, what it takes to open. Getting those right is the entire job.
 
@@ -125,6 +127,8 @@ Set \`readyToDraft\` to true on the turn where you have enough; the draft itself
 
 "Enough" means the revenue driver, the scale parameters, the major cost lines and the opening capex. Not certainty about every figure — anything shaky goes in \`openNotes\`, and they will review the whole register before committing.
 
+\`openNotes\` is **ordered by what would change their decision**, most important first, and each one is a sentence or two. If the headline finding is that the plan needs four times the capital they have, that is note one and everything else is detail. Five notes is plenty; only the first few are shown.
+
 ## Choosing the revenue archetype
 
 Pick the one whose *constraint* matches what actually limits this business:
@@ -136,7 +140,13 @@ Pick the one whose *constraint* matches what actually limits this business:
 - **OCCUPANCY** — rentable units at some occupancy. Storage, property, parking.
 - **PROJECT_BACKLOG** — bids won, delivered against execution capacity. Contractors, studios.
 
-Say why in \`archetypeRationale\`, and name the alternative you rejected. If a business genuinely has two engines — a café that also does catering — that is two streams.
+Say why in \`archetypeRationale\`, in **one sentence**. It is shown to the player, not to a reviewer, so name the archetype and the reason — not the alternatives you considered and rejected. If a business genuinely has two engines — a café that also does catering — that is two streams.
+
+### Parameter names are fixed
+
+The engine reads each archetype's parameters under specific names, listed below. Use them exactly. They are not guessable from the domain — an airline's seat fare is \`ratePerUnitPerQuarter\`, because to the engine a scheduled seat is a rentable unit — so do not invent a name that fits the business better. Anything you omit falls back to the engine's own default, which is usually fine; the **price** is the exception, because a stream with no price has no revenue.
+
+{{ARCHETYPE_PARAMS}}
 
 ## Templates
 
@@ -144,8 +154,26 @@ If a seed template's cost structure genuinely fits the business, name it and the
 
 Null is a normal answer, not a failure. It is the right answer for anything the templates do not actually cover, and forcing a concept into an ill-fitting template is worse than having no template at all — it produces borrowed numbers wearing someone else's citation.`;
 
+/**
+ * The parameter table, rendered from `ARCHETYPE_PARAMS` rather than typed out.
+ * A prompt that lists names the engine no longer reads is worse than one that
+ * lists none, and two hand-maintained copies drift within a week.
+ */
+function archetypeParamSection(): string {
+  const rows = (Object.keys(ARCHETYPE_PARAMS) as (keyof typeof ARCHETYPE_PARAMS)[]).map((a) => {
+    const [price, ...rest] = ARCHETYPE_PARAMS[a];
+    return `- **${a}** — price is \`${price}\`. Also reads: ${rest.map((r) => `\`${r}\``).join(', ')}.`;
+  });
+  return rows.join('\n');
+}
+
 /** Available seed templates, injected so the model names real ids or none. */
 export function templateCatalogue(templates: readonly { id: string; label: string }[]): string {
   const rows = templates.map((t) => `- \`${t.id}\` — ${t.label}`).join('\n');
   return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.`;
 }
+
+export const CONCEPT_INTERVIEW_SYSTEM = CONCEPT_INTERVIEW_TEMPLATE.replace(
+  '{{ARCHETYPE_PARAMS}}',
+  archetypeParamSection(),
+);
