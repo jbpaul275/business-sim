@@ -154,6 +154,7 @@ const DRAFT: ConceptDraft = {
     seasonality: [1, 1, 1, 1],
     marketingSpendPerQuarter: 400_000,
     expectedAnnualRevenue: 40_000_000,
+    volumeNoun: 'subscribers',
   },
   costLines: [
     {

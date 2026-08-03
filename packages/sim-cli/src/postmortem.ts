@@ -83,7 +83,7 @@ export function runPoint(result: TickResult, business: Business): RunPoint | und
     fixedAndStep,
     breakEvenRevenue: m.breakEvenRevenue,
     breakEven: m.breakEvenVolume,
-    achieved: stream ? achievedVolume(stream) : undefined,
+    achieved: stream ? achievedVolume(stream, business.streams[0]?.volumeNoun ?? 'transactions') : undefined,
     debtService: business.trailingDebtService[business.trailingDebtService.length - 1] ?? 0n,
     crisisRemedies: result.events.filter((e: EngineEvent) => e.kind === 'CRISIS_REMEDY_APPLIED').length,
     lostDemand: stream?.lostDemand ?? 0,
@@ -114,7 +114,10 @@ function pricePoint(
  * without "you reached 76%" beside it — so the two have to be the same unit,
  * computed the same way, or the sentence is a lie with a number in it.
  */
-function achievedVolume(m: StreamMetrics): { unit: string; value: number } | undefined {
+function achievedVolume(
+  m: StreamMetrics,
+  noun: string,
+): { unit: string; value: number } | undefined {
   switch (m.archetype) {
     case 'OCCUPANCY':
       return m.occupancy !== undefined ? { unit: 'occupancy', value: m.occupancy } : undefined;
@@ -123,11 +126,11 @@ function achievedVolume(m: StreamMetrics): { unit: string; value: number } | und
         ? { unit: 'utilization', value: m.realizedUtilization }
         : undefined;
     case 'TRAFFIC':
-      return { unit: 'covers/day', value: m.realizedVolume / 91 };
+      return { unit: `${noun}/day`, value: m.realizedVolume / 91 };
     case 'SUBSCRIPTION':
-      return { unit: 'subscribers', value: m.realizedVolume };
+      return { unit: noun, value: m.realizedVolume };
     case 'UNITS_CAC':
-      return { unit: 'orders/quarter', value: m.realizedVolume };
+      return { unit: `${noun}/quarter`, value: m.realizedVolume };
     default:
       return undefined;
   }

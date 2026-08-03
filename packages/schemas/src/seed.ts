@@ -67,6 +67,14 @@ export const zSeedTemplate = z.object({
   payrollLoadPct: z.number(),
   workersCompPct: z.number(),
   offersBenefits: z.boolean(),
+  /**
+   * What one unit of volume is called in this trade — covers, loads, rounds.
+   *
+   * A seed template is a business, and a business has a word for what it sells.
+   * Without one every screen borrowed the first template's: a ready-mix plant's
+   * post-mortem told its owner he needed "12 covers/day" of concrete.
+   */
+  volumeNoun: z.string().default('transactions'),
   seasonality: z.tuple([zPositive, zPositive, zPositive, zPositive]),
   /**
    * The monthly refinement of `seasonality`, required by the year-one export

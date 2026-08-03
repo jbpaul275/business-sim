@@ -145,5 +145,6 @@
   "badDebtPctOfRevenue": 0.004,
   "repairsPctOfRevenue": 0.004,
   "cardProcessingRate": 0.029,
-  "cardMixPct": 0.98
+  "cardMixPct": 0.98,
+  "volumeNoun": "orders"
 }

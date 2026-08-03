@@ -7,6 +7,7 @@ import {
   validateBusinessModel,
 } from '@bizsim/engine';
 import { draftToTemplate, type ConceptDraft } from '@bizsim/llm';
+import type { WorldState } from '@bizsim/schemas';
 
 /**
  * Does the draft build the business the draft says it is building?
@@ -324,4 +325,154 @@ export function staffingRealismIssues(draft: ConceptDraft): string[] {
       `exists to model — never comes up. Either the volume one block supports is too high, or this ` +
       `business really is that light and the sourceNote should say why.`,
   ];
+}
+
+/**
+ * The number the commit screen already says is the one to fund against.
+ *
+ * §5.4 is explicit that month zero is not the peak: the peak comes when you are
+ * open and still losing money. The gate said exactly that to a ready-mix
+ * operator — and then did not tell him what the number was. He opened with
+ * $35k of cash and $989k raised against a peak cash need that reached $1.6M by
+ * period 2, and was insolvent inside a year with $1.3M of personally
+ * guaranteed debt following him home.
+ *
+ * Every term of it was computable at the gate. `peakCashNeed` is a running
+ * extremum of the cumulative *unfinanced* gap, so running the committed world
+ * forward with the crisis ladder switched off gives the honest figure: what
+ * this plan consumes before financing, not what it consumes after the remedies
+ * have papered over it.
+ */
+const PEAK_PROJECTION_QUARTERS = 8;
+
+export interface FundingGap {
+  /** The most the plan is ever down, before any financing (§5.4). */
+  peak: Money;
+  /** When it gets there, in quarters after opening. */
+  atPeriod: number;
+  /** Equity plus debt actually committed. */
+  raised: Money;
+  /** Positive when the plan needs more than was raised. */
+  shortfall: Money;
+}
+
+export function projectFundingGap(world: WorldState, raised: Money): FundingGap | undefined {
+  const business = world.businesses[0];
+  if (!business) return undefined;
+
+  /**
+   * Funded past anything it could need, and rescued only by that funding.
+   *
+   * The first attempt switched the crisis ladder off entirely, which does not
+   * measure what the plan needs — it kills the business in period 0 and stops
+   * the meter. `peakCashNeed` is the cumulative *unfinanced* gap, so household
+   * injections do not touch it: an unlimited household keeps the business alive
+   * to be measured while contributing nothing to the number being measured.
+   *
+   * The alternative — letting the real ladder run — would answer "can this be
+   * kept alive on emergency debt at 19.5%", which is a different and much less
+   * useful question than "what does it need".
+   */
+  const current: WorldState = structuredClone(world) as WorldState;
+  current.config = { ...current.config, crisisPolicy: ['HOUSEHOLD_INJECTION'] };
+  current.household = { ...current.household, cash: fromDisplay(1_000_000_000) };
+
+
+  let peak = business.peakCashNeed;
+  let atPeriod = business.peakCashNeedPeriod;
+  let running = current;
+  for (let q = 0; q < PEAK_PROJECTION_QUARTERS; q++) {
+    const result = tick(running, [], { throwOnAssertionFailure: false });
+    running = result.state;
+    const after = running.businesses[0];
+    if (!after) break;
+    if (after.peakCashNeed > peak) {
+      peak = after.peakCashNeed;
+      atPeriod = after.peakCashNeedPeriod;
+    }
+    if (after.status === 'CLOSED') break;
+  }
+
+  return { peak, atPeriod, raised, shortfall: peak - raised };
+}
+
+/**
+ * A business that cannot break even with every unit sold.
+ *
+ * The ready-mix plant needed $871k a quarter to break even and could physically
+ * produce $488k — two trucks, 321 loads, $1,520 a load, and no decision
+ * available to anyone closes a gap like that. It ran four quarters, hit
+ * capacity in one of them, and died owing $1.3M.
+ *
+ * This is a different claim from the revenue check, which asks whether the
+ * drafted volume matches the drafted revenue. Both can agree and the business
+ * still be impossible: what makes it impossible is the cost structure against
+ * the ceiling, and the ceiling is physical.
+ */
+export function capacityCeilingIssues(draft: ConceptDraft): string[] {
+  const projected = projectAtCapacity(draft);
+  if (!projected) return [];
+  const { breakEven, ceiling, unit, capacityVolume } = projected;
+  if (ceiling <= 0n || breakEven <= ceiling) return [];
+
+  return [
+    `This business cannot break even at full capacity. It needs ` +
+      `${toDisplay(breakEven, { showCents: false })} a quarter to cover its costs and can physically ` +
+      `produce ${toDisplay(ceiling, { showCents: false })} — ${Math.round(capacityVolume).toLocaleString()} ` +
+      `${unit} at the price you set, with every one of them sold. No decision the player makes ` +
+      `later closes a gap like that: not price, not marketing, not staffing. Either the cost lines ` +
+      `are too heavy for this scale, the capacity is understated, or the price is too low.`,
+  ];
+}
+
+interface CapacityCheck {
+  breakEven: Money;
+  ceiling: Money;
+  capacityVolume: number;
+  unit: string;
+}
+
+function projectAtCapacity(draft: ConceptDraft): CapacityCheck | undefined {
+  try {
+    const mapped = draftToTemplate(draft);
+    const model = buildModelFromTemplate({
+      businessName: mapped.businessName,
+      template: mapped.template,
+      archetype: mapped.archetype,
+      scale: mapped.scale,
+      equityInjection: fromDisplay(1_000_000_000),
+    });
+    let world = createWorld({
+      id: 'ceiling',
+      playerId: 'ceiling',
+      config: createWorldConfig({
+        startMode: 'FREEPLAY',
+        customCapital: fromDisplay(1_000_000_000),
+      }),
+      models: [model],
+    });
+
+    let check: CapacityCheck | undefined;
+    for (let q = 0; q < PROJECTION_QUARTERS; q++) {
+      const result = tick(world, [], { throwOnAssertionFailure: false });
+      world = result.state;
+      const entry = result.statements.byBusiness[world.businesses[0]!.id];
+      const stream = entry?.derivedMetrics.streamMetrics[0];
+      if (!entry || !stream || stream.capacityVolume === undefined || stream.realizedVolume <= 0) {
+        continue;
+      }
+      // Revenue per unit at the realised volume, taken to the ceiling. The
+      // engine's own figures, so the comparison cannot drift from the run.
+      const perUnit = Number(entry.incomeStatement.revenue) / stream.realizedVolume;
+      check = {
+        breakEven: entry.derivedMetrics.breakEvenRevenue,
+        ceiling: BigInt(Math.round(stream.capacityVolume * perUnit)),
+        capacityVolume: stream.capacityVolume,
+        unit: draft.stream.volumeNoun,
+      };
+    }
+    return check;
+  } catch {
+    return undefined;
+  }
 }

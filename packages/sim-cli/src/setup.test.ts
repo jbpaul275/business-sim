@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_USAGE, ScriptedTransport, draftToTemplate, type ConceptDraft } from '@bizsim/llm';
-import { buildModelFromTemplate, validateBusinessModel } from '@bizsim/engine';
+import {
+  buildModelFromTemplate,
+  createWorld,
+  createWorldConfig,
+  validateBusinessModel,
+} from '@bizsim/engine';
 import { isThin, runSetup } from './setup.js';
-import { START_CAPITAL, FREEPLAY_CAPITAL_CAP } from '@bizsim/schemas';
+import { projectFundingGap } from './plausibility.js';
+import { getSeedTemplate } from '@bizsim/seeds';
+import { START_CAPITAL, FREEPLAY_CAPITAL_CAP, type WorldState } from '@bizsim/schemas';
 import { clampFreeplay } from '@bizsim/engine';
 import { fromDisplay } from '@bizsim/money';
 import type { LineSource } from './input.js';
@@ -52,6 +59,7 @@ const draft: ConceptDraft = {
       seasonality: [0.9, 1.0, 1.2, 0.9],
       marketingSpendPerQuarter: 4_000,
       expectedAnnualRevenue: 480_000,
+      volumeNoun: 'covers',
     },
   costLines: [
     {
@@ -254,6 +262,7 @@ describe('the concept path reaches the same gate as the picker', () => {
           seasonality: [1.0, 1.05, 0.9, 1.05],
           marketingSpendPerQuarter: 18_000,
           expectedAnnualRevenue: 2_600_000,
+          volumeNoun: 'covers',
         },
       costLines: [
         {
@@ -788,5 +797,56 @@ describe('the starting tiers', () => {
   it('still caps free play at a billion', () => {
     expect(clampFreeplay(fromDisplay(5_000_000_000))).toBe(FREEPLAY_CAPITAL_CAP);
     expect(clampFreeplay(fromDisplay(250_000_000))).toBe(fromDisplay(250_000_000));
+  });
+});
+
+/**
+ * The number the commit screen already says is the one to fund against.
+ *
+ * §5.4: month zero is not the peak — the peak comes when you are open and still
+ * losing money. The gate said exactly that to a ready-mix operator and then did
+ * not tell him what the number was. He opened with $989,000 raised against a
+ * plan that needed $1.6M by its third quarter, and was insolvent inside a year
+ * with $1.3M of personally guaranteed debt following him home.
+ */
+describe('what the plan actually needs', () => {
+  const thinWorld = (equity: number, debt: number): WorldState => {
+    const model = buildModelFromTemplate({
+      businessName: 'Underfunded',
+      template: getSeedTemplate('full_service_restaurant'),
+      scale: { seats: 120, turnsPerDay: 2, addressableTrafficPerQuarter: 40_000, captureRate: 0.02, price: fromDisplay(24) },
+      equityInjection: fromDisplay(equity),
+      ...(debt > 0
+        ? { debt: [{ kind: 'SBA_7A' as const, principal: fromDisplay(debt), termQuarters: 40 }] }
+        : {}),
+    });
+    return createWorld({
+      id: 'thin',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model],
+    });
+  };
+
+  it('projects the peak with the crisis ladder switched off', () => {
+    // A projection that lets emergency debt at 19.5% rescue each quarter
+    // answers "can this be kept alive", which is a different and much less
+    // useful question than "what does it need".
+    const world = thinWorld(400_000, 300_000);
+    const gap = projectFundingGap(world, fromDisplay(700_000));
+    expect(gap).toBeDefined();
+    // The peak is the cumulative unfinanced gap, so it exceeds month zero.
+    expect(gap!.peak).toBeGreaterThan(world.businesses[0]!.peakCashNeed);
+    expect(gap!.atPeriod).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reports a shortfall when the plan needs more than was raised', () => {
+    const gap = projectFundingGap(thinWorld(400_000, 300_000), fromDisplay(700_000));
+    expect(gap!.shortfall).toBe(gap!.peak - fromDisplay(700_000));
+  });
+
+  it('reports no shortfall when the money is genuinely there', () => {
+    const gap = projectFundingGap(thinWorld(400_000, 300_000), fromDisplay(50_000_000));
+    expect(gap!.shortfall).toBeLessThan(0n);
   });
 });

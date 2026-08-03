@@ -230,6 +230,20 @@ Open with whatever staffing the volume needs; that comes from \`capacityPerBlock
 
 The same applies to anything else that looks fixed. A cost that genuinely cannot move belongs in \`FIXED_PERIOD\`; a cost that moves with headcount or shifts belongs in \`STEP_FIXED\` with an honest floor. Putting variable labour in the fixed bucket makes a downturn unsurvivable in a way real businesses are not.
 
+### Check the ceiling before you write the cost lines
+
+A business has to be able to break even with every unit it can physically produce. Divide the costs you are writing by the volume the capacity supports, at the price you set, and look at the answer.
+
+A ready-mix plant was drafted with two trucks — 321 loads a quarter at $1,520 a load, so $488k of revenue at absolute maximum — against $667k a quarter of costs. It needed $871k to break even and could never reach it. The player financed it, ran it at capacity in its third quarter, and was insolvent inside a year owing $1.3M with a personal guarantee. Nothing they could have done would have saved it, because the concept as drafted had no solvent state.
+
+If the arithmetic does not clear, one of three things is wrong and you should say which: the cost lines are too heavy for this scale, the capacity is understated, or the price is too low. Do not quietly raise the capacity to make it work — say what you changed and why.
+
+### They have to speak the trade's own language
+
+\`volumeNoun\` is what one unit of volume is called by someone who works there: **loads** for ready-mix, **covers** for a restaurant, **rounds** for a golf course, **visits** for a clinic, **jobs** for a trades contractor, **nights** for a hotel. Plural, lower case, the word that would go on a whiteboard.
+
+It changes nothing the engine computes. It is the difference between a post-mortem that reads "you needed 12 loads a day" and one that told a concrete producer he needed "12 covers/day".
+
 ### And they have to be able to grow
 
 \`capacityPerBlock\` is how much volume **one block** supports — one crew, one shift, one van. Size it for a real shift, then check what it implies at maturity, because this is the number that decides whether the business ever has to hire.

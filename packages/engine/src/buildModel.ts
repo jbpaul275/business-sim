@@ -1,5 +1,6 @@
 import { fromDisplay, mulRate, type Money } from '@bizsim/money';
 import {
+  DEFAULT_VOLUME_NOUN,
   ARCHETYPE_DRIVER,
   DEFAULT_MAINTENANCE_PCT,
   type Archetype,
@@ -41,6 +42,8 @@ import { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
 export type { ScaleInput };
 
 export interface BuildModelOptions {
+  /** What one unit of volume is called: loads, covers, rounds, visits. */
+  volumeNoun?: string;
   businessName: string;
   template: SeedTemplate;
   archetype?: Archetype;
@@ -422,6 +425,9 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
     marketingSpendPerQuarter: marketing,
     seasonality: t.seasonality,
     launchPeriod: 0,
+    // The trade's own word for a unit of volume, when the caller knows it. A
+    // seeded template does not, so the archetype's binding unit stands in.
+    volumeNoun: options.volumeNoun ?? t.volumeNoun ?? DEFAULT_VOLUME_NOUN[archetype],
   };
 
   // ── Assumptions for every stream parameter (§10.2) ───────────────────────

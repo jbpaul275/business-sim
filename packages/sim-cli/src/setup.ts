@@ -29,7 +29,7 @@ import { listSeedTemplates } from '@bizsim/seeds';
 import type { ConceptTransport } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
 import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
-import { capitalIntensityNote } from './plausibility.js';
+import { capitalIntensityNote, projectFundingGap } from './plausibility.js';
 import { openJournal, type Journal } from './journal.js';
 import { masthead, note, rule } from './ui.js';
 
@@ -419,6 +419,46 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
         ),
       );
     }
+  }
+
+  /**
+   * And then say what that number is.
+   *
+   * The line above told a ready-mix operator that the peak is what to fund
+   * against, and did not tell him what the peak was. He opened with $989,000
+   * raised against a plan that needed $1.6M by its third quarter, and was
+   * insolvent inside a year with $1.3M of personally guaranteed debt following
+   * him home. Every term was computable at this screen.
+   *
+   * Projected with the crisis ladder switched off, because a projection that
+   * lets emergency debt at 19.5% rescue each quarter answers "can this be kept
+   * alive" — a different and much less useful question than "what does it
+   * need".
+   */
+  const raised =
+    model.financingPlan.equityInjection +
+    model.financingPlan.outsideCapital +
+    model.financingPlan.debtRequests.reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+  const gap = projectFundingGap(world, raised);
+  if (gap && gap.shortfall > 0n) {
+    console.log(
+      `\n  ${RED}Run forward, this plan is down ${toDisplay(gap.peak, { showCents: false })} at its ` +
+        `worst — period ${gap.atPeriod} — against the ${toDisplay(gap.raised, { showCents: false })} ` +
+        `you have raised. It is short by ${toDisplay(gap.shortfall, { showCents: false })}.${RESET}`,
+    );
+    console.log(
+      note(
+        'That gap gets funded by the crisis ladder if you open anyway: the revolver first, then' +
+          ' factored receivables, then emergency debt at prime plus twelve with your name on it.' +
+          ' More equity or a bigger loan now is the same money at a fifth of the price.',
+      ),
+    );
+  } else if (gap) {
+    console.log(
+      `\n  ${DIM}Run forward, this plan is down ${toDisplay(gap.peak, { showCents: false })} at its ` +
+        `worst — period ${gap.atPeriod} — inside the ${toDisplay(gap.raised, { showCents: false })} ` +
+        `you have raised.${RESET}`,
+    );
   }
 }
 

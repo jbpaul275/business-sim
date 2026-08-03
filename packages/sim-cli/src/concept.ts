@@ -17,6 +17,7 @@ import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
 import {
   buildabilityIssues,
+  capacityCeilingIssues,
   revenueRealityIssues,
   staffingRealismIssues,
 } from './plausibility.js';
@@ -374,7 +375,14 @@ export async function runConceptInterview(
     // claim about a shadow of the real fault, printed above it. One root cause
     // per round: the model fixes the price, and the revenue check gets a
     // meaningful number to check on the next pass.
-    const structural = [...draftIssues(state.draft), ...buildabilityIssues(state.draft)];
+    // A business that cannot break even with every unit sold is structural in
+    // the only sense that matters: no decision downstream closes the gap. It
+    // belongs with the faults that stop a draft, not with the warnings.
+    const structural = [
+      ...draftIssues(state.draft),
+      ...buildabilityIssues(state.draft),
+      ...capacityCeilingIssues(state.draft),
+    ];
     // Both plausibility checks share the repair round when nothing structural
     // is wrong: a business whose revenue is right and whose staffing never
     // grows has one fault, not none, and the model can fix both at once.
@@ -419,6 +427,7 @@ export async function runConceptInterview(
     for (const issue of [
       ...revenueRealityIssues(state.draft),
       ...staffingRealismIssues(state.draft),
+      ...capacityCeilingIssues(state.draft),
     ]) {
       console.log(`\n  ${YELLOW}⚠ ${wrap(issue, 70, '    ').trimStart()}${RESET}`);
     }

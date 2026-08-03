@@ -186,7 +186,9 @@ function renderTurn(result: TickResult, business: Business, world?: WorldState):
    * they agree, and the ceiling takes the space they were wasting.
    */
   for (const s of m.streamMetrics) {
-    const volume = `${Math.round(s.realizedVolume).toLocaleString()} ${VOLUME_UNIT[s.archetype] ?? 'units'}`;
+    const volume =
+      `${Math.round(s.realizedVolume).toLocaleString()} ` +
+      `${business.streams.find((x) => x.id === s.streamId)?.volumeNoun ?? VOLUME_UNIT[s.archetype] ?? 'units'}`;
     let detail: string;
     if (s.lostDemand > 0.5) {
       detail =

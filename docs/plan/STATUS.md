@@ -183,6 +183,7 @@ Each is commented at the point it applies:
 | Crisis remedies raise a 10% headroom rather than the exact shortfall | `tick.ts` |
 | The in-state event log is a rolling 200-event window; persistence owns history | `tick.ts` |
 | Runtime state is plain TS, not zod — only the trust boundaries are parsed | `state.ts` |
+| The funding-gap projection runs 8 quarters, not the full 40 | `plausibility.ts` |
 
 ## Spec gaps
 
