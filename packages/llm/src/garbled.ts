@@ -69,8 +69,39 @@ function adjacentDuplicateRate(text: string): number {
  *   ordinary prose      0.00 and 0 across every sample tried, including
  *                       "McDonald's ... iPhone-era ... PepsiCo's"
  */
+/**
+ * Markup that has no business in a terminal interview. A third live corruption
+ * spliced several complete attempts together and left the seams showing:
+ * `</summary>`, `<br><br>`, `</p>`. Nothing this prompt asks for is HTML, so a
+ * closing tag is unambiguous evidence rather than a heuristic.
+ */
+const STRAY_MARKUP = /<\/?(?:summary|br|p|div|span|thinking|answer)\b[^>]*>/i;
+
+/**
+ * A long run of text appearing twice.
+ *
+ * The same corruption restated its answer three times — "Fair enough — I'll
+ * build a plausible target and you correct it" and near-variants — which no
+ * per-word signal notices, because none of the words repeat *adjacently*.
+ * Forty characters is long enough that ordinary prose does not repeat it by
+ * accident, and short enough to catch a restated sentence.
+ */
+function hasRepeatedRun(text: string, run = 40): boolean {
+  const t = text.replace(/\s+/g, ' ');
+  if (t.length < run * 2) return false;
+  const seen = new Set<string>();
+  for (let i = 0; i + run <= t.length; i++) {
+    const slice = t.slice(i, i + run);
+    if (seen.has(slice)) return true;
+    seen.add(slice);
+  }
+  return false;
+}
+
 export function looksGarbled(text: string): boolean {
+  if (STRAY_MARKUP.test(text)) return true;
   if (adjacentDuplicateRate(text) > 0.12) return true;
+  if (hasRepeatedRun(text)) return true;
   const repeats = text.split(/\s+/).filter((w) => hasInternalRepeat(w)).length;
   return repeats >= 2;
 }

@@ -389,6 +389,32 @@ describe('draftIssues', () => {
     expect(draftIssues(free)[0]).toContain('no price has no revenue');
   });
 
+  it('catches a UTILIZATION business with no staffed capacity', () => {
+    // The recruiting-firm run. UTILIZATION bills hours against staffed blocks,
+    // and without a STEP_FIXED labour line there is no ceiling on what the
+    // model can sell. It surfaced at the commit gate as
+    // UTILIZATION_WITHOUT_STAFFING, after the whole draft had been built.
+    const firm = draft({
+      streams: [
+        {
+          ...draft().streams[0]!,
+          archetype: 'UTILIZATION',
+          params: [
+            {
+              name: 'blendedHourlyRate',
+              value: 180,
+              low: 150,
+              high: 220,
+              sourceNote: 'Fee as a share of placed salary, per hour worked.',
+              provenance: 'LLM_ESTIMATE',
+            },
+          ],
+        },
+      ],
+    });
+    expect(draftIssues(firm).some((i) => i.includes('staffed capacity'))).toBe(true);
+  });
+
   it('catches a model with nothing driving revenue', () => {
     expect(draftIssues(draft({ streams: [] }))[0]).toContain('No revenue stream');
   });

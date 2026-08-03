@@ -21,6 +21,18 @@ const INTERLEAVED =
   'Lagos–Ab Lagos–Abujauja–Port–Port Harcourt Harcourt triangle triangle,. and D ' +
   'MDRC-80 hass are have familiar looser to oversight the and engineers no there surface.';
 
+const RESTATED =
+  '.a $2M perm search shop doing roughly $2.5-3M with 8-10 recruiters — searches ' +
+  'opened, a fill rate, and an average fee per placement — plus SBA debt service on ' +
+  "the $1M note. Every number will be my estimate, not a comp I've read.<br><br>Want " +
+  'me to draft that so you can start argue with the figures?</p></summary>Fair — ' +
+  "you've never seen the inside of one, so I'll build a plausible acquisition target " +
+  "and you correct it. I'll model a $2M perm search firm at roughly $2.6M revenue, 9 " +
+  'recruiters, fees as a percentage of placed salary, with SBA debt service on the $1M ' +
+  'note.the the dials from there.</summary>Fair enough — I\'ll build a plausible ' +
+  'target and you tear into it.</summary>Fair enough — I\'ll build a plausible ' +
+  'target and you correct it.';
+
 describe('looksGarbled', () => {
   it('catches every token emitted twice', () => {
     expect(looksGarbled(DOUBLED)).toBe(true);
@@ -32,6 +44,28 @@ describe('looksGarbled', () => {
     expect(looksGarbled(INTERLEAVED)).toBe(true);
   });
 
+  it('catches several complete attempts spliced together', () => {
+    // The third corruption, and the one that got through: three restatements of
+    // the same answer with HTML seams left in. No word repeats adjacently and
+    // no word is malformed, so both earlier signals score zero.
+    expect(looksGarbled(RESTATED)).toBe(true);
+  });
+
+  it('catches stray markup on its own', () => {
+    // Nothing in a terminal interview about business models is HTML, so a
+    // closing tag is evidence rather than a heuristic.
+    expect(looksGarbled('Fine — a bistro it is.</summary>')).toBe(true);
+    expect(looksGarbled('Two questions.<br><br>How big is the room?')).toBe(true);
+  });
+
+  it('catches a restated sentence with no adjacent duplicates', () => {
+    const restated =
+      'I will build a plausible acquisition target and you correct the figures. ' +
+      'Then we can look at the debt service together. ' +
+      'I will build a plausible acquisition target and you correct the figures.';
+    expect(looksGarbled(restated)).toBe(true);
+  });
+
   it('leaves ordinary answers alone', () => {
     const real = [
       'Most seats per dollar at that budget is an MD-82/83 — roughly 155-170 seats, and tired airframes have traded near scrap value.',
@@ -40,6 +74,23 @@ describe('looksGarbled', () => {
       '256 flavours needs about a third more counter than 40 does to serve the same queue.',
     ];
     for (const text of real) expect(looksGarbled(text)).toBe(false);
+  });
+
+  it('does not flag ordinary prose that reuses a phrase', () => {
+    // The repeated-run signal needs to survive normal writing. Forty characters
+    // is a long way past "the cost of the" and similar.
+    expect(
+      looksGarbled(
+        'The cost of the buildout is the cost of the lease plus the cost of the ' +
+          'equipment, and the cost of the equipment is the part you can shop around.',
+      ),
+    ).toBe(false);
+    expect(
+      looksGarbled(
+        'Rent is 12% of revenue. Labour is 31% of revenue. Food is 30% of revenue. ' +
+          'Marketing is 3% of revenue. That leaves about 15% before debt service.',
+      ),
+    ).toBe(false);
   });
 
   it('is not fooled by brand names and camel case', () => {

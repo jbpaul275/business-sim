@@ -228,6 +228,22 @@ export function draftIssues(draft: ConceptDraft): string[] {
     }
   }
 
+  // §3.8: a UTILIZATION stream's capacity comes from staffed blocks, so it
+  // needs a STEP_FIXED labour line or it has no ceiling at all. Caught here
+  // rather than at the commit gate, where UTILIZATION_WITHOUT_STAFFING arrives
+  // after the whole draft has been built and shown.
+  const needsStaffing = draft.streams.some((s) => s.archetype === 'UTILIZATION');
+  const hasStaffedBlocks = draft.costLines.some(
+    (c) => c.class === 'STEP_FIXED' && c.isLabor && (c.capacityPerBlock ?? 0) > 0,
+  );
+  if (needsStaffing && !hasStaffedBlocks) {
+    issues.push(
+      'A UTILIZATION business bills hours against staffed capacity, so it needs a STEP_FIXED ' +
+        'labour line with isLabor true and a capacityPerBlock — the billable hours one ' +
+        'person covers per quarter. Without it the model has no ceiling on what it can sell.',
+    );
+  }
+
   for (const [i, line] of draft.costLines.entries()) {
     const where = `costLines[${i}] (${line.label})`;
     // The unit confusion that produced a contractor hiring 200 crews: a rate

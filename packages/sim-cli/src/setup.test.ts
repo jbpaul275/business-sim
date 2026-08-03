@@ -172,6 +172,61 @@ describe('the concept path reaches the same gate as the picker', () => {
     expect(mapped.scale.price).toBe(45_00n); // the archetype's price slot
   });
 
+  it('builds a UTILIZATION business that actually validates', () => {
+    // The recruiting-firm run died on UTILIZATION_WITHOUT_STAFFING, and the
+    // cause was the mapper stamping `driver: 'TRANSACTIONS'` on every
+    // step-fixed line. §3.8 gives each archetype one binding volume unit, so a
+    // recruiting desk billed in transactions could never satisfy the check —
+    // no draft, however well formed, could have passed.
+    const firm: ConceptDraft = {
+      ...draft,
+      businessName: 'Permanent placement search firm',
+      streams: [
+        {
+          label: 'Perm search fees',
+          archetype: 'UTILIZATION',
+          archetypeRationale: 'Output is capped by the searches nine recruiters can work at once.',
+          params: [
+            { name: 'blendedHourlyRate', value: 190, low: 150, high: 240, sourceNote: 'Fee per hour worked.', provenance: 'LLM_ESTIMATE' },
+            { name: 'demandHoursPerQuarter', value: 4_600, low: 3_500, high: 5_500, sourceNote: 'Searches the market will bear.', provenance: 'LLM_ESTIMATE' },
+            { name: 'realizationRate', value: 0.78, low: 0.65, high: 0.85, sourceNote: 'Fills over searches taken.', provenance: 'LLM_ESTIMATE' },
+          ],
+          seasonality: [1.0, 1.05, 0.9, 1.05],
+          marketingSpendPerQuarter: 18_000,
+        },
+      ],
+      costLines: [
+        {
+          label: 'Recruiter desks',
+          class: 'STEP_FIXED',
+          statementLine: 'LABOR',
+          value: 34_000,
+          isLabor: true,
+          accruable: false,
+          capacityPerBlock: 480,
+          minimumBlocks: 1,
+          sourceNote: 'One producing recruiter, base plus draw.',
+          provenance: 'LLM_ESTIMATE',
+        },
+      ],
+    };
+
+    const mapped = draftToTemplate(firm);
+    // The line is billed in hours, because the archetype says so.
+    expect(mapped.template.costDefaults[0]?.driver).toBe('BILLABLE_HOURS');
+
+    const model = buildModelFromTemplate({
+      businessName: mapped.businessName,
+      template: mapped.template,
+      archetype: mapped.archetype,
+      scale: mapped.scale,
+      equityInjection: 1_000_000_00n,
+    });
+    const result = validateBusinessModel(model);
+    expect(result.issues.filter((i) => i.severity === 'ERROR')).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
   it('runs the whole of setup from a sentence, through to the commit gate', async () => {
     const transport = new ScriptedTransport(
       [

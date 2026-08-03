@@ -1,4 +1,5 @@
 import {
+  ARCHETYPE_DRIVER,
   payrollLoadPct,
   zSeedTemplate,
   type CostDefault,
@@ -141,7 +142,11 @@ const toCents = (dollars: number): bigint => BigInt(Math.round(dollars * 100));
 const slug = (label: string): string =>
   label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'concept';
 
-function costDefaultFrom(line: DraftCostLine, index: number): CostDefault {
+function costDefaultFrom(
+  line: DraftCostLine,
+  index: number,
+  archetype: DraftStream['archetype'],
+): CostDefault {
   const isMoney = line.class !== 'VARIABLE_REVENUE';
   return {
     lineId: `llm_${index}_${line.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 24)}`,
@@ -156,12 +161,15 @@ function costDefaultFrom(line: DraftCostLine, index: number): CostDefault {
     annualEscalatorPct: 0.02,
     isPrepaidExpense: false,
     sourceNote: line.sourceNote,
-    // Deliberately no `benchmarkBand` and no `driver`/`capacityPerBlock`
-    // unless the line actually declares one: an absent band is honest, and a
+    // Deliberately no `benchmarkBand`: an absent band is honest, and a
     // borrowed one is a fabrication wearing a citation (D-5).
     ...(line.capacityPerBlock !== null ? { capacityPerBlock: line.capacityPerBlock } : {}),
+    // The driver comes from the archetype, never a constant. Hardcoding
+    // TRANSACTIONS here meant a UTILIZATION business could not validate at
+    // all: §3.8 gives each archetype exactly one binding volume unit, and a
+    // recruiting desk is billed in BILLABLE_HOURS, not transactions.
     ...(line.class === 'STEP_FIXED' || line.class === 'VARIABLE_ACTIVITY'
-      ? { driver: 'TRANSACTIONS' as const }
+      ? { driver: ARCHETYPE_DRIVER[archetype] }
       : {}),
   };
 }
@@ -206,7 +214,7 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     id: `llm_${slug(draft.businessName)}`,
     label: draft.businessName,
     defaultArchetypes: [stream.archetype],
-    costDefaults: draft.costLines.map(costDefaultFrom),
+    costDefaults: draft.costLines.map((line, i) => costDefaultFrom(line, i, stream.archetype)),
     streamParamDefaults,
     modifierDefaults: {
       // Not concept-specific and not worth a model's guess: these are the
