@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ScriptedTransport, draftToTemplate, type ConceptDraft } from '@bizsim/llm';
+import { EMPTY_USAGE, ScriptedTransport, draftToTemplate, type ConceptDraft } from '@bizsim/llm';
 import { buildModelFromTemplate, validateBusinessModel } from '@bizsim/engine';
 import { runSetup } from './setup.js';
 import type { LineSource } from './input.js';
@@ -382,6 +382,47 @@ describe('the concept path reaches the same gate as the picker', () => {
       expect(printed.match(/How many scopes/g)?.length).toBe(1);
       expect(result?.committed).toBe(true);
       expect(result?.world.businesses[0]?.cash).toBeGreaterThan(0n);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('repairs a malformed draft instead of ending the run over it', async () => {
+    // Three missing `provenance` fields on a nine-parameter soft-serve truck
+    // ended a session that had taken four turns to get there. Everything else
+    // that goes wrong with a draft already goes back to the model; this was
+    // the one that did not, for no reason but that it failed a different check.
+    const broken = { ...draft, streams: [{ label: 'Only a label' }] };
+    let asked = 0;
+    const transport = {
+      turn: async () => ({
+        turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      }),
+      draft: async () => {
+        asked += 1;
+        return (asked === 1 ? broken : draft) as ConceptDraft;
+      },
+      usage: EMPTY_USAGE,
+    };
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A soft-serve truck in San Antonio.',
+      '', // nothing to argue with
+      '', // take the proposed funding
+      'y', // commit
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(asked).toBe(2);
+      expect(result?.committed).toBe(true);
+      // And the player is told something is being fixed, not what — the
+      // schema paths are the model's homework.
+      expect(printed).toContain('did not come out right');
+      expect(printed).not.toContain('provenance');
     } finally {
       log.mockRestore();
     }

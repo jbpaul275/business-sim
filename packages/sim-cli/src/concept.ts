@@ -88,10 +88,15 @@ const seconds = (ms: number): string =>
 
 const tokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
-function effortLine(turn: { ms: number; thinkingTokens: number } | undefined): string {
+function effortLine(
+  turn: { ms: number; thinkingTokens: number; calls: number } | undefined,
+): string {
   if (!turn) return '';
   const thought = turn.thinkingTokens > 0 ? `, ${tokens(turn.thinkingTokens)} thinking` : '';
-  return `thought ${seconds(turn.ms)}${thought}`;
+  // A turn that took two calls is a discarded reply, not slow reasoning. They
+  // look identical on the clock and need opposite fixes, so say which it was.
+  const retried = turn.calls > 1 ? `, ${turn.calls} calls` : '';
+  return `thought ${seconds(turn.ms)}${thought}${retried}`;
 }
 
 export async function runConceptInterview(
@@ -213,6 +218,27 @@ export async function runConceptInterview(
         );
         return undefined;
       }
+      /**
+       * A draft the schema rejects is a repair round, not the end of the run.
+       *
+       * It ended one live session over three missing `provenance` fields on a
+       * nine-parameter soft-serve truck — a fault the model fixes in one call
+       * when told, and which cost the player four turns of conversation
+       * instead. Everything else that goes wrong with a draft already goes
+       * back to the model; this was the one that did not, for no reason but
+       * that it failed a different check.
+       */
+      if (error instanceof MalformedDraftError && repairs < MAX_REPAIRS) {
+        repairs += 1;
+        console.log(
+          `${DIM}  the first draft did not come out right — asking for a corrected one${RESET}`,
+        );
+        if (process.env['BIZSIM_DEBUG']) console.log(`    ${DIM}${error.message}${RESET}`);
+        reply =
+          `That draft did not match the schema — ${error.detail}. ` +
+          `Emit the whole draft again, with every required field present.`;
+        continue;
+      }
       if (error instanceof UnusableResponseError || error instanceof MalformedDraftError) {
         console.log(`\n  ${RED}${wrap(error.message, 74, '')}${RESET}`);
         console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
@@ -273,8 +299,21 @@ export async function runConceptInterview(
       structural.length > 0 ? structural : revenueRealityIssues(state.draft);
     if (issues.length > 0 && repairs < MAX_REPAIRS) {
       repairs += 1;
-      console.log(`  ${YELLOW}The draft has problems I need to fix:${RESET}`);
-      for (const issue of issues) console.log(`    - ${wrap(issue, 70, '      ').trimStart()}`);
+      /**
+       * The player is told that something is being fixed, not what.
+       *
+       * These strings are written for the model — `streams[1]`, `avgTicket`,
+       * "a delivery app's commission is a VARIABLE_REVENUE line" — and a live
+       * session put all of that in front of someone buying a soft-serve truck.
+       * It is the model's homework. That it is being redone is worth one line;
+       * the schema vocabulary is not.
+       */
+      console.log(
+        `${DIM}  the first draft did not come out right — asking for a corrected one${RESET}`,
+      );
+      if (process.env['BIZSIM_DEBUG']) {
+        for (const issue of issues) console.log(`    ${DIM}- ${wrap(issue, 70, '      ').trimStart()}${RESET}`);
+      }
       reply =
         `That draft has structural problems: ${issues.join(' ')} ` +
         `Please correct them and emit the draft again.`;

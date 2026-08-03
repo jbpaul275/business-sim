@@ -38,13 +38,30 @@ export const zProvenanceWire = z.enum([
  * because an assumption with no stated basis is exactly the kind the challenge
  * loop most needs to interrogate.
  */
+/**
+ * Provenance and its note default rather than being required.
+ *
+ * A live draft omitted `provenance` on three of nine parameters and the
+ * session ended — the third distinct "model produced a very slightly wrong
+ * draft, run is over" failure. The unconstrained fallback makes this a normal
+ * outcome rather than an impossible one: with no decoding grammar there is
+ * nothing forcing a field to appear.
+ *
+ * `LLM_ESTIMATE` is the safe default in the one direction that matters. §10.3
+ * ranks it below CATALOG, PLAYER_SOURCED and BENCHMARK, so a forgotten tag can
+ * only ever *understate* how well a number is supported. The failure this
+ * whole subsystem exists to prevent is the opposite one — the register
+ * claiming published backing for an invention — and defaulting downward cannot
+ * cause it. A model that forgot to say where a number came from did not look
+ * it up.
+ */
 export const zDraftParam = z.object({
   name: z.string(),
   value: z.number(),
   low: z.number(),
   high: z.number(),
-  sourceNote: z.string(),
-  provenance: zProvenanceWire,
+  sourceNote: z.string().default(''),
+  provenance: zProvenanceWire.default('LLM_ESTIMATE'),
 });
 export type DraftParam = z.infer<typeof zDraftParam>;
 
@@ -100,8 +117,9 @@ export const zDraftCostLine = z.object({
   /** STEP_FIXED only: volume one block supports, in driver units. */
   capacityPerBlock: z.number().nullable(),
   minimumBlocks: z.number().nullable(),
-  sourceNote: z.string(),
-  provenance: zProvenanceWire,
+  sourceNote: z.string().default(''),
+  /** Defaults downward for the same reason as `zDraftParam.provenance`. */
+  provenance: zProvenanceWire.default('LLM_ESTIMATE'),
 });
 export type DraftCostLine = z.infer<typeof zDraftCostLine>;
 
@@ -117,7 +135,7 @@ export const zDraftCapex = z.object({
   grossCost: z.number(),
   usefulLifeYears: z.number(),
   quantity: z.number(),
-  sourceNote: z.string(),
+  sourceNote: z.string().default(''),
 });
 
 /**

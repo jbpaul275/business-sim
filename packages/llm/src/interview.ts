@@ -123,7 +123,9 @@ export class ConceptInterview {
    * failure worth catching is per turn — a minute of thinking on "where is
    * it?", or three seconds on a question about capital structure.
    */
-  lastTurn: { ms: number; thinkingTokens: number; outputTokens: number } | undefined;
+  lastTurn:
+    | { ms: number; thinkingTokens: number; outputTokens: number; calls: number }
+    | undefined;
 
   /** The same, for the draft call, which is much the slower of the two. */
   lastDraft: { ms: number; thinkingTokens: number } | undefined;
@@ -184,11 +186,16 @@ export class ConceptInterview {
     // second full call and the player waits for both, so timing only the
     // successful one would report half the wait.
     const startedAt = Date.now();
+    const callsBefore = this.transport.usage?.calls ?? 0;
     const { turn, reasoning, usage } = await this.transport.turn(this.system, this.transcript);
     this.lastTurn = {
       ms: Date.now() - startedAt,
       thinkingTokens: usage?.thinkingTokens ?? 0,
       outputTokens: usage?.outputTokens ?? 0,
+      // More than one means the transport threw a reply away and asked again.
+      // Without this, a 58-second turn that was really two calls is
+      // indistinguishable from one slow call, and they need opposite fixes.
+      calls: Math.max(1, (this.transport.usage?.calls ?? 0) - callsBefore),
     };
     this.lastReasoning = reasoning;
     this.turnsTaken += 1;

@@ -514,6 +514,60 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
   });
 });
 
+describe('a forgotten provenance tag', () => {
+  it('defaults downward rather than failing the draft', () => {
+    // A live draft omitted `provenance` on three of nine parameters and the
+    // session ended. LLM_ESTIMATE is the safe default in the direction that
+    // matters: §10.3 ranks it below CATALOG, PLAYER_SOURCED and BENCHMARK, so
+    // a forgotten tag can only understate how well a number is supported. The
+    // failure this subsystem exists to prevent is the opposite one.
+    const parsed = zConceptDraft.parse({
+      ...draft(),
+      streams: [
+        {
+          ...draft().streams[0]!,
+          params: [{ name: 'avgTicket', value: 12, low: 9, high: 15 }],
+        },
+      ],
+    });
+    expect(parsed.streams[0]!.params[0]!.provenance).toBe('LLM_ESTIMATE');
+    expect(parsed.streams[0]!.params[0]!.sourceNote).toBe('');
+  });
+
+  it('never defaults upward into a claim of support', () => {
+    // The whole point. If this ever defaulted to BENCHMARK, a model that
+    // forgot to say where a number came from would be asserting it was
+    // published — which is the exact failure §10 exists to prevent.
+    const parsed = zConceptDraft.parse({
+      ...draft(),
+      costLines: [
+        {
+          label: 'Mix and cones',
+          class: 'VARIABLE_REVENUE',
+          statementLine: 'COGS',
+          value: 0.3,
+          isLabor: false,
+          accruable: true,
+          capacityPerBlock: null,
+          minimumBlocks: null,
+        },
+      ],
+    });
+    expect(parsed.costLines[0]!.provenance).toBe('LLM_ESTIMATE');
+  });
+
+  it('still requires the numbers themselves', () => {
+    // Metadata defaults; load-bearing values do not. A missing value is a
+    // fault the model has to fix, not one to paper over with a zero.
+    expect(() =>
+      zConceptDraft.parse({
+        ...draft(),
+        streams: [{ ...draft().streams[0]!, params: [{ name: 'avgTicket', low: 9, high: 15 }] }],
+      }),
+    ).toThrow();
+  });
+});
+
 describe('how hard the turn worked', () => {
   it('records wall clock and thinking tokens for the last turn', async () => {
     // Two currencies because they measure different things, and the gap
