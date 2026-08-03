@@ -297,6 +297,25 @@ describe('the prompt carries D-5', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('grounded rather than guessed');
   });
 
+  it('forbids disclaiming its way into authority', () => {
+    // Second live run: "BK's franchise disclosure sets minimum financial
+    // qualifications — roughly $1.5M net worth... Those are their numbers, not
+    // mine." It read no disclosure. Saying a figure is not your opinion is a
+    // claim about where it came from, and a stronger one than the bare number:
+    // the reader stops evaluating it. Someone could restructure their equity
+    // around a threshold the model half-remembers.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Do not disclaim your way into authority');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain(
+      'a category of constraint can be stated confidently; a specific figure inside it cannot',
+    );
+  });
+
+  it('pushes toward drafting rather than one more useful question', () => {
+    // Four turns in and still interviewing. The register and the challenge loop
+    // exist so the interview does not have to be exhaustive.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Draft early and let them push back on real numbers');
+  });
+
   it('spells out that one question means one', () => {
     // Same run: it asked about site format and trade area in one turn, with the
     // second question in a trailing paragraph. The rule needed an example.
