@@ -1,0 +1,148 @@
+{
+  "id": "professional_services_firm",
+  "label": "Professional services firm",
+  "naicsCode": "541611",
+  "defaultArchetypes": [
+    "UTILIZATION"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "subcontractors",
+      "label": "Subcontracted delivery",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.1,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.05,
+        "high": 0.18,
+        "source": "RMA Annual Statement Studies 5416"
+      },
+      "sourceNote": "Overflow work placed with contract specialists."
+    },
+    {
+      "lineId": "delivery_staff",
+      "label": "Billable consultants",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 33000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "BILLABLE_HOURS",
+      "capacityPerBlock": 480,
+      "minimumBlocks": 1,
+      "sourceNote": "One consultant at $132k/yr delivering 480 billable hours a quarter."
+    },
+    {
+      "lineId": "principal",
+      "label": "Practice principal",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 30000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Non-billable practice lead; required regardless of utilisation."
+    },
+    {
+      "lineId": "rent",
+      "label": "Office rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 15000,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "2,000 sq ft of Class B office at $30/sq ft/yr."
+    }
+  ],
+  "streamParamDefaults": {
+    "blendedHourlyRate": 185,
+    "demandHoursPerQuarter": 3800,
+    "targetUtilization": 0.7,
+    "realizationRate": 0.9,
+    "billableHoursPerHeadPerQuarter": 480
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.55,
+    "rampConstant": 3.0,
+    "marketingMaxLift": 0.3,
+    "halfSaturationSpend": 12000,
+    "priceElasticity": 0.7,
+    "baseMarketingSpendPerQuarter": 12000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 52,
+    "dioDays": 0,
+    "dpoDays": 25,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 2,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.2515,
+  "workersCompPct": 0.01,
+  "offersBenefits": true,
+  "seasonality": [
+    1.02,
+    1.06,
+    0.9,
+    1.02
+  ],
+  "monthlySeasonalWeight": [
+    1.0,
+    1.02,
+    1.04,
+    1.06,
+    1.08,
+    1.04,
+    0.92,
+    0.84,
+    0.94,
+    1.02,
+    1.04,
+    1.0
+  ],
+  "typicalCapex": [
+    {
+      "label": "Workstations & laptops",
+      "category": "EQUIPMENT",
+      "cost": 60000,
+      "usefulLifeYears": 4
+    },
+    {
+      "label": "Office fit-out",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 80000,
+      "usefulLifeYears": 10
+    }
+  ],
+  "plausibility": {
+    "laborPctOfRevenue": {
+      "low": 0.42,
+      "high": 0.62,
+      "source": "RMA Annual Statement Studies 5416"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.1,
+      "high": 0.28,
+      "source": "RMA Annual Statement Studies 5416"
+    }
+  },
+  "monthlyRent": 5000,
+  "preOpening": {
+    "payrollAndTraining": 30000,
+    "marketing": 12000,
+    "permitsAndLegal": 8000
+  },
+  "generalLiabilityInsurancePerYear": 9000,
+  "propertyInsurancePerYear": 1500,
+  "accountingAndLegalPerYear": 14000,
+  "softwareAndPosPerYear": 18000,
+  "permitsAndLicensesPerYear": 2000,
+  "utilitiesPerQuarter": 2500,
+  "ownerCompPerYear": 120000,
+  "badDebtPctOfRevenue": 0.008,
+  "repairsPctOfRevenue": 0.003,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.1
+}

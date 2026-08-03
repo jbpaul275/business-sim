@@ -1,0 +1,16 @@
+{
+  "name": "@bizsim/sim-cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sim": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@bizsim/engine": "workspace:*",
+    "@bizsim/llm": "workspace:*",
+    "@bizsim/money": "workspace:*",
+    "@bizsim/schemas": "workspace:*",
+    "@bizsim/seeds": "workspace:*"
+  }
+}

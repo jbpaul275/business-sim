@@ -1,0 +1,187 @@
+{
+  "id": "full_service_restaurant",
+  "label": "Full-service restaurant",
+  "naicsCode": "722511",
+  "defaultArchetypes": [
+    "TRAFFIC"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "food_cost",
+      "label": "Food & beverage cost",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.3,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.28,
+        "high": 0.32,
+        "source": "NRA Restaurant Operations Report"
+      },
+      "sourceNote": "Prime cost benchmarking; full-service median food cost is 28-32% of sales."
+    },
+    {
+      "lineId": "kitchen_labor",
+      "label": "Kitchen line",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 13000,
+      "isMoney": true,
+      "isLabor": true,
+      "sourceNote": "One kitchen block \u2248 1.5 line cooks plus prep at metro-market wages.",
+      "driver": "TRANSACTIONS",
+      "capacityPerBlock": 2000,
+      "minimumBlocks": 1
+    },
+    {
+      "lineId": "front_of_house",
+      "label": "Front of house",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 8000,
+      "isMoney": true,
+      "isLabor": true,
+      "sourceNote": "One FOH block \u2248 2 servers plus a busser across the service week.",
+      "driver": "TRANSACTIONS",
+      "capacityPerBlock": 2600,
+      "minimumBlocks": 1
+    },
+    {
+      "lineId": "management",
+      "label": "General manager",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 13000,
+      "isMoney": true,
+      "isLabor": true,
+      "sourceNote": "Salaried GM at $52k/yr; required regardless of volume.",
+      "annualEscalatorPct": 0.03
+    },
+    {
+      "lineId": "rent",
+      "label": "Rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 33000,
+      "isMoney": true,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 15000,
+        "high": 60000,
+        "source": "IBISWorld 72251 \u2014 quarterly rent for 2,000-3,000 sq ft at NNN rates"
+      },
+      "sourceNote": "2,400 sq ft at $55/sq ft/yr NNN in a secondary metro corridor.",
+      "annualEscalatorPct": 0.03
+    }
+  ],
+  "streamParamDefaults": {
+    "captureRate": 0.05,
+    "avgTicket": 42,
+    "operatingDaysPerQuarter": 91,
+    "turnsPerDay": 2.0,
+    "peakConcentration": 0.45,
+    "baselineSkuCount": 40,
+    "skuCount": 40,
+    "seats": 64,
+    "floorAreaSqFt": 2400,
+    "addressableTrafficPerQuarter": 180000
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.4,
+    "rampConstant": 3.0,
+    "marketingMaxLift": 0.35,
+    "halfSaturationSpend": 8000,
+    "priceElasticity": 1.2,
+    "baseMarketingSpendPerQuarter": 8000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 1,
+    "dioDays": 7,
+    "dpoDays": 21,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 1,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.1315,
+  "workersCompPct": 0.04,
+  "offersBenefits": false,
+  "seasonality": [
+    0.92,
+    1.02,
+    1.08,
+    0.98
+  ],
+  "monthlySeasonalWeight": [
+    0.88,
+    0.9,
+    0.98,
+    1.0,
+    1.02,
+    1.04,
+    1.1,
+    1.1,
+    1.04,
+    0.96,
+    0.96,
+    1.02
+  ],
+  "typicalCapex": [
+    {
+      "label": "Kitchen equipment package",
+      "category": "EQUIPMENT",
+      "cost": 180000,
+      "usefulLifeYears": 7
+    },
+    {
+      "label": "Leasehold improvements & buildout",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 250000,
+      "usefulLifeYears": 15
+    },
+    {
+      "label": "Dining room FF&E",
+      "category": "FF&E",
+      "cost": 90000,
+      "usefulLifeYears": 7
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.28,
+      "high": 0.32,
+      "source": "NRA Restaurant Operations Report"
+    },
+    "laborPctOfRevenue": {
+      "low": 0.3,
+      "high": 0.35,
+      "source": "NRA Restaurant Operations Report"
+    },
+    "occupancyPctOfRevenue": {
+      "low": 0.1,
+      "high": 0.16,
+      "source": "IBISWorld 72251 \u2014 note this is the full OCCUPANCY statement line (rent, utilities, property insurance, repairs), not rent alone; rent-only runs 6-10%"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.08,
+      "high": 0.15,
+      "source": "IBISWorld 72251"
+    }
+  },
+  "monthlyRent": 11000,
+  "preOpening": {
+    "payrollAndTraining": 40000,
+    "marketing": 15000,
+    "permitsAndLegal": 15000
+  },
+  "generalLiabilityInsurancePerYear": 6000,
+  "propertyInsurancePerYear": 4000,
+  "accountingAndLegalPerYear": 8000,
+  "softwareAndPosPerYear": 6000,
+  "permitsAndLicensesPerYear": 3000,
+  "utilitiesPerQuarter": 9000,
+  "ownerCompPerYear": 75000,
+  "badDebtPctOfRevenue": 0.01,
+  "repairsPctOfRevenue": 0.015,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.85
+}

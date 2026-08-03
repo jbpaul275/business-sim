@@ -1,0 +1,151 @@
+{
+  "id": "general_contractor",
+  "label": "General contractor",
+  "naicsCode": "236220",
+  "defaultArchetypes": [
+    "PROJECT_BACKLOG"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "subs_and_materials",
+      "label": "Subcontractors & materials",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.605,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.68,
+        "high": 0.8,
+        "source": "CFMA Construction Industry Annual Financial Survey"
+      },
+      "sourceNote": "Subcontracts and materials only. Own field crew is a separate COGS line, so the two together sit inside the 68-80% direct-cost band."
+    },
+    {
+      "lineId": "field_crew",
+      "label": "Field crew & supervision",
+      "class": "STEP_FIXED",
+      "statementLine": "COGS",
+      "value": 62000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "REVENUE",
+      "capacityPerBlock": 450000,
+      "minimumBlocks": 1,
+      "sourceNote": "One crew plus a superintendent executes roughly $450k of work a quarter."
+    },
+    {
+      "lineId": "estimating",
+      "label": "Estimating & project management",
+      "class": "FIXED_PERIOD",
+      "statementLine": "G&A",
+      "value": 48000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Estimator and PM; the bid pipeline exists whether or not you win."
+    },
+    {
+      "lineId": "yard",
+      "label": "Yard & shop",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 11000,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Fenced yard with a shop building."
+    }
+  ],
+  "streamParamDefaults": {
+    "avgContractValue": 340000,
+    "bidsSubmittedPerQuarter": 14,
+    "winRate": 0.22,
+    "executionCapacityPerQuarter": 1200000,
+    "retainagePct": 0.1,
+    "retainageReleaseLagQuarters": 2,
+    "progressBillingLagDays": 52,
+    "changeOrderPctOfContract": 0.07
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.4,
+    "rampConstant": 3.0,
+    "marketingMaxLift": 0.25,
+    "halfSaturationSpend": 15000,
+    "priceElasticity": 1.8,
+    "baseMarketingSpendPerQuarter": 15000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 52,
+    "dioDays": 5,
+    "dpoDays": 38,
+    "prepaidInsuranceMonths": 12,
+    "securityDepositMonths": 1,
+    "customerDepositPct": 0.05
+  },
+  "payrollLoadPct": 0.2065,
+  "workersCompPct": 0.08,
+  "offersBenefits": false,
+  "seasonality": [
+    0.84,
+    1.1,
+    1.14,
+    0.92
+  ],
+  "monthlySeasonalWeight": [
+    0.78,
+    0.82,
+    0.92,
+    1.04,
+    1.12,
+    1.14,
+    1.16,
+    1.16,
+    1.1,
+    0.98,
+    0.92,
+    0.86
+  ],
+  "typicalCapex": [
+    {
+      "label": "Trucks & trailers",
+      "category": "VEHICLES",
+      "cost": 240000,
+      "usefulLifeYears": 5
+    },
+    {
+      "label": "Tools & small equipment",
+      "category": "EQUIPMENT",
+      "cost": 120000,
+      "usefulLifeYears": 7
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.68,
+      "high": 0.8,
+      "source": "CFMA Construction Industry Annual Financial Survey"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.03,
+      "high": 0.12,
+      "source": "CFMA Construction Industry Annual Financial Survey"
+    }
+  },
+  "monthlyRent": 3700,
+  "preOpening": {
+    "payrollAndTraining": 45000,
+    "marketing": 15000,
+    "permitsAndLegal": 25000
+  },
+  "generalLiabilityInsurancePerYear": 42000,
+  "propertyInsurancePerYear": 9000,
+  "accountingAndLegalPerYear": 18000,
+  "softwareAndPosPerYear": 12000,
+  "permitsAndLicensesPerYear": 9000,
+  "utilitiesPerQuarter": 3500,
+  "ownerCompPerYear": 130000,
+  "badDebtPctOfRevenue": 0.0,
+  "repairsPctOfRevenue": 0.012,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.05
+}

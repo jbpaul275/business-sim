@@ -1,0 +1,144 @@
+{
+  "id": "b2b_saas",
+  "label": "B2B SaaS",
+  "naicsCode": "513210",
+  "defaultArchetypes": [
+    "SUBSCRIPTION"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "hosting",
+      "label": "Hosting & infrastructure",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.11,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.06,
+        "high": 0.18,
+        "source": "KeyBanc SaaS Survey"
+      },
+      "sourceNote": "Cloud compute, storage and egress at published list less committed-use discount."
+    },
+    {
+      "lineId": "support",
+      "label": "Customer success",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 28000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "SUBSCRIBERS",
+      "capacityPerBlock": 120,
+      "minimumBlocks": 1,
+      "sourceNote": "One CSM covers about 120 accounts at this ACV."
+    },
+    {
+      "lineId": "engineering",
+      "label": "Engineering",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 145000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.04,
+      "sourceNote": "Four engineers at $145k/yr; the product exists whether or not it sells."
+    },
+    {
+      "lineId": "office",
+      "label": "Office & remote stipends",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 9000,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Small hub office plus home-office stipends."
+    }
+  ],
+  "streamParamDefaults": {
+    "arpuPerQuarter": 2400,
+    "baseCac": 7200,
+    "cacInflationCoefficient": 0.3,
+    "quarterlyChurnRate": 0.03,
+    "setupFee": 1500,
+    "netRevenueRetention": 1.03,
+    "prepayMonths": 12
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.35,
+    "rampConstant": 4.0,
+    "marketingMaxLift": 0.3,
+    "halfSaturationSpend": 90000,
+    "priceElasticity": 0.8,
+    "baseMarketingSpendPerQuarter": 90000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 38,
+    "dioDays": 0,
+    "dpoDays": 30,
+    "prepaidInsuranceMonths": 12,
+    "securityDepositMonths": 2,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.2415,
+  "workersCompPct": 0.01,
+  "offersBenefits": true,
+  "seasonality": [
+    0.96,
+    1.0,
+    0.96,
+    1.08
+  ],
+  "monthlySeasonalWeight": [
+    0.92,
+    0.96,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.94,
+    0.92,
+    1.02,
+    1.04,
+    1.06,
+    1.14
+  ],
+  "typicalCapex": [
+    {
+      "label": "Laptops & developer hardware",
+      "category": "EQUIPMENT",
+      "cost": 55000,
+      "usefulLifeYears": 4
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.08,
+      "high": 0.25,
+      "source": "KeyBanc SaaS Survey"
+    },
+    "ebitdaMarginPct": {
+      "low": -0.15,
+      "high": 0.3,
+      "source": "KeyBanc SaaS Survey \u2014 evaluated at maturity (year 7+); a seed-stage SaaS runs deeply negative for years before the recurring base covers a fixed engineering team"
+    }
+  },
+  "monthlyRent": 3000,
+  "preOpening": {
+    "payrollAndTraining": 120000,
+    "marketing": 45000,
+    "permitsAndLegal": 20000
+  },
+  "generalLiabilityInsurancePerYear": 12000,
+  "propertyInsurancePerYear": 1200,
+  "accountingAndLegalPerYear": 26000,
+  "softwareAndPosPerYear": 48000,
+  "permitsAndLicensesPerYear": 3000,
+  "utilitiesPerQuarter": 1500,
+  "ownerCompPerYear": 150000,
+  "badDebtPctOfRevenue": 0.006,
+  "repairsPctOfRevenue": 0.0,
+  "cardProcessingRate": 0.029,
+  "cardMixPct": 0.35
+}

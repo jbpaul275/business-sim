@@ -1,0 +1,149 @@
+{
+  "id": "ecommerce_dtc_brand",
+  "label": "Ecommerce / DTC brand",
+  "naicsCode": "454110",
+  "defaultArchetypes": [
+    "UNITS_CAC"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "product_cost",
+      "label": "Product cost",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.38,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.3,
+        "high": 0.45,
+        "source": "IBISWorld 45411"
+      },
+      "sourceNote": "Landed unit cost including inbound freight and duty."
+    },
+    {
+      "lineId": "pick_pack_ship",
+      "label": "Pick, pack & ship",
+      "class": "VARIABLE_ACTIVITY",
+      "statementLine": "COGS",
+      "value": 9.5,
+      "isMoney": true,
+      "accruable": true,
+      "driver": "ORDERS",
+      "sourceNote": "3PL fulfilment plus outbound parcel, per order. Independent of price."
+    },
+    {
+      "lineId": "ops_staff",
+      "label": "Operations staff",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 19000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "ORDERS",
+      "capacityPerBlock": 9000,
+      "minimumBlocks": 1,
+      "sourceNote": "One ops/CX block supports roughly 9,000 orders a quarter."
+    },
+    {
+      "lineId": "warehouse",
+      "label": "Warehouse & studio",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 12000,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Small warehouse plus photography space."
+    }
+  ],
+  "streamParamDefaults": {
+    "avgOrderValue": 78,
+    "baseCac": 30,
+    "cacInflationCoefficient": 0.35,
+    "ordersPerNewCustomerFirstQuarter": 1.0,
+    "repeatPurchaseRatePerQuarter": 0.26,
+    "quarterlyCustomerAttrition": 0.11
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.4,
+    "rampConstant": 3.0,
+    "marketingMaxLift": 0.35,
+    "halfSaturationSpend": 60000,
+    "priceElasticity": 1.5,
+    "baseMarketingSpendPerQuarter": 60000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 2,
+    "dioDays": 75,
+    "dpoDays": 35,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 2,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.2465,
+  "workersCompPct": 0.015,
+  "offersBenefits": true,
+  "seasonality": [
+    0.82,
+    0.92,
+    0.94,
+    1.32
+  ],
+  "monthlySeasonalWeight": [
+    0.8,
+    0.8,
+    0.86,
+    0.9,
+    0.92,
+    0.94,
+    0.94,
+    0.92,
+    0.96,
+    1.06,
+    1.42,
+    1.48
+  ],
+  "typicalCapex": [
+    {
+      "label": "Warehouse racking & packing stations",
+      "category": "EQUIPMENT",
+      "cost": 70000,
+      "usefulLifeYears": 7
+    },
+    {
+      "label": "Brand photography & site build",
+      "category": "FF&E",
+      "cost": 60000,
+      "usefulLifeYears": 5
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.4,
+      "high": 0.58,
+      "source": "IBISWorld 45411"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.02,
+      "high": 0.18,
+      "source": "IBISWorld 45411"
+    }
+  },
+  "monthlyRent": 4000,
+  "preOpening": {
+    "payrollAndTraining": 25000,
+    "marketing": 40000,
+    "permitsAndLegal": 9000
+  },
+  "generalLiabilityInsurancePerYear": 7000,
+  "propertyInsurancePerYear": 4000,
+  "accountingAndLegalPerYear": 12000,
+  "softwareAndPosPerYear": 22000,
+  "permitsAndLicensesPerYear": 2500,
+  "utilitiesPerQuarter": 3000,
+  "ownerCompPerYear": 95000,
+  "badDebtPctOfRevenue": 0.004,
+  "repairsPctOfRevenue": 0.004,
+  "cardProcessingRate": 0.029,
+  "cardMixPct": 0.98
+}

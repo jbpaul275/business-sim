@@ -79,6 +79,114 @@ Two things follow from taking this seriously:
   quarterly sheet. Sheets 9/10 (debt, capex) are naturally formulaic. Sheet 11 (run history) is a record and
   should be values.
 
+### D-5 · The absurdity principle — the AI pushes back on impossibility, never on implausibility
+
+Also not one of the spec's four questions, but the one that decides what the product is for.
+
+A tool that filters ideas for plausibility filters out precisely the ideas worth modelling. Enough
+enormously successful businesses looked ridiculous at the outset that "this sounds unlikely to work" is
+worthless as a gate — and a founder who wanted that verdict could get it anywhere, for free. The reason to
+build this is the opposite case: someone wants to know what a strange idea would actually cost, and what
+would have to be true for it to clear. Had a sovereign wealth fund been able to run *The Line* through
+something like this before committing capital, the useful output would not have been "no."
+
+**The rule, binding on every M3/M4 prompt:**
+
+> The AI pushes back on **physical and contractual impossibility** and on nothing else. Not commercial
+> implausibility. Not "no comparable exists." Not "the benchmark says otherwise."
+
+An ice cream shop with 256 flavours might be a bad business, but anyone with the money can open one, so the
+system's job is to model it, not to have an opinion about it. What it *is* allowed to say is that 256
+flavours means 22 dipping cabinets, a slower counter, and inventory that turns half as fast — because those
+are consequences, not judgements.
+
+What counts as impossible, and is therefore fair to refuse:
+
+- **Arithmetic and identity** — accumulated depreciation exceeding an asset's depreciable base, a period
+  ending with cash that was never received, a balance sheet that does not balance.
+- **Contract** — zero payroll load on employed staff, zero rent on a leased space, a lease with no
+  escalator asserted as a lease *with* one.
+- **Physics and law** — capacity exceeding what the stated footprint and hours permit, a licence that does
+  not exist, delivery in negative time.
+
+Everything else is a condition to be surfaced, not a door to be closed. §11.2's own framing is the standard:
+*"a business that is viable under some conditions and not others. The player should learn what those
+conditions are, not be told yes or no."*
+
+**Two consequences that change how M3 must be built:**
+
+1. **A novel concept gets NO benchmark bands, rather than borrowed ones.** The tempting shortcut is to map
+   an unfamiliar concept to the nearest seed template and inherit its bands. Do not. *The Line* has no
+   comparable; if it inherits self-storage's bands, every line flags out-of-band, and out-of-band reads as
+   "this is wrong" when the truth is "nobody knows." An absent band is honest; a borrowed band is a
+   fabrication wearing a citation. The register already ranks provenance for exactly this reason —
+   `LLM_ESTIMATE` with no band and a visibly low confidence score is the correct representation of a
+   genuinely novel cost line.
+2. **The LLM emits cost lines directly for concepts outside the twelve templates**, at `LLM_ESTIMATE`
+   provenance, rather than borrowing a template's cost structure and relabelling it. A borrowed structure is
+   wrong in ways nobody can see; an estimated one is wrong in ways the register displays.
+
+**Benchmarks are weak constraints, not absent ones.** An absent band means "no comparable exists," not "any
+number goes." A 256-flavour shop may well charge more than Ben & Jerry's; it cannot charge $200 a scoop. And
+because it needs a bigger store, it may take far more revenue than a Ben & Jerry's benchmark would suggest —
+but it is still bound by the same arithmetic: it can only serve so many people a day at such and such a
+price. There is no single-location ice cream shop with a billion dollars of revenue.
+
+The useful reading of that: **the constraint that binds is not the benchmark value, it is the identity that
+produced it.** Revenue is servable customers × price. Either factor can move a long way outside its band —
+that is the whole point of modelling a novel concept — but the *product* is bounded by physical facts:
+footprint, operating hours, service time per customer. That bound is arithmetic, not opinion, and the engine
+already computes it. The 256-flavour shop is capped at $302k a quarter on a 30-position counter not because a
+benchmark says so, but because 30 × 12 × 91 ÷ 1.268 is 25,836 customers and they are paying $13 each.
+
+So there are three tiers, not two:
+
+| Tier | What it covers | Response |
+|---|---|---|
+| **Impossible** | Arithmetic, contract, physics — including *derived* ceilings: claimed revenue that cannot reconcile to volume × price, or capacity that cannot fit the stated footprint | **Refuse.** Cannot be overridden. |
+| **Far outside any anchor** | A value many multiples from the nearest defensible reference — $200 a scoop, 40% capture of a metro trade area | **Challenge, and report the magnitude.** Never refuse. |
+| **In band, or modestly outside** | Everything else | **Register and move on.** |
+
+Two consequences for the build, both now implemented:
+
+1. **The register carries a deviation *magnitude*, not just a boolean.** `outsideBenchmark` can only say
+   "outside," which is the same word for 1.2× and 22× and is therefore useless as a weak constraint.
+   `Assumption.benchmarkDeviation` measures the miss in **band-widths** — signed, zero inside — and
+   `deviationLabel()` renders the founder-facing phrasing (*"17× the top of the range"*), falling back to
+   band-widths when the band straddles zero and a multiple would mislead. Band-widths rather than a raw
+   ratio because a seed-stage SaaS EBITDA band genuinely runs −15% to 30%, and `value / low` is meaningless
+   against a negative edge. The register review now sorts by magnitude, so the startling number is the one a
+   founder sees first. This is what lets M4 ask *"what makes 22× true?"* instead of announcing *"out of
+   band"* — the first is a question, the second is a verdict.
+2. **The capacity model carries a footprint, and validation checks it.** `floorAreaSqFt` is a **required**
+   field on `SEAT_TURNS`, not an optional one: a capacity claim with no box behind it is unfalsifiable, and
+   an optional field would simply be omitted by the concepts that most need it. `MIN_SQ_FT_PER_SEAT = 7`
+   comes from IBC Table 1004.5 (assembly standing space is 5 net sq ft per occupant; concentrated seating
+   is 7), applied against *gross* floor area — so it sits well under anything real and only catches
+   fabrications. Over-capacity is a hard `CAPACITY_EXCEEDS_FOOTPRINT` error, and the message says what would
+   have to be true rather than just refusing: *"Either take 700000 sq ft (and carry the rent) or seat 261."*
+
+   The same bound had to go into `EXPAND_CAPACITY`, which previously added seats with nothing checking them
+   — validation only ran at concept lock, so a player could reach any capacity by repeating the buildout.
+   The action now takes an optional `deltaFloorAreaSqFt`, applied *before* seats: take the space and the
+   seats are yours, along with the rent. That argument belongs on the player's P&L, not in a refusal.
+
+Note what neither of these does: nothing here refuses $200 a scoop. It is physically possible, so it gets
+modelled. What the engine already has is the honest consequence — price elasticity anchored at the price set
+at concept lock — so a player who raises the ticket 22× and *also* holds capture rate flat is making a second,
+separate claim: that 44,200 people will pay it. That claim is a `PLAYER_ASSUMED` assumption with no source,
+sitting many multiples outside any anchor, and interrogating it is precisely M4's job. The absurdity principle
+does not mean the system is credulous. It means it argues about assumptions rather than about concepts.
+
+**Where this is enforced:** [`packages/engine/src/absurdity.test.ts`](../../packages/engine/src/absurdity.test.ts)
+builds the 256-flavour shop as its own template — own cost lines, own capex, `plausibility: {}` — and asserts
+the whole shape of this decision: that validation has no opinion on it, that the complexity is charged in
+throughput, freezers and inventory days, that nothing is flagged out-of-band against numbers that do not
+exist, and that the concept is *conditionally* viable. The condition it surfaces is the useful part: 256
+flavours loses money on a 30-position counter at any price, and clears 14% EBITDA on a 40-position one,
+because the novelty draws a queue the original shop cannot serve. That is the output this product owes a
+founder — not a verdict.
+
 ---
 
 ## Risk register

@@ -1,0 +1,13 @@
+{
+  "name": "@bizsim/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bizsim/money": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}
