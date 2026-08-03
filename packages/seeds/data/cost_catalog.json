@@ -172,7 +172,7 @@
         "high": 22000
       }
     ],
-    "source": "BLS 35-2014 median wages by metro, 2024, grossed up for payroll load. Fully loaded means employer taxes, workers' comp and any benefits — typically 12-18% on top of wage.",
+    "source": "BLS 35-2014 median wages by metro, 2024, grossed up for payroll load. Fully loaded means employer taxes, workers' comp and any benefits \u2014 typically 12-18% on top of wage.",
     "keywords": [
       "cook",
       "kitchen labor",
@@ -267,7 +267,7 @@
         "high": 75000
       }
     ],
-    "source": "Commercial vehicle listings, 2024. Upfit — shelving, ladder rack, wrap — typically adds $4-9k and is usually omitted.",
+    "source": "Commercial vehicle listings, 2024. Upfit \u2014 shelving, ladder rack, wrap \u2014 typically adds $4-9k and is usually omitted.",
     "keywords": [
       "van",
       "truck",
@@ -302,7 +302,7 @@
         "high": 34000
       }
     ],
-    "source": "BLS 47-2152 and 47-2111 medians, 2024, grossed up for payroll load and workers' comp — which for trades runs far above the 4% typical of office work.",
+    "source": "BLS 47-2152 and 47-2111 medians, 2024, grossed up for payroll load and workers' comp \u2014 which for trades runs far above the 4% typical of office work.",
     "keywords": [
       "plumber",
       "electrician",
@@ -375,7 +375,7 @@
         "high": 90
       }
     ],
-    "source": "Brokerage market reports, 2024. Triple-net adds taxes, insurance and common-area maintenance on top — often another 20-30%.",
+    "source": "Brokerage market reports, 2024. Triple-net adds taxes, insurance and common-area maintenance on top \u2014 often another 20-30%.",
     "keywords": [
       "rent",
       "lease",
@@ -598,7 +598,7 @@
         "high": 11500
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Tips are on top and are the reason the wage holds below fast food in some markets.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Tips are on top and are the reason the wage holds below fast food in some markets.",
     "keywords": [
       "barista"
     ]
@@ -672,7 +672,7 @@
         "high": 11000
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. California fast-food minimums sit at the top of this band.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. California fast-food minimums sit at the top of this band.",
     "keywords": [
       "crew member",
       "counter staff",
@@ -698,7 +698,7 @@
         "high": 13500
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
     "keywords": [
       "shift supervisor",
       "shift lead"
@@ -798,7 +798,7 @@
         "high": 14000
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
     "keywords": [
       "warehouse",
       "picker",
@@ -824,7 +824,7 @@
         "high": 15000
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Excludes the vehicle; commercial auto insurance is its own line.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Excludes the vehicle; commercial auto insurance is its own line.",
     "keywords": [
       "delivery driver",
       "courier"
@@ -844,12 +844,12 @@
         "high": 20000
       },
       {
-        "tier": "specialized — mixer, tanker, heavy haul",
+        "tier": "specialized \u2014 mixer, tanker, heavy haul",
         "low": 19000,
         "high": 27000
       }
     ],
-    "source": "BLS 53-3032 medians, 2024, grossed up. Mixer and tanker endorsements carry a premium, and workers’ comp for drivers runs far above office rates.",
+    "source": "BLS 53-3032 medians, 2024, grossed up. Mixer and tanker endorsements carry a premium, and workers\u2019 comp for drivers runs far above office rates.",
     "keywords": [
       "cdl",
       "truck driver",
@@ -875,7 +875,7 @@
         "high": 23000
       }
     ],
-    "source": "BLS 47-2073 medians, 2024, grossed up including construction-class workers’ comp.",
+    "source": "BLS 47-2073 medians, 2024, grossed up including construction-class workers\u2019 comp.",
     "keywords": [
       "equipment operator",
       "loader operator"
@@ -900,7 +900,7 @@
         "high": 16000
       }
     ],
-    "source": "BLS 47-2061 medians, 2024, grossed up including construction-class workers’ comp — which is most of the gap over comparable indoor work.",
+    "source": "BLS 47-2061 medians, 2024, grossed up including construction-class workers\u2019 comp \u2014 which is most of the gap over comparable indoor work.",
     "keywords": [
       "laborer",
       "helper",
@@ -926,7 +926,7 @@
         "high": 14000
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Seasonal markets compress the working year, not the quarterly rate.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Seasonal markets compress the working year, not the quarterly rate.",
     "keywords": [
       "landscaper",
       "lawn crew",
@@ -952,7 +952,7 @@
         "high": 12000
       }
     ],
-    "source": "BLS 37-2011 medians, 2024, grossed up for payroll load. Contracted services price per square foot instead — see the recurring lines.",
+    "source": "BLS 37-2011 medians, 2024, grossed up for payroll load. Contracted services price per square foot instead \u2014 see the recurring lines.",
     "keywords": [
       "janitor",
       "cleaner",
@@ -1005,7 +1005,7 @@
         "high": 19000
       }
     ],
-    "source": "BLS 43-3031 medians, 2024, grossed up. An outsourced service is usually cheaper below ~20 hours a week — that is its own catalog line.",
+    "source": "BLS 43-3031 medians, 2024, grossed up. An outsourced service is usually cheaper below ~20 hours a week \u2014 that is its own catalog line.",
     "keywords": [
       "bookkeeper (staff)",
       "accounting clerk"
@@ -1030,7 +1030,7 @@
         "high": 16500
       }
     ],
-    "source": "BLS 43-4051 medians and BPO per-seat pricing, 2024. The offshore tier is a vendor invoice, not payroll — no load applies, and quality is the trade.",
+    "source": "BLS 43-4051 medians and BPO per-seat pricing, 2024. The offshore tier is a vendor invoice, not payroll \u2014 no load applies, and quality is the trade.",
     "keywords": [
       "customer support",
       "support rep",
@@ -1056,7 +1056,7 @@
         "high": 20000
       }
     ],
-    "source": "Posted base ranges, 2024, grossed up. Commission is deliberately excluded — model it as a variable cost against revenue, not payroll.",
+    "source": "Posted base ranges, 2024, grossed up. Commission is deliberately excluded \u2014 model it as a variable cost against revenue, not payroll.",
     "keywords": [
       "inside sales",
       "sdr",
@@ -1237,7 +1237,7 @@
         "high": 24000
       }
     ],
-    "source": "BLS 39-9031 medians, 2024, grossed up. Many gyms pay per session instead — if so this is a variable cost, not a block.",
+    "source": "BLS 39-9031 medians, 2024, grossed up. Many gyms pay per session instead \u2014 if so this is a variable cost, not a block.",
     "keywords": [
       "personal trainer",
       "fitness instructor",
@@ -1263,7 +1263,7 @@
         "high": 11000
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
     "keywords": [
       "front desk (gym)",
       "membership desk"
@@ -1288,7 +1288,7 @@
         "high": 11500
       }
     ],
-    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Ratios are the constraint: one attendant per 10-15 dogs is the insurable norm, which makes this a true step-fixed line.",
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load \u2014 employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Ratios are the constraint: one attendant per 10-15 dogs is the insurable norm, which makes this a true step-fixed line.",
     "keywords": [
       "daycare attendant",
       "kennel staff",
@@ -1597,7 +1597,7 @@
         "high": 3500
       }
     ],
-    "source": "Dealer listings, 2024. Busy shops run two — one for espresso, one for batch.",
+    "source": "Dealer listings, 2024. Busy shops run two \u2014 one for espresso, one for batch.",
     "keywords": [
       "coffee grinder"
     ]
@@ -1900,7 +1900,7 @@
         "high": 25000
       }
     ],
-    "source": "Manufacturer quotes and used listings, 2024. Count them against annual barrelage — fermenter capacity, not the brewhouse, usually caps output.",
+    "source": "Manufacturer quotes and used listings, 2024. Count them against annual barrelage \u2014 fermenter capacity, not the brewhouse, usually caps output.",
     "keywords": [
       "fermenter",
       "unitank",
@@ -2082,7 +2082,7 @@
         "high": 25000
       }
     ],
-    "source": "Dealer listings, 2024. Pressurized machines overrun more air into the product, which is margin — the price gap pays back in COGS.",
+    "source": "Dealer listings, 2024. Pressurized machines overrun more air into the product, which is margin \u2014 the price gap pays back in COGS.",
     "keywords": [
       "soft serve",
       "soft-serve",
@@ -2195,7 +2195,7 @@
   },
   {
     "id": "gym_strength",
-    "label": "Strength station — rack, bar, plates",
+    "label": "Strength station \u2014 rack, bar, plates",
     "templates": [],
     "unit": "USD",
     "low": 1500,
@@ -2423,7 +2423,7 @@
         "high": 75000
       }
     ],
-    "source": "Heavy equipment dealer and auction listings, 2024. Attachments — forks, augers, breakers — are $2-15k each and are usually the point.",
+    "source": "Heavy equipment dealer and auction listings, 2024. Attachments \u2014 forks, augers, breakers \u2014 are $2-15k each and are usually the point.",
     "keywords": [
       "skid steer",
       "bobcat"
@@ -2651,7 +2651,7 @@
         "high": 7000
       }
     ],
-    "source": "Astronomy retailer list prices, 2024. Rental duty favours Dobsonians — fewer motors to break and collimation is the only maintenance.",
+    "source": "Astronomy retailer list prices, 2024. Rental duty favours Dobsonians \u2014 fewer motors to break and collimation is the only maintenance.",
     "keywords": [
       "telescope",
       "dobsonian"
@@ -2676,7 +2676,7 @@
         "high": 3000
       }
     ],
-    "source": "Kennel construction supplier pricing, 2024. Drainage and sound attenuation are what separate the tiers — and what inspections check.",
+    "source": "Kennel construction supplier pricing, 2024. Drainage and sound attenuation are what separate the tiers \u2014 and what inspections check.",
     "keywords": [
       "kennel",
       "dog run"
@@ -2781,7 +2781,7 @@
         "high": 400000
       }
     ],
-    "source": "State ABC fee schedules and quota-state resale listings, 2024. In quota states — Florida, New Jersey, parts of others — licenses trade on a secondary market into six figures, and the band is honest about that.",
+    "source": "State ABC fee schedules and quota-state resale listings, 2024. In quota states \u2014 Florida, New Jersey, parts of others \u2014 licenses trade on a secondary market into six figures, and the band is honest about that.",
     "keywords": [
       "liquor license",
       "liquor licence",
@@ -2815,7 +2815,7 @@
   },
   {
     "id": "llc_formation",
-    "label": "Business formation — LLC filing and basics",
+    "label": "Business formation \u2014 LLC filing and basics",
     "templates": [],
     "unit": "USD",
     "low": 100,
@@ -3059,7 +3059,7 @@
         "high": 5000
       }
     ],
-    "source": "Published Unity pricing, 2024. Unreal charges no seat fee — its 5% royalty above $1M of gross is a separate catalog line.",
+    "source": "Published Unity pricing, 2024. Unreal charges no seat fee \u2014 its 5% royalty above $1M of gross is a separate catalog line.",
     "keywords": [
       "unity",
       "game engine license"
@@ -3274,7 +3274,7 @@
   },
   {
     "id": "workers_comp_rate",
-    "label": "Workers’ compensation rate, share of payroll",
+    "label": "Workers\u2019 compensation rate, share of payroll",
     "templates": [],
     "unit": "pct",
     "low": 0.002,
@@ -3448,7 +3448,7 @@
         "high": 1200
       }
     ],
-    "source": "Service contractor pricing, 2024. Fire code sets the frequency — quarterly for most full-service kitchens — so this is 4x a year, not optional.",
+    "source": "Service contractor pricing, 2024. Fire code sets the frequency \u2014 quarterly for most full-service kitchens \u2014 so this is 4x a year, not optional.",
     "keywords": [
       "hood cleaning",
       "duct cleaning"
@@ -3523,7 +3523,7 @@
         "high": 800
       }
     ],
-    "source": "Linen service pricing, 2024. On-premise laundry beats this above roughly 60 hotel rooms — see the commercial laundry line.",
+    "source": "Linen service pricing, 2024. On-premise laundry beats this above roughly 60 hotel rooms \u2014 see the commercial laundry line.",
     "keywords": [
       "linen service",
       "uniform service"
@@ -3629,7 +3629,7 @@
         "high": 2500
       }
     ],
-    "source": "ASCAP, BMI and SESAC published rate schedules, 2024. Three separate societies, three separate invoices — and they audit. A commercial streaming service with licensing built in covers the background tier.",
+    "source": "ASCAP, BMI and SESAC published rate schedules, 2024. Three separate societies, three separate invoices \u2014 and they audit. A commercial streaming service with licensing built in covers the background tier.",
     "keywords": [
       "music licensing",
       "ascap",
@@ -3807,7 +3807,7 @@
         "high": 80
       }
     ],
-    "source": "Maltster and hop supplier pricing, 2024 — grain, hops and yeast only. Packaging roughly doubles the per-barrel figure for cans versus draft.",
+    "source": "Maltster and hop supplier pricing, 2024 \u2014 grain, hops and yeast only. Packaging roughly doubles the per-barrel figure for cans versus draft.",
     "keywords": [
       "brewing cost",
       "per barrel",
@@ -3862,10 +3862,103 @@
         "high": 0.45
       }
     ],
-    "source": "DTC operating benchmarks, 2023-24, landed — freight and duty included. Quoting factory cost without freight is the classic understatement.",
+    "source": "DTC operating benchmarks, 2023-24, landed \u2014 freight and duty included. Quoting factory cost without freight is the classic understatement.",
     "keywords": [
       "landed cost",
       "dtc cogs"
+    ]
+  },
+  {
+    "id": "vending_machine",
+    "label": "Vending machine (per unit)",
+    "templates": [],
+    "unit": "USD",
+    "low": 1500,
+    "high": 18000,
+    "tiers": [
+      {
+        "tier": "used snack/soda, refurbished",
+        "low": 1500,
+        "high": 3500
+      },
+      {
+        "tier": "new combo snack-drink",
+        "low": 4000,
+        "high": 8000
+      },
+      {
+        "tier": "Japanese-style or custom multi-category, imported",
+        "low": 8000,
+        "high": 18000
+      }
+    ],
+    "source": "New combo units run $4-8k from US distributors; refurbished route machines trade well below that. Imported Japanese-style units add freight, 110V conversion and parts risk \u2014 get a landed quote before modelling one.",
+    "keywords": [
+      "vending machine",
+      "combo machine",
+      "japanese vending"
+    ]
+  },
+  {
+    "id": "vending_daily_sales",
+    "label": "Vending sales per machine per day",
+    "templates": [],
+    "unit": "USD",
+    "low": 5,
+    "high": 150,
+    "tiers": [
+      {
+        "tier": "typical US placement",
+        "low": 5,
+        "high": 25
+      },
+      {
+        "tier": "good placement (offices, gyms, campuses)",
+        "low": 25,
+        "high": 75
+      },
+      {
+        "tier": "premium high-traffic (transit, hospitals, airports)",
+        "low": 75,
+        "high": 150
+      }
+    ],
+    "source": "NAMA operator surveys put the median US machine in the teens of dollars per day; placement, not the machine, is nearly the whole distribution. Count the location's actual daily foot traffic before believing the top tier.",
+    "keywords": [
+      "vending sales",
+      "per machine per day",
+      "vending revenue"
+    ]
+  },
+  {
+    "id": "vending_location_commission",
+    "label": "Vending location commission",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.05,
+    "high": 0.25,
+    "tiers": [
+      {
+        "tier": "small independent host",
+        "low": 0.05,
+        "high": 0.1
+      },
+      {
+        "tier": "standard placement contract",
+        "low": 0.1,
+        "high": 0.2
+      },
+      {
+        "tier": "premium venue, bid or exclusive",
+        "low": 0.2,
+        "high": 0.25
+      }
+    ],
+    "source": "Vending placement contracts pay the host a share of gross sales; 10-20% is the common band and premium venues bid higher. The rate is negotiable and belongs in the written placement agreement, not in memory.",
+    "keywords": [
+      "location commission",
+      "host commission",
+      "placement commission"
     ]
   }
 ]

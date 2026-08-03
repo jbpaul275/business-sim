@@ -1,4 +1,5 @@
 import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
+import { statedFiguresAppendix } from './commitments.js';
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import {
@@ -165,6 +166,19 @@ export class ConceptInterview {
   }
 
   /**
+   * The system prompt for the next call: the fixed interview prompt plus every
+   * money figure the model has already stated in this conversation, extracted
+   * from the transcript and handed back as explicit commitments.
+   *
+   * Rebuilt per call rather than mutated, because the transcript is the source
+   * of truth: `undo()` retracts an undone turn's figures automatically, and a
+   * failed call that rolled its message back never committed anything.
+   */
+  private promptNow(): string {
+    return this.system + statedFiguresAppendix(this.transcript);
+  }
+
+  /**
    * Synthesise from the transcript as it stands, without a new player message.
    *
    * Exists because a draft that fails on an overloaded model is not the same
@@ -174,6 +188,30 @@ export class ConceptInterview {
    * two.
    */
   async retryDraft(): Promise<ConceptDraft> {
+    return this.runDraft();
+  }
+
+  /**
+   * Re-draft after the schema or a structural check rejected one, carrying the
+   * correction — without a conversational turn.
+   *
+   * The repair used to be sent as a player message, which cost a full turn
+   * call before the re-draft: the model would reply "resending it now" (shown
+   * to the player as conversation), *then* draft. The turn added 8-15 seconds
+   * and one more billed call to every repair round and said nothing. The
+   * correction is for the drafting call, so it goes to the drafting call.
+   *
+   * A repeated repair replaces the previous correction rather than stacking a
+   * second consecutive user message — the new correction supersedes the old
+   * one, and some providers reject non-alternating roles.
+   */
+  async repairDraft(correction: string): Promise<ConceptDraft> {
+    const last = this.transcript[this.transcript.length - 1];
+    if (last?.role === 'user') {
+      this.transcript[this.transcript.length - 1] = { role: 'user', content: correction };
+    } else {
+      this.transcript.push({ role: 'user', content: correction });
+    }
     return this.runDraft();
   }
 
@@ -193,7 +231,7 @@ export class ConceptInterview {
     const before = this.transport.usage?.thinkingTokens ?? 0;
     let draft;
     try {
-      draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
+      draft = assertDraftShape(await this.transport.draft(this.promptNow(), this.transcript));
     } catch (error) {
       throw isTransient(error) ? new TransientError(error, 'draft') : error;
     }
@@ -266,7 +304,7 @@ export class ConceptInterview {
     const callsBefore = this.transport.usage?.calls ?? 0;
     let turn, reasoning, usage;
     try {
-      ({ turn, reasoning, usage } = await this.transport.turn(this.system, this.transcript));
+      ({ turn, reasoning, usage } = await this.transport.turn(this.promptNow(), this.transcript));
     } catch (error) {
       // Roll the player's message back out of the transcript before rethrowing.
       // It was pushed above so the call could see it; leaving it there means a

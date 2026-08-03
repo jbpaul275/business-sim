@@ -8,7 +8,15 @@ import {
   tick,
   type TickResult,
 } from '@bizsim/engine';
-import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
+import {
+  deviationLabel,
+  type Action,
+  type Assumption,
+  type Business,
+  type CrisisRemedy,
+  type EngineEvent,
+  type WorldState,
+} from '@bizsim/schemas';
 import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
@@ -124,6 +132,15 @@ function describeAction(a: Action): string {
       return `sell the business at ${a.multipleOfEbitda ?? DEFAULT_MULTIPLE}× EBITDA`;
     case 'SET_CRISIS_POLICY':
       return `crisis order → ${a.policy.join(', ')}`;
+    case 'ADJUST_ASSUMPTION': {
+      const value =
+        typeof a.newValue === 'bigint'
+          ? toDisplay(a.newValue, { showCents: false })
+          : a.newValue <= 1
+            ? `${(a.newValue * 100).toFixed(1)}%`
+            : String(a.newValue);
+      return `assumption ${a.assumptionId} → ${value}`;
+    }
     default:
       return a.kind;
   }
@@ -316,6 +333,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}expand${RESET} 20 150k        add capacity for what it costs to build ${DIM}— +2 quarters${RESET}
   ${BOLD}market${RESET} 40% 150k       open a new territory: more demand, not more room ${DIM}— +2 quarters${RESET}
   ${BOLD}upgrade${RESET} 15% 800k      build something better: +15% to what a customer will pay ${DIM}— +2 quarters${RESET}
+  ${BOLD}assume${RESET} a12 35% [why]   revise a model assumption ${DIM}— a COGS rate, a cost per unit — \`assumptions\` lists them${RESET}
   ${BOLD}policy${RESET} revolver,inject,defer,emergency,insolvency
                         reorder the cash-crisis ladder (§9.4)
 
@@ -331,6 +349,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}postmortem${RESET}            what would have had to be true ${DIM}— any time, not just at the end${RESET}
   ${BOLD}costs${RESET}                 where the money goes, biggest line first
   ${BOLD}lines${RESET}                 list step-fixed cost line ids
+  ${BOLD}assumptions${RESET}           every number the model rests on, and how to argue with one
   ${BOLD}help${RESET} · ${BOLD}quit${RESET}
 `;
 
@@ -501,9 +520,25 @@ function topicOf(question: string): Topic {
  */
 export interface AdvisorMemory {
   said: Set<string>;
+  /**
+   * The running Q&A with the model advisor, session-long.
+   *
+   * Without it, every question was answered by an amnesiac: a vending operator
+   * explained that some machines sold higher-margin products — new information
+   * the model should have folded into everything after — and the very next
+   * question was answered as if the exchange had never happened. `said` resets
+   * each quarter because the deterministic findings recompute; the
+   * conversation does not reset, because the player's account of their own
+   * business is not a quarterly figure.
+   */
+  exchanges: { role: 'user' | 'assistant'; content: string }[];
 }
 
-export const newAdvisorMemory = (): AdvisorMemory => ({ said: new Set() });
+export const newAdvisorMemory = (): AdvisorMemory => ({ said: new Set(), exchanges: [] });
+
+/** Passed to the model each call: enough to hold a thread, capped so a long
+ * session cannot grow the prompt without bound. */
+const ADVISOR_HISTORY_MESSAGES = 12;
 
 /**
  * Why the optimum stops where it does.
@@ -1072,8 +1107,9 @@ function advise(
 
   if (out.length === 0) {
     out.push(
-      `Nothing is obviously binding this quarter. \`price\`, \`marketing\`, \`hire\` and ` +
-        `\`expand\` are the levers; \`skip 4\` runs a year if you want to see the trend first.`,
+      `Nothing is obviously binding this quarter. \`price\`, \`marketing\`, \`hire\`, ` +
+        `\`expand\` and \`assume\` (the model's own cost rates) are the levers; ` +
+        `\`skip 4\` runs a year if you want to see the trend first.`,
     );
   }
 
@@ -1120,8 +1156,34 @@ const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing', 'postmortem',
   'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
   'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
-  'businesses', 'switch', 'clone', 'divest',
+  'businesses', 'switch', 'clone', 'divest', 'assume', 'assumptions',
 ]);
+
+/**
+ * The commands as the model advisor sees them — with semantics, not just names.
+ *
+ * A bare verb list invited the model to guess what each verb does, and it
+ * guessed confidently: told a vending operator that `quotes` would "list new
+ * sites with their machine counts and costs" — a screen that has never
+ * existed; `quotes` prices securities. A model that knows only a command's
+ * name will describe the command the player wishes existed. One line of
+ * meaning per lever is what stops advice from inventing the game.
+ */
+const COMMAND_GUIDE: readonly string[] = [
+  'price <amount> — set the price per unit; demand responds through the elasticity',
+  'marketing <amount> — set marketing spend per quarter; diminishing returns',
+  'assume <id> <value> [why] — revise a model assumption by id: a COGS rate, a landlord or platform revenue share, a cost per unit. This is how supplier switches, product-mix changes and renegotiated deal terms are recorded',
+  'assumptions — list every model assumption with its id, value, range and provenance',
+  'hire <line> [n] / fire <line> [n] — add or remove staffed blocks; cost lands now, capacity next quarter',
+  'expand <units> <cost> — more capacity at the current site; two-quarter buildout',
+  'market <pct> <cost> — open a new territory: more addressable demand, not more capacity; two quarters',
+  'upgrade <pct> <cost> — a better product: raises what customers will pay; two quarters',
+  'debt <amount> [quarters] — raise a term loan (fee now, proceeds next quarter); draw <amount> — draw the revolver; repay <amount> — pay principal down',
+  'inject <amount> — move household cash into the business; distribute <amount> — take cash out to the household',
+  'buy <ticker> <amount> / sell — household money into listed SECURITIES (index funds and the like); quotes — that securities catalog. Nothing here lists business sites or locations',
+  'clone <equity> <name> — open a second location of this same business; divest <n> — sell a business',
+  'costs — the cost breakdown; lines — staffing line ids; skip <n> — run quarters unattended; policy — reorder the cash-crisis ladder',
+];
 
 /**
  * Anything that is not a command, and is more than one word, is a question.
@@ -1149,6 +1211,51 @@ function looksLikeAQuestion(line: string, verb: string): boolean {
  * computed. Sorted by size because that is the order the decisions come in:
  * nobody cuts the software subscription first.
  */
+/** An assumption's value, in its own units. */
+function renderAssumptionValue(a: Assumption): string {
+  if (typeof a.value === 'bigint') return toCompact(a.value);
+  if (a.unit === 'pct') return pct(a.value);
+  return `${a.value.toLocaleString()} ${a.unit === 'ratio' ? '' : a.unit}`.trim();
+}
+
+const renderRange = (a: Assumption): string =>
+  a.unit === 'pct' && !a.isMoney
+    ? `${pct(a.range.low)}–${pct(a.range.high)}`
+    : a.isMoney
+      ? `${toCompact(BigInt(Math.round(a.range.low * 100)))}–${toCompact(BigInt(Math.round(a.range.high * 100)))}`
+      : `${a.range.low.toLocaleString()}–${a.range.high.toLocaleString()}`;
+
+/** A plausible value for the error message, so the example actually parses. */
+const exampleValue = (a: Assumption): string =>
+  a.isMoney ? '12k' : a.unit === 'pct' ? '35%' : '450';
+
+/**
+ * The register, mid-game — §10.1's read half.
+ *
+ * The setup flow shows every one of these before commit; this is the same
+ * ledger once the world exists, because "what does the model actually
+ * believe?" is a question a player asks in period 6, usually right after the
+ * screen disagreed with them.
+ */
+function renderAssumptions(business: Business): void {
+  const all = Object.values(business.assumptions.byId).sort((a, b) =>
+    a.category === b.category ? a.label.localeCompare(b.label) : a.category.localeCompare(b.category),
+  );
+  if (all.length === 0) {
+    console.log(`  ${DIM}This business has no registered assumptions to argue with.${RESET}`);
+    return;
+  }
+  console.log(
+    `\n  ${BOLD}ASSUMPTIONS${RESET}  ${DIM}the numbers the model rests on — \`assume <id> <value> [why]\` revises one${RESET}`,
+  );
+  for (const a of all) {
+    console.log(
+      `  ${pad(a.id, 6)}${pad(a.label, 38)}${rpad(renderAssumptionValue(a), 10)}  ` +
+        `${DIM}${rpad(renderRange(a), 17)}  ${a.provenance}${RESET}`,
+    );
+  }
+}
+
 function renderCosts(business: Business, result: TickResult): void {
   const entry = result.statements.byBusiness[business.id];
   if (!entry) {
@@ -1158,11 +1265,19 @@ function renderCosts(business: Business, result: TickResult): void {
   const is = entry.incomeStatement;
 
   const lines: { label: string; amount: Money; note: string }[] = [
-    ...business.costs.variableWithRevenue.map((c) => ({
-      label: c.label,
-      amount: mulRate(is.revenue, c.pctOfRevenue),
-      note: `${pct(c.pctOfRevenue)} of revenue`,
-    })),
+    ...business.costs.variableWithRevenue.map((c) => {
+      // The rate is an assumption, and the register knows it by id. Naming the
+      // command here matters because this line is where a player who thinks
+      // the rate is wrong is looking when they think it.
+      const assumptionId = business.assumptions.byPath[`costs.${c.id}.pctOfRevenue`];
+      return {
+        label: c.label,
+        amount: mulRate(is.revenue, c.pctOfRevenue),
+        note:
+          `${pct(c.pctOfRevenue)} of revenue` +
+          (assumptionId ? ` — \`assume ${assumptionId}\` changes it` : ''),
+      };
+    }),
     ...business.costs.stepFixed.map((c) => ({
       label: c.label,
       amount: c.blockCostPerQuarter * BigInt(c.currentBlocks),
@@ -1196,7 +1311,8 @@ function renderCosts(business: Business, result: TickResult): void {
   );
   console.log(
     `  ${DIM}${toCompact(reachable)} of that is staffing you can change this quarter with` +
-      ` \`fire\`; the rest is contracted or scales with revenue.${RESET}`,
+      ` \`fire\`; the revenue-scaled rates are assumptions \`assume\` can revise; the rest` +
+      ` is contracted.${RESET}`,
   );
 }
 
@@ -1233,10 +1349,12 @@ async function speakToPlayer(
   findings: readonly string[],
   question: string,
   journal?: Journal,
+  memory?: AdvisorMemory,
 ): Promise<{ reply: string } | undefined> {
   try {
-    const briefing = buildBriefing(world, business, result, findings, [...VERBS].filter(Boolean));
-    const outcome = await askAdvisor(advisor, briefing, question, [], () => Date.now());
+    const briefing = buildBriefing(world, business, result, findings, COMMAND_GUIDE);
+    const history = memory?.exchanges.slice(-ADVISOR_HISTORY_MESSAGES) ?? [];
+    const outcome = await askAdvisor(advisor, briefing, question, history, () => Date.now());
     if (!outcome) {
       // Twice in a row it could not answer without inventing a figure. The
       // arithmetic is already on screen and is still correct; adding "the model
@@ -1264,6 +1382,12 @@ async function speakToPlayer(
     if (outcome.retriedOn && outcome.retriedOn.length > 0) {
       journal?.write({ kind: 'advice_corrected', question, figures: outcome.retriedOn });
     }
+    // Only what was actually said enters the record — a refused or failed
+    // answer must not become history the next answer builds on.
+    memory?.exchanges.push(
+      { role: 'user', content: question },
+      { role: 'assistant', content: outcome.reply },
+    );
     return { reply: outcome.reply };
   } catch {
     // Transport failures are not the player's problem and not their fault.
@@ -1300,7 +1424,7 @@ async function narrateTurn(
     const events = result.events
       .filter((e) => e.severity !== 'INFO')
       .map((e) => describeEvent(e));
-    const briefing = buildBriefing(world, business, result, [], [...VERBS].filter(Boolean), {
+    const briefing = buildBriefing(world, business, result, [], COMMAND_GUIDE, {
       ...(prior ? { prior: { revenue: prior.revenue, ebitda: prior.ebitda, cash: prior.cash } } : {}),
       events,
     });
@@ -1421,6 +1545,98 @@ async function parseCommand(
         console.log(`  ${pad(c.id, 22)}${DIM}${c.label} · ${c.currentBlocks} blocks${RESET}`);
       }
       return none;
+
+    case 'assumptions':
+      renderAssumptions(business);
+      return none;
+
+    /**
+     * §10.1's second half, finally reachable from the game.
+     *
+     * A vending operator said his coffee and soft-serve margins should run
+     * 60-70% where the draft assumed a flat 50% product cost — a claim about
+     * the real world (substitute a generic product, renegotiate supply) that
+     * the game could not express: every registered assumption was locked the
+     * moment setup ended, and the only margin lever left was price. The
+     * engine's `ADJUST_ASSUMPTION` had write-through to the model all along;
+     * no command ever emitted it.
+     *
+     * D-5 applies mid-game exactly as it does at setup: a value outside the
+     * drafted range gets a warning and a provenance mark, never a refusal.
+     * The player is the one looking at the real supplier quote.
+     */
+    case 'assume': {
+      const token = rest[0] ?? '';
+      const target = token.trim()
+        ? Object.values(business.assumptions.byId).find(
+            (a) => a.id === token || a.label.toLowerCase().startsWith(token.toLowerCase()),
+          )
+        : undefined;
+      if (!target) {
+        return fail(
+          token.trim()
+            ? `No assumption matches "${token}". \`assumptions\` lists every id.`
+            : 'assume needs an assumption and a value, e.g. `assume a12 35%`. `assumptions` lists them.',
+        );
+      }
+
+      const raw = rest[1] ?? '';
+      if (!raw.trim()) {
+        return fail(
+          `${target.label} is currently ${renderAssumptionValue(target)}. ` +
+            `Give the new value too, e.g. \`assume ${target.id} ${exampleValue(target)}\`.`,
+        );
+      }
+
+      let newValue: number | Money;
+      if (target.isMoney) {
+        const money = parseMoney(raw);
+        if (money === undefined) return fail(`${target.label} is a dollar amount, e.g. \`assume ${target.id} ${exampleValue(target)}\`.`);
+        if (money < 0n) return fail(`${target.label} cannot be negative.`);
+        newValue = money;
+      } else if (target.unit === 'pct') {
+        // "35%", "0.35" and "35" all mean the same rate: bare numbers above 1
+        // are read as percentage points, because nobody types `assume a12 35`
+        // meaning thirty-five times revenue.
+        const numeric = Number(raw.replace(/%$/, '').replace(/,/g, ''));
+        if (!Number.isFinite(numeric)) return fail(`${target.label} is a rate, e.g. \`assume ${target.id} 35%\`.`);
+        const rate = raw.trim().endsWith('%') || numeric > 1 ? numeric / 100 : numeric;
+        if (rate < 0 || rate > 1) return fail(`A rate has to sit between 0% and 100%; ${raw} does not.`);
+        newValue = rate;
+      } else {
+        const numeric = Number(raw.replace(/,/g, ''));
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          return fail(`${target.label} is a number (${target.unit}), e.g. \`assume ${target.id} ${exampleValue(target)}\`.`);
+        }
+        newValue = numeric;
+      }
+
+      const evidence = rest.slice(2).join(' ').trim();
+      const action: Action = {
+        kind: 'ADJUST_ASSUMPTION',
+        assumptionId: target.id,
+        newValue,
+        ...(evidence ? { evidence } : {}),
+      };
+
+      // The warning, not the refusal (D-5). Out of the drafted range is a
+      // claim worth flagging at the moment it is made — after the quarter runs
+      // it is indistinguishable from a number that was always there.
+      const numeric = typeof newValue === 'bigint' ? Number(newValue) / 100 : newValue;
+      const flags: string[] = [];
+      if (numeric < target.range.low || numeric > target.range.high) {
+        flags.push(
+          `outside the drafted range (${renderRange(target)}) — modelled anyway, recorded as ` +
+            (evidence ? 'your sourced figure' : 'your assertion, no evidence behind it'),
+        );
+      }
+      const deviation = deviationLabel({ ...target, value: newValue });
+      if (deviation) flags.push(`${deviation} — benchmark: ${target.benchmarkBand!.source}`);
+      return {
+        actions: [action],
+        ...(flags.length > 0 ? { message: `${DIM}${target.label}: ${flags.join('; ')}${RESET}` } : {}),
+      };
+    }
 
     case 'skip': {
       const n = Number(rest[0] ?? 1);
@@ -2079,7 +2295,7 @@ async function parseCommand(
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
 
         const spoken = advisor
-          ? await speakToPlayer(advisor, world, business, result, answered, line, journal)
+          ? await speakToPlayer(advisor, world, business, result, answered, line, journal, memory)
           : undefined;
 
         journal?.write({
@@ -2211,6 +2427,12 @@ export async function play(
   // The scoreboard fires once. After that the run belongs to the player.
   let pastMilestone = false;
 
+  // Session-long, because the conversation is: the player's account of their
+  // own business must survive the quarter boundary. `said` is cleared each
+  // quarter below — the deterministic findings recompute and may honestly
+  // repeat once the numbers have changed.
+  const memory = newAdvisorMemory();
+
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
   record(last);
@@ -2306,10 +2528,10 @@ export async function play(
       const queued: Action[] = [];
       let quit = false;
       let skip = 0;
-      // Per quarter, not per session: repeating yourself inside one decision is
-      // not listening, and repeating yourself after a quarter has run is the
-      // same answer holding because the same numbers do.
-      const memory = newAdvisorMemory();
+      // The dedup is per quarter — repeating a finding inside one decision is
+      // not listening; repeating it after the numbers changed is a fresh
+      // finding. The conversation on the same object is session-long.
+      memory.said.clear();
 
       while (true) {
         const prompt = queued.length > 0 ? `${DIM}[${queued.length} queued]${RESET} > ` : '> ';

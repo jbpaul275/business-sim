@@ -391,7 +391,7 @@ async function challengeLoop(
   input: LineSource,
   model: BusinessModel,
   transport?: ConceptTransport,
-): Promise<void> {
+): Promise<string | undefined> {
   // Worth arguing with first: furthest out of band, then the unsourced.
   const arguable = [...model.assumptions]
     .filter((a) => a.outsideBenchmark || !isWellSourced(a.provenance))
@@ -401,12 +401,13 @@ async function challengeLoop(
         a.label.localeCompare(b.label),
     )
     .slice(0, 12);
-  if (arguable.length === 0) return;
+  if (arguable.length === 0) return undefined;
 
   console.log(
     `\n  ${DIM}\`challenge <n> <value> [why]\` argues with one of these. A bare number moves it` +
       ` at most to the\n  edge of its range; a real basis — a quote, a listing, a model number —` +
-      ` moves it properly.${RESET}`,
+      ` moves it properly.\n  Plain words work too: say what should change about the business` +
+      ` itself and the model redrafts it.${RESET}`,
   );
   arguable.forEach((a, i) => {
     const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
@@ -415,10 +416,25 @@ async function challengeLoop(
 
   while (true) {
     const raw = await input.next('\n  challenge, or enter to move on > ');
-    if (raw === undefined || raw.trim() === '') return;
+    if (raw === undefined || raw.trim() === '') return undefined;
     const [verb = '', indexToken = '', valueToken = '', ...basisWords] = raw.trim().split(/\s+/);
     if (verb.toLowerCase() !== 'challenge') {
-      console.log(`  ${DIM}\`challenge 3 22000 used unit on MachineryTrader\`, or enter to move on.${RESET}`);
+      /**
+       * Prose at a numbers prompt is an objection, not a typo.
+       *
+       * "wait, I don't want to lease I want to buy the planes used at a good
+       * price" — typed here, answered with a canned `challenge 3 22000` hint,
+       * and lost. A structural change is a drafting question the register
+       * cannot express, so it is handed back to the caller, who re-enters the
+       * interview with it. The three-word floor keeps a mistyped verb from
+       * triggering an expensive redraft.
+       */
+      if (raw.trim().split(/\s+/).length >= 3) return raw.trim();
+      console.log(
+        `  ${DIM}\`challenge 3 22000 used unit on MachineryTrader\` argues with a number — or` +
+          ` say in plain words\n  what should change about the business itself, and the model` +
+          ` redrafts it.${RESET}`,
+      );
       continue;
     }
 
@@ -795,7 +811,7 @@ export async function runSetup(
    * screen and the response curve visible in the last quarter's revenue. That
    * is where the call can actually be made.
    */
-  const marketing = template.modifierDefaults.baseMarketingSpendPerQuarter;
+  // (moved into the pricing loop below — the template can change on reopen)
 
   /**
    * Which decade of market history this run gets.
@@ -853,372 +869,407 @@ export async function runSetup(
    */
   const investable = config.startCapital;
 
-  for (let attempt = 1; ; attempt++) {
-    // What opening costs, before anyone has been asked for a number. Everything
-    // below is arithmetic on this, which is the whole point: the player is
-    // being shown a plan, not interrogated for its inputs.
-    const bare = buildModelFromTemplate({
-      businessName,
-      template,
-      archetype,
-      scale,
-      marketingSpendPerQuarter: marketing,
-      equityInjection: 0n,
-      ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
-    });
-    // Opened, so the assets exist to lend against. Nothing is committed by
-    // this: it is the same throwaway probe the outlay figure comes from.
-    const bareWorld = createWorld({
-      id: 'probe',
-      playerId: 'probe',
-      config,
-      annualLivingExpenses: 0n,
-      models: [bare],
-    });
-    const monthZero = computeMonthZeroOutlays(bare).total;
-    // Month zero alone is a knife edge: the first quarter's fixed costs land
-    // before any revenue does, so a business funded to exactly its opening
-    // outlay begins on the crisis ladder. One quarter of fixed operating cost
-    // on top — the buffer a lender would expect to see anyway.
-    const quarterOfFixed = bare.costs.fixedPeriod.reduce<Money>(
-      (a, c) => a + c.amountPerQuarter,
-      0n,
-    );
-    const needed = monthZero + quarterOfFixed;
-
-    const proposedEquity = needed < investable ? needed : investable;
-    const gap = needed > proposedEquity ? needed - proposedEquity : 0n;
-    // Grossed up for the fee, because a loan does not deliver its own
-    // principal: SBA 7(a) charges 3% at close, so borrowing exactly the gap
-    // lands 3% short. This is what left an earlier run one origination fee
-    // outside a gate the setup had just recommended.
-    const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
-    const wanted = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
-
-    /**
-     * Propose only what a lender will actually write.
-     *
-     * The screen offered "$40,000 of your own plus a $113,925 SBA 7(a)" and
-     * the lender declined it on the very next screen — $113,925 against
-     * $61,800 of collateral. Recommending a plan and then refusing it is the
-     * same self-contradiction as the commit gate rejecting a build the setup
-     * had just suggested, and it teaches the player that the numbers on offer
-     * are not real.
-     *
-     * Two ceilings, both the underwriter's own: lending value of the assets,
-     * and ten times the owner's injection. The collateral is *shared* — the
-     * engine underwrites each facility against the full amount independently,
-     * so proposing both at the ceiling would slip two loans through a test
-     * meant to allow one. The term loan takes priority and the revolver gets
-     * what is left, because the term loan is what actually funds opening.
-     */
-    const lendable = collateralValue(bareWorld.businesses[0]!);
-    const onEquity = mulRate(proposedEquity, 1 / MIN_OWNER_INJECTION_PCT);
-    const ceiling = lendable < onEquity ? lendable : onEquity;
-    const proposedLoan = wanted < ceiling ? wanted : ceiling;
-    const headroom = ceiling > proposedLoan ? ceiling - proposedLoan : 0n;
-    const revolverTarget = fromDisplay(100_000);
-    const proposedRevolver = headroom < revolverTarget ? headroom : revolverTarget;
-
-    let loan: Money;
-    let revolver: Money;
-    let equity: Money;
-    let outside = 0n;
-
-    /**
-     * One choice instead of three numbers.
-     *
-     * The old screen asked for an SBA loan, a revolver limit and an equity
-     * injection as bare dollar figures. Nobody arrives at a terminal knowing
-     * what revolver limit a veggie burger place should carry, and the
-     * arithmetic that answers it — month zero, a quarter of fixed costs, the
-     * origination fee, what is left after living expenses — is all already
-     * computed right here. Asking was never eliciting information; it was
-     * making the player do the sum by hand and then refusing them when they
-     * got it wrong.
-     *
-     * The numbers are still fully editable. What changed is that the default
-     * is a worked plan rather than a blank field.
-     */
-    console.log(`\n${rule('Funding')}`);
-    console.log(
-      note(
-        `Opening costs ${toDisplay(needed, { showCents: false })} — buildout, deposits and` +
-          ` the first quarter of fixed costs before any revenue lands.`,
-      ),
-    );
-    console.log(
-      note(
-        `You have ${toDisplay(config.startCapital, { showCents: false })}, all of it` +
-          ` available to put into this.`,
-      ) + '\n',
-    );
-    const plan =
-      proposedLoan > 0n
-        ? `${toDisplay(proposedEquity, { showCents: false })} of your own plus a ` +
-          `${toDisplay(proposedLoan, { showCents: false })} SBA 7(a)`
-        : `${toDisplay(proposedEquity, { showCents: false })} of your own, no debt needed`;
-    /**
-     * Never offer a plan that does not fund the build.
-     *
-     * A Nevada solar farm was offered "$1,000,000 of your own plus a
-     * $3,000,000 SBA 7(a)" against a $5.19M opening cost, chose it, and was
-     * refused one screen later — short by $1.192M. The proposal already
-     * respects the lending ceiling; what it did not do was notice that the
-     * capped plan cannot cover opening, and say so before the choice rather
-     * than after it.
-     */
-    const proposedTotal = proposedEquity + proposedLoan;
-    const shortBy = needed > proposedTotal ? needed - proposedTotal : 0n;
-
-    console.log(
-      shortBy > 0n
-        ? `  1  ${plan} — ${RED}still ${toDisplay(shortBy, { showCents: false })} short${RESET}`
-        : proposedRevolver > 0n
-          ? `  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`
-          : `  1  ${plan}`,
-    );
-    console.log(`  2  ${DIM}Set the loan, revolver and equity myself${RESET}`);
-    if (shortBy > 0n) {
-      console.log(
-        note(
-          `That is everything a lender will write against this build plus everything you have.` +
-            ` Closing the gap takes money from outside the deal — a tax credit, a grant, a` +
-            ` partner — or a smaller project. Option 2 asks for outside capital as well.`,
-        ),
-      );
-    }
-
-    const choice = await ask(input, '> ', 1, (raw) => {
-      const n = parseNumber(raw);
-      return n === 1 || n === 2 ? n : undefined;
-    });
-
-    if (choice === 1) {
-      loan = proposedLoan;
-      revolver = proposedRevolver;
-      equity = proposedEquity;
-    } else {
-      loan = await ask(
-        input,
-        `  ${pad('SBA 7(a) loan', 42)}[${toDisplay(proposedLoan, { showCents: false })}]: `,
-        proposedLoan,
-        parseMoney,
-      );
-      revolver = await ask(
-        input,
-        `  ${pad('Revolver limit', 42)}[${toDisplay(proposedRevolver, { showCents: false })}]: `,
-        proposedRevolver,
-        parseMoney,
-      );
-      equity = await ask(
-        input,
-        `  ${pad('Your own capital into the business', 42)}[${toDisplay(proposedEquity, { showCents: false })}]: `,
-        proposedEquity,
-        parseMoney,
-      );
-      /**
-       * The line the solar farm had nowhere to put.
-       *
-       * Its drafted stack was $1.0M sponsor equity, ~$1.5M of transferred
-       * federal ITC and ~$3.2M of debt. The screen carried the first and the
-       * third, dropped the credit, and refused the project as unaffordable —
-       * having itself established that the credit was most of what made it
-       * financeable.
-       */
-      outside = await ask(
-        input,
-        `  ${pad('Grants, tax credits, outside equity', 42)}[$0]: `,
+  /**
+   * Everything from financing to the challenge gate runs in a loop.
+   *
+   * The challenge prompt can hand back a *structural* objection — "I want to
+   * buy the planes, not lease them" — which no assumption edit can express.
+   * That goes back into the interview through `reopen`, a fresh draft comes
+   * back, and pricing starts over: month zero, the funding plan and the
+   * register are all downstream of the draft, so all of them are recomputed.
+   */
+  for (;;) {
+    const marketing = template.modifierDefaults.baseMarketingSpendPerQuarter;
+    for (let attempt = 1; ; attempt++) {
+      // What opening costs, before anyone has been asked for a number. Everything
+      // below is arithmetic on this, which is the whole point: the player is
+      // being shown a plan, not interrogated for its inputs.
+      const bare = buildModelFromTemplate({
+        businessName,
+        template,
+        archetype,
+        scale,
+        marketingSpendPerQuarter: marketing,
+        equityInjection: 0n,
+        ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+      });
+      // Opened, so the assets exist to lend against. Nothing is committed by
+      // this: it is the same throwaway probe the outlay figure comes from.
+      const bareWorld = createWorld({
+        id: 'probe',
+        playerId: 'probe',
+        config,
+        annualLivingExpenses: 0n,
+        models: [bare],
+      });
+      const monthZero = computeMonthZeroOutlays(bare).total;
+      // Month zero alone is a knife edge: the first quarter's fixed costs land
+      // before any revenue does, so a business funded to exactly its opening
+      // outlay begins on the crisis ladder. One quarter of fixed operating cost
+      // on top — the buffer a lender would expect to see anyway.
+      const quarterOfFixed = bare.costs.fixedPeriod.reduce<Money>(
+        (a, c) => a + c.amountPerQuarter,
         0n,
-        parseMoney,
       );
-    }
+      const needed = monthZero + quarterOfFixed;
 
-    const debt = [
-      ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
-      ...(revolver > 0n
-        ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }]
-        : []),
-    ];
+      const proposedEquity = needed < investable ? needed : investable;
+      const gap = needed > proposedEquity ? needed - proposedEquity : 0n;
+      // Grossed up for the fee, because a loan does not deliver its own
+      // principal: SBA 7(a) charges 3% at close, so borrowing exactly the gap
+      // lands 3% short. This is what left an earlier run one origination fee
+      // outside a gate the setup had just recommended.
+      const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
+      const wanted = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
 
-    const candidate = buildModelFromTemplate({
-      businessName,
-      template,
-      archetype,
-      scale,
-      marketingSpendPerQuarter: marketing,
-      equityInjection: equity,
-      outsideCapital: outside,
-      debt,
-      ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
-    });
+      /**
+       * Propose only what a lender will actually write.
+       *
+       * The screen offered "$40,000 of your own plus a $113,925 SBA 7(a)" and
+       * the lender declined it on the very next screen — $113,925 against
+       * $61,800 of collateral. Recommending a plan and then refusing it is the
+       * same self-contradiction as the commit gate rejecting a build the setup
+       * had just suggested, and it teaches the player that the numbers on offer
+       * are not real.
+       *
+       * Two ceilings, both the underwriter's own: lending value of the assets,
+       * and ten times the owner's injection. The collateral is *shared* — the
+       * engine underwrites each facility against the full amount independently,
+       * so proposing both at the ceiling would slip two loans through a test
+       * meant to allow one. The term loan takes priority and the revolver gets
+       * what is left, because the term loan is what actually funds opening.
+       */
+      const lendable = collateralValue(bareWorld.businesses[0]!);
+      const onEquity = mulRate(proposedEquity, 1 / MIN_OWNER_INJECTION_PCT);
+      const ceiling = lendable < onEquity ? lendable : onEquity;
+      const proposedLoan = wanted < ceiling ? wanted : ceiling;
+      const headroom = ceiling > proposedLoan ? ceiling - proposedLoan : 0n;
+      const revolverTarget = fromDisplay(100_000);
+      const proposedRevolver = headroom < revolverTarget ? headroom : revolverTarget;
 
-    // The completeness invariant is a hard gate: a model with a hole in its
-    // register cannot be committed (§10.2). No amount of money fixes a missing
-    // assumption, so this one really does end the run.
-    const validation = validateBusinessModel(candidate);
-    const errors = validation.issues.filter((i) => i.severity === 'ERROR');
-    if (errors.length > 0) {
-      console.log(`\n${RED}This model cannot be committed:${RESET}`);
-      for (const e of errors) console.log(`  ${RED}${e.code}  ${e.message}${RESET}`);
-      return undefined;
-    }
-    for (const w of validation.issues.filter((i) => i.severity === 'WARNING')) {
-      console.log(`\n${YELLOW}⚠ ${w.message}${RESET}`);
-    }
+      let loan: Money;
+      let revolver: Money;
+      let equity: Money;
+      let outside = 0n;
 
-    const candidateWorld = createWorld({
-      id: 'player-run',
-      playerId: 'player',
-      config,
-    /**
-     * No living expenses. §2.3 draws them from household cash every quarter,
-     * and they are a second game — personal solvency — running underneath the
-     * one being played. Turning off the reserve without turning off the draw
-     * would be the worst of both: nothing held back, against a household that
-     * still bleeds.
-     */
-    annualLivingExpenses: 0n,
-      models: [candidate],
-    });
-
-    console.log(`\n${rule('Before you commit')}`);
-    renderOpening(candidate, candidateWorld);
-
-    /**
-     * The lender gets a say, which until now it did not.
-     *
-     * `underwrite` has always been here — collateral coverage, a 10% owner
-     * equity minimum, DSCR once there is history — and setup granted every
-     * facility unconditionally, so it was never consulted for the one loan
-     * that matters most. A live run answered a $203,902 shortfall by asking
-     * for a $4M SBA and a $4M revolver against $140,000 of equity and $3.6M
-     * of buildout, and got all of it. The engine would have declined it twice
-     * over: 10% of $4M is $400,000, and lending value on that capex is $2.16M.
-     *
-     * It refuses rather than warns, which is only safe because the financing
-     * loop exists: a decline sends the player back to the same screen with
-     * the reason, instead of ending the run.
-     */
-    const declined = candidate.financingPlan.debtRequests
-      .map((spec) => ({
-        spec,
-        decision: underwrite(
-          candidateWorld.businesses[0]!,
-          spec,
-          config,
-          candidateWorld.household,
-          0,
-        ),
-      }))
-      .filter((d) => !d.decision.approved);
-
-    if (declined.length > 0 && attempt < MAX_FINANCING_ATTEMPTS) {
-      console.log(`\n${RED}${BOLD}The lender declined.${RESET}`);
-      for (const d of declined) {
-        console.log(`  ${RED}${d.spec.kind}  ${d.decision.reason}${RESET}`);
-      }
+      /**
+       * One choice instead of three numbers.
+       *
+       * The old screen asked for an SBA loan, a revolver limit and an equity
+       * injection as bare dollar figures. Nobody arrives at a terminal knowing
+       * what revolver limit a veggie burger place should carry, and the
+       * arithmetic that answers it — month zero, a quarter of fixed costs, the
+       * origination fee, what is left after living expenses — is all already
+       * computed right here. Asking was never eliciting information; it was
+       * making the player do the sum by hand and then refusing them when they
+       * got it wrong.
+       *
+       * The numbers are still fully editable. What changed is that the default
+       * is a worked plan rather than a blank field.
+       */
+      console.log(`\n${rule('Funding')}`);
       console.log(
         note(
-          'Collateral and your own money into the deal are what a first loan is written' +
-            ' against — there is no trading history to underwrite yet. More equity, a' +
-            ' smaller facility, or a smaller build.',
+          `Opening costs ${toDisplay(needed, { showCents: false })} — buildout, deposits and` +
+            ` the first quarter of fixed costs before any revenue lands.`,
         ),
       );
-      const retry = await input.next('\nTry different financing? (Y/n) ');
-      if (retry === undefined) return undefined;
-      const t = retry.trim().toLowerCase();
-      if (t === 'n' || t === 'no') {
+      console.log(
+        note(
+          `You have ${toDisplay(config.startCapital, { showCents: false })}, all of it` +
+            ` available to put into this.`,
+        ) + '\n',
+      );
+      const plan =
+        proposedLoan > 0n
+          ? `${toDisplay(proposedEquity, { showCents: false })} of your own plus a ` +
+            `${toDisplay(proposedLoan, { showCents: false })} SBA 7(a)`
+          : `${toDisplay(proposedEquity, { showCents: false })} of your own, no debt needed`;
+      /**
+       * Never offer a plan that does not fund the build.
+       *
+       * A Nevada solar farm was offered "$1,000,000 of your own plus a
+       * $3,000,000 SBA 7(a)" against a $5.19M opening cost, chose it, and was
+       * refused one screen later — short by $1.192M. The proposal already
+       * respects the lending ceiling; what it did not do was notice that the
+       * capped plan cannot cover opening, and say so before the choice rather
+       * than after it.
+       */
+      const proposedTotal = proposedEquity + proposedLoan;
+      const shortBy = needed > proposedTotal ? needed - proposedTotal : 0n;
+
+      console.log(
+        shortBy > 0n
+          ? `  1  ${plan} — ${RED}still ${toDisplay(shortBy, { showCents: false })} short${RESET}`
+          : proposedRevolver > 0n
+            ? `  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`
+            : `  1  ${plan}`,
+      );
+      console.log(`  2  ${DIM}Set the loan, revolver and equity myself${RESET}`);
+      if (shortBy > 0n) {
+        console.log(
+          note(
+            `That is everything a lender will write against this build plus everything you have.` +
+              ` Closing the gap takes money from outside the deal — a tax credit, a grant, a` +
+              ` partner — or a smaller project. Option 2 asks for outside capital as well.`,
+          ),
+        );
+      }
+
+      const choice = await ask(input, '> ', 1, (raw) => {
+        const n = parseNumber(raw);
+        return n === 1 || n === 2 ? n : undefined;
+      });
+
+      if (choice === 1) {
+        loan = proposedLoan;
+        revolver = proposedRevolver;
+        equity = proposedEquity;
+      } else {
+        loan = await ask(
+          input,
+          `  ${pad('SBA 7(a) loan', 42)}[${toDisplay(proposedLoan, { showCents: false })}]: `,
+          proposedLoan,
+          parseMoney,
+        );
+        revolver = await ask(
+          input,
+          `  ${pad('Revolver limit', 42)}[${toDisplay(proposedRevolver, { showCents: false })}]: `,
+          proposedRevolver,
+          parseMoney,
+        );
+        equity = await ask(
+          input,
+          `  ${pad('Your own capital into the business', 42)}[${toDisplay(proposedEquity, { showCents: false })}]: `,
+          proposedEquity,
+          parseMoney,
+        );
+        /**
+         * The line the solar farm had nowhere to put.
+         *
+         * Its drafted stack was $1.0M sponsor equity, ~$1.5M of transferred
+         * federal ITC and ~$3.2M of debt. The screen carried the first and the
+         * third, dropped the credit, and refused the project as unaffordable —
+         * having itself established that the credit was most of what made it
+         * financeable.
+         */
+        outside = await ask(
+          input,
+          `  ${pad('Grants, tax credits, outside equity', 42)}[$0]: `,
+          0n,
+          parseMoney,
+        );
+      }
+
+      const debt = [
+        ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
+        ...(revolver > 0n
+          ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }]
+          : []),
+      ];
+
+      const candidate = buildModelFromTemplate({
+        businessName,
+        template,
+        archetype,
+        scale,
+        marketingSpendPerQuarter: marketing,
+        equityInjection: equity,
+        outsideCapital: outside,
+        debt,
+        ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+      });
+
+      // The completeness invariant is a hard gate: a model with a hole in its
+      // register cannot be committed (§10.2). No amount of money fixes a missing
+      // assumption, so this one really does end the run.
+      const validation = validateBusinessModel(candidate);
+      const errors = validation.issues.filter((i) => i.severity === 'ERROR');
+      if (errors.length > 0) {
+        console.log(`\n${RED}This model cannot be committed:${RESET}`);
+        for (const e of errors) console.log(`  ${RED}${e.code}  ${e.message}${RESET}`);
+        return undefined;
+      }
+      for (const w of validation.issues.filter((i) => i.severity === 'WARNING')) {
+        console.log(`\n${YELLOW}⚠ ${w.message}${RESET}`);
+      }
+
+      const candidateWorld = createWorld({
+        id: 'player-run',
+        playerId: 'player',
+        config,
+      /**
+       * No living expenses. §2.3 draws them from household cash every quarter,
+       * and they are a second game — personal solvency — running underneath the
+       * one being played. Turning off the reserve without turning off the draw
+       * would be the worst of both: nothing held back, against a household that
+       * still bleeds.
+       */
+      annualLivingExpenses: 0n,
+        models: [candidate],
+      });
+
+      console.log(`\n${rule('Before you commit')}`);
+      renderOpening(candidate, candidateWorld);
+
+      /**
+       * The lender gets a say, which until now it did not.
+       *
+       * `underwrite` has always been here — collateral coverage, a 10% owner
+       * equity minimum, DSCR once there is history — and setup granted every
+       * facility unconditionally, so it was never consulted for the one loan
+       * that matters most. A live run answered a $203,902 shortfall by asking
+       * for a $4M SBA and a $4M revolver against $140,000 of equity and $3.6M
+       * of buildout, and got all of it. The engine would have declined it twice
+       * over: 10% of $4M is $400,000, and lending value on that capex is $2.16M.
+       *
+       * It refuses rather than warns, which is only safe because the financing
+       * loop exists: a decline sends the player back to the same screen with
+       * the reason, instead of ending the run.
+       */
+      const declined = candidate.financingPlan.debtRequests
+        .map((spec) => ({
+          spec,
+          decision: underwrite(
+            candidateWorld.businesses[0]!,
+            spec,
+            config,
+            candidateWorld.household,
+            0,
+          ),
+        }))
+        .filter((d) => !d.decision.approved);
+
+      if (declined.length > 0 && attempt < MAX_FINANCING_ATTEMPTS) {
+        console.log(`\n${RED}${BOLD}The lender declined.${RESET}`);
+        for (const d of declined) {
+          console.log(`  ${RED}${d.spec.kind}  ${d.decision.reason}${RESET}`);
+        }
+        console.log(
+          note(
+            'Collateral and your own money into the deal are what a first loan is written' +
+              ' against — there is no trading history to underwrite yet. More equity, a' +
+              ' smaller facility, or a smaller build.',
+          ),
+        );
+        const retry = await input.next('\nTry different financing? (Y/n) ');
+        if (retry === undefined) return undefined;
+        const t = retry.trim().toLowerCase();
+        if (t === 'n' || t === 'no') {
+          console.log(`${DIM}Nothing committed.${RESET}`);
+          return undefined;
+        }
+        console.log(`${DIM}  — attempt ${attempt + 1}${RESET}`);
+        continue;
+      }
+
+      // Phase 4 is a gate, not a formality. A business that cannot fund its own
+      // month zero has not been financed; letting it open would start the run with
+      // negative cash, which the engine would immediately have to resolve as a
+      // crisis on turn one — teaching the player nothing except that the setup
+      // screen does not mean what it says.
+      if (candidateWorld.businesses[0]!.cash >= 0n) {
+        model = candidate;
+        world = candidateWorld;
+        break;
+      }
+
+      // A revolver is a LIMIT, not a drawdown — `openBusiness` sets its
+      // outstanding principal to zero. Counting it as money raised produced a
+      // message that contradicted itself: "you raised $317k" directly above
+      // "you cannot afford $217k". Only term debt actually funds month zero.
+      const raised = candidate.financingPlan.equityInjection + loan;
+      const shortfall = -candidateWorld.businesses[0]!.cash;
+
+      console.log(
+        `\n${RED}${BOLD}Not funded yet.${RESET} ${RED}Month zero costs ` +
+          `${toDisplay(computeMonthZeroOutlays(candidate).total)} and you have funded ` +
+          `${toDisplay(raised)} — short by ${toDisplay(shortfall)}.${RESET}`,
+      );
+      if (revolver > 0n) {
+        console.log(
+          `${DIM}The ${toDisplay(revolver, { showCents: false })} revolver is a limit, not cash:` +
+            ` it costs its origination fee at close and draws only when you are short later.${RESET}`,
+        );
+      }
+
+      if (attempt >= MAX_FINANCING_ATTEMPTS) {
+        console.log(
+          `${DIM}The gap has not closed in ${MAX_FINANCING_ATTEMPTS} tries, so the business` +
+            ` is probably too big for the money rather than badly financed. Run` +
+            ` \`pnpm sim --new\` and describe something smaller.${RESET}`,
+        );
+        return undefined;
+      }
+
+      // Only suggest a bigger loan when a bigger loan is available. The lending
+      // ceiling is what it is, and "an SBA loan of at least $228,839 would close
+      // it" is not advice when the underwriter stops at $312,000 and the plan is
+      // already there — it is the same refuse-what-you-recommended fault one
+      // screen further on.
+      const stillLendable = ceiling > loan ? ceiling - loan : 0n;
+      console.log(
+        stillLendable >= shortfall
+          ? `${DIM}The concept is intact — only the financing needs to change. An SBA loan of` +
+              ` at least ${toDisplay(shortfall, { showCents: false })} would close it.${RESET}`
+          : `${DIM}The concept is intact, but the money is not there: a lender will write at` +
+              ` most ${toDisplay(ceiling, { showCents: false })} against this build and you have` +
+              ` ${toDisplay(investable, { showCents: false })} of your own. Either the gap comes` +
+              ` from outside the deal — a tax credit, a grant, a partner — or the build gets` +
+              ` smaller.${RESET}`,
+      );
+      const raw = await input.next('\nTry different financing? (Y/n) ');
+      // End of input is not consent to keep looping. A scripted run that stops
+      // here has said everything it is going to say.
+      if (raw === undefined) return undefined;
+      const again = raw.trim().toLowerCase();
+      if (again === 'n' || again === 'no') {
         console.log(`${DIM}Nothing committed.${RESET}`);
         return undefined;
       }
       console.log(`${DIM}  — attempt ${attempt + 1}${RESET}`);
-      continue;
     }
 
-    // Phase 4 is a gate, not a formality. A business that cannot fund its own
-    // month zero has not been financed; letting it open would start the run with
-    // negative cash, which the engine would immediately have to resolve as a
-    // crisis on turn one — teaching the player nothing except that the setup
-    // screen does not mean what it says.
-    if (candidateWorld.businesses[0]!.cash >= 0n) {
-      model = candidate;
-      world = candidateWorld;
+    renderRegister(model);
+
+    /**
+     * The one sentence the campground owner needed, at the moment he needed it.
+     *
+     * His draft's open notes said it exactly — "not an operating business that
+     * services $960k on its own" — and then scrolled away behind month zero, the
+     * funding screen and the register. He committed, bled for three years, and
+     * concluded he was bad at business. He was not; this screen was.
+     */
+    if (concept) {
+      const heavy = capitalIntensityNote(concept.draft, computeMonthZeroOutlays(model).total);
+      if (heavy) console.log(`\n${YELLOW}⚠ ${RESET}${note(heavy).trimStart()}`);
+    }
+
+    const objection = await challengeLoop(input, model, options?.transport);
+    if (objection === undefined) break;
+    journal.write({ kind: 'objection', text: objection });
+    if (!concept?.reopen) {
+      // The template path has no conversation to reopen. Say what the limit
+      // is rather than pretending the words were not understood.
+      console.log(
+        note(
+          'That is a change to the business itself, and without the conversational path' +
+            ' this setup can only move numbers. Restart with a model key set to redescribe it.',
+        ),
+      );
       break;
     }
-
-    // A revolver is a LIMIT, not a drawdown — `openBusiness` sets its
-    // outstanding principal to zero. Counting it as money raised produced a
-    // message that contradicted itself: "you raised $317k" directly above
-    // "you cannot afford $217k". Only term debt actually funds month zero.
-    const raised = candidate.financingPlan.equityInjection + loan;
-    const shortfall = -candidateWorld.businesses[0]!.cash;
-
     console.log(
-      `\n${RED}${BOLD}Not funded yet.${RESET} ${RED}Month zero costs ` +
-        `${toDisplay(computeMonthZeroOutlays(candidate).total)} and you have funded ` +
-        `${toDisplay(raised)} — short by ${toDisplay(shortfall)}.${RESET}`,
+      note('Taking that back to the interview — a fresh draft, then pricing runs again.'),
     );
-    if (revolver > 0n) {
-      console.log(
-        `${DIM}The ${toDisplay(revolver, { showCents: false })} revolver is a limit, not cash:` +
-          ` it costs its origination fee at close and draws only when you are short later.${RESET}`,
-      );
-    }
-
-    if (attempt >= MAX_FINANCING_ATTEMPTS) {
-      console.log(
-        `${DIM}The gap has not closed in ${MAX_FINANCING_ATTEMPTS} tries, so the business` +
-          ` is probably too big for the money rather than badly financed. Run` +
-          ` \`pnpm sim --new\` and describe something smaller.${RESET}`,
-      );
-      return undefined;
-    }
-
-    // Only suggest a bigger loan when a bigger loan is available. The lending
-    // ceiling is what it is, and "an SBA loan of at least $228,839 would close
-    // it" is not advice when the underwriter stops at $312,000 and the plan is
-    // already there — it is the same refuse-what-you-recommended fault one
-    // screen further on.
-    const stillLendable = ceiling > loan ? ceiling - loan : 0n;
-    console.log(
-      stillLendable >= shortfall
-        ? `${DIM}The concept is intact — only the financing needs to change. An SBA loan of` +
-            ` at least ${toDisplay(shortfall, { showCents: false })} would close it.${RESET}`
-        : `${DIM}The concept is intact, but the money is not there: a lender will write at` +
-            ` most ${toDisplay(ceiling, { showCents: false })} against this build and you have` +
-            ` ${toDisplay(investable, { showCents: false })} of your own. Either the gap comes` +
-            ` from outside the deal — a tax credit, a grant, a partner — or the build gets` +
-            ` smaller.${RESET}`,
-    );
-    const raw = await input.next('\nTry different financing? (Y/n) ');
-    // End of input is not consent to keep looping. A scripted run that stops
-    // here has said everything it is going to say.
-    if (raw === undefined) return undefined;
-    const again = raw.trim().toLowerCase();
-    if (again === 'n' || again === 'no') {
-      console.log(`${DIM}Nothing committed.${RESET}`);
-      return undefined;
-    }
-    console.log(`${DIM}  — attempt ${attempt + 1}${RESET}`);
+    const again = await concept.reopen(objection);
+    if (!again) return undefined;
+    concept = again;
+    template = concept.mapped.template;
+    archetype = concept.mapped.archetype;
+    scale = concept.mapped.scale;
+    businessName = concept.mapped.businessName;
   }
-
-  renderRegister(model);
-
-  /**
-   * The one sentence the campground owner needed, at the moment he needed it.
-   *
-   * His draft's open notes said it exactly — "not an operating business that
-   * services $960k on its own" — and then scrolled away behind month zero, the
-   * funding screen and the register. He committed, bled for three years, and
-   * concluded he was bad at business. He was not; this screen was.
-   */
-  if (concept) {
-    const heavy = capitalIntensityNote(concept.draft, computeMonthZeroOutlays(model).total);
-    if (heavy) console.log(`\n${YELLOW}⚠ ${RESET}${note(heavy).trimStart()}`);
-  }
-
-  await challengeLoop(input, model, options?.transport);
 
   console.log(
     `\n${DIM}Committing freezes the model. After this it changes only through the` +

@@ -3,6 +3,7 @@ import {
   askAdvisor,
   parseMoneyToken,
   unverifiedFigures,
+  TURN_ADVISOR_PROMPT,
   type AdviceTransport,
   type Briefing,
   type TurnAdvice,
@@ -154,5 +155,72 @@ describe('asking, checking, and giving up', () => {
     await askAdvisor(transport, briefing, 'how is occupancy?');
     expect(seen).toContain('Revenue this quarter: $362.0k');
     expect(seen).toContain('how is occupancy?');
+  });
+
+  it('hands the model the conversation so far', async () => {
+    // The vending session: "some of our machines sell higher-margin products"
+    // was new information, and the very next question was answered by an
+    // amnesiac because the history was always passed as [].
+    let seen: string[] = [];
+    const transport: AdviceTransport = {
+      async advise(_system, messages) {
+        seen = messages.map((m) => m.content);
+        return { advice: advice('Noted.') };
+      },
+    };
+    await askAdvisor(transport, briefing, 'so what do we change first?', [
+      { role: 'user', content: 'our coffee machines run higher margins than the packaged goods' },
+      { role: 'assistant', content: 'Then the flat product-cost rate is understating them.' },
+    ]);
+    expect(seen[0]).toContain('higher margins than the packaged goods');
+    expect(seen[1]).toContain('understating');
+    expect(seen[2]).toContain('so what do we change first?');
+  });
+
+  it('treats figures already spoken in the conversation as sourced', async () => {
+    // Every figure in the history either passed this guard when it was said or
+    // came from the player. Flagging the model for quoting the conversation it
+    // is in would train everyone to ignore the guard.
+    const transport = transportOf(
+      advice('You said the machines do $150 a day; the briefing has nothing near that, so test it.'),
+    );
+    const outcome = await askAdvisor(transport, briefing, 'what should I do?', [
+      { role: 'user', content: 'my best machines do $150 a day' },
+      { role: 'assistant', content: 'Placement is doing the work there.' },
+    ]);
+    // One call — the $150 was not flagged as a fabrication.
+    expect(transport.calls).toBe(1);
+    expect(outcome?.reply).toContain('$150');
+    expect(outcome?.retriedOn).toBeUndefined();
+  });
+});
+
+describe('the advisor prompt frames a business, not a pricing exercise', () => {
+  /**
+   * The Genki session, condensed: "we're not making any money" was met with
+   * price as the only lever, a claim that the player's margins were "already
+   * baked in", and a confident description of a `quotes` screen that does not
+   * exist. Coarse checks — they cannot prove behaviour, but they fail loudly
+   * if someone edits the load-bearing rules away.
+   */
+  it('names the whole lever panel, not just price', () => {
+    expect(TURN_ADVISOR_PROMPT).toContain('Think like an operator, not an economist');
+    for (const lever of ['`assume`', '`market`', '`upgrade`', '`fire`']) {
+      expect(TURN_ADVISOR_PROMPT, lever).toContain(lever);
+    }
+  });
+
+  it('treats player information as a model correction, not a debating point', () => {
+    expect(TURN_ADVISOR_PROMPT).toContain('New information changes the model');
+    expect(TURN_ADVISOR_PROMPT).toContain('it is a model correction');
+  });
+
+  it('forbids inventing game mechanics', () => {
+    expect(TURN_ADVISOR_PROMPT).toContain('The commands in the briefing are the whole game');
+    expect(TURN_ADVISOR_PROMPT).toContain('Never invent a screen, a quote list, a negotiation flow');
+  });
+
+  it('forbids claiming a player’s different number is already reflected', () => {
+    expect(TURN_ADVISOR_PROMPT).toContain('already baked in');
   });
 });

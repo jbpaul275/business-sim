@@ -97,6 +97,12 @@ describe('routing a draft label to its item', () => {
     ['Commissary kitchen rent', 'commissary_rent'],
     ['Dog daycare attendants', 'daycare_attendant_wage'],
     ['Zero-turn mowers (2)', 'zero_turn_mower'],
+    // The vending session that quoted "$75-$150/day strong location" and
+    // "$15-$25/day typical" three hundred words apart. Both turns should have
+    // been arguing from this one range, tiers and all.
+    ['Vending machines (40, Japanese-style)', 'vending_machine'],
+    ['Vending sales per machine per day', 'vending_daily_sales'],
+    ['Location commission (15% of gross)', 'vending_location_commission'],
   ];
 
   for (const [label, id] of fixtures) {

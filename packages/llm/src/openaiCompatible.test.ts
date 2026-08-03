@@ -170,7 +170,9 @@ describe('the Kimi transport', () => {
      * `reasoning_effort`'s companions (temperature, top_p, the penalties), so
      * a per-vendor flag was the wrong shape: it has to be per model.
      */
-    const t = transport();
+    // K2.6 pinned explicitly: it is no longer the default after failing its
+    // live gate, but the dialect must keep working for whoever measures it.
+    const t = new KimiConceptTransport({ apiKey: 'sk-test', turnModel: 'kimi-k2.6' });
     const ADVICE = JSON.stringify({ reply: 'Hold the price.', suggestedCommands: [] });
     const seen = stub(t, (req, call) =>
       req['model'] === KIMI_DEFAULT_MODEL
@@ -178,7 +180,6 @@ describe('the Kimi transport', () => {
         : textChunks(call === 2 ? ADVICE : TURN),
     );
     await t.turn('system', [{ role: 'user', content: 'A telescope rental.' }]);
-    // The turn rides the cheap model, thinking on: judgement is the product.
     expect(seen[0]!['model']).toBe('kimi-k2.6');
     expect(seen[0]!['thinking']).toEqual({ type: 'enabled' });
     expect(seen[0]!['reasoning_effort']).toBeUndefined();
@@ -199,9 +200,9 @@ describe('the Kimi transport', () => {
 
   it('keeps the adjudication on the draft-grade model', async () => {
     // The risk register's own words: the ruling is the call most likely to
-    // regress into sycophancy — do not cheapen it first. Moving the turn
-    // default to K2.6 must not drag the ruling down with it silently.
-    const t = transport();
+    // regress into sycophancy — do not cheapen it first. A cheap turn model
+    // must never drag the ruling down with it silently.
+    const t = new KimiConceptTransport({ apiKey: 'sk-test', turnModel: 'kimi-k2.6' });
     const seen = stub(t, () =>
       textChunks(
         JSON.stringify({
@@ -239,11 +240,11 @@ describe('the Kimi transport', () => {
      * BIZSIM_MODEL → vendor default. A second copy of that ladder would drift,
      * and a screen naming the wrong model is worse than one naming none.
      */
-    // The split IS the default now — the header has to say so, because a
-    // session bills at two prices and the player is entitled to know which.
-    expect(transport().describe()).toBe('kimi · kimi-k2.6 (turns), kimi-k3 (draft)');
-    const single = new OpenAICompatibleTransport({ apiKey: 'x', model: 'kimi-k3' });
-    expect(single.describe()).toBe('kimi · kimi-k3');
+    expect(transport().describe()).toBe('kimi · kimi-k3');
+    // And it names both when a session bills at two prices — the player is
+    // entitled to know which model is answering which call.
+    const split = new OpenAICompatibleTransport({ apiKey: 'x', turnModel: 'kimi-k2.6' });
+    expect(split.describe()).toBe('kimi · kimi-k2.6 (turns), kimi-k3 (draft)');
   });
 
   it('collapses five effort tiers onto K3s three, downward', async () => {

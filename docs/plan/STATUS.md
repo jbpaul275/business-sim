@@ -18,7 +18,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 
 | | State | Notes |
 |---|---|---|
-| **Provider routing** | ✅ Done | `OpenAICompatibleTransport` over a `VENDORS` table — Moonshot, DeepSeek, Groq, Together, OpenRouter, Gemini, OpenAI — plus Anthropic on its own. Kimi K3 is the default. [05](./05-provider-migration.md) |
+| **Provider routing** | ✅ Done | `OpenAICompatibleTransport` over a `VENDORS` table — Moonshot, DeepSeek, Groq, Together, OpenRouter, Gemini, OpenAI — plus Anthropic on its own. Kimi K3 is the default for every call — K2.6 took the turns for half a day and failed its live gate (double-encoding, garble-twice, 23-60s latencies). [05](./05-provider-migration.md) |
 | **Per-call telemetry** | ✅ Done | One journal row per model call: type, provider, model, effort, wall clock, four token counts, cost. `--sessions` reports a head-to-head by model on cost, latency and three quality signals |
 | **Telemetry upload** | 🟡 Built, unwired | Supabase schema, two-tier opt-in, insert-only RLS, redaction with tests. Migration never applied; no in-game consent screen; no retention or deletion path. [06](./06-telemetry-upload.md) |
 

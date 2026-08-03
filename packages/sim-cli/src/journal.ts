@@ -56,6 +56,17 @@ export type JournalEvent =
       calls: number;
     }
   | { kind: 'fault'; round: number; issues: string[] }
+  /**
+   * A draft that parsed as JSON but failed the Zod schema — the repair class
+   * the player reads as "it came back incomplete". `detail` names the missing
+   * or wrong paths, because the fix is calibration and calibration needs the
+   * pattern: on providers without real constrained decoding (Moonshot's
+   * json_schema is advisory — a strict grammar cannot emit the double-encoded
+   * strings we have seen live), a ~40-required-field draft leans entirely on
+   * the model's memory, and which fields it forgets decides whether the cure
+   * is a schema default, a prompt line, or a different draft model.
+   */
+  | { kind: 'draft_rejected'; round: number; detail: string }
   | { kind: 'transient'; phase: string; attempt: number }
   | { kind: 'draft'; businessName: string; archetype: string; draft: unknown; ms: number }
   | { kind: 'objection'; text: string }

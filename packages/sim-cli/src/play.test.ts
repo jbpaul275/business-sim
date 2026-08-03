@@ -669,6 +669,68 @@ describe('asking what to do', () => {
  * the prose: it prints when the model behaves, stays silent when the guard
  * fires twice, and runs once per pause rather than once per skipped quarter.
  */
+describe('arguing with an assumption mid-game', () => {
+  /**
+   * §10.1's second half, reached from the game at last. A vending operator
+   * said his coffee and soft-serve margins should run 60-70% where the draft
+   * assumed a flat 50% product cost — a real-world claim (generic product,
+   * cheaper supplier) with no expression in the game: the engine's
+   * `ADJUST_ASSUMPTION` had write-through to the model all along, and no
+   * command ever emitted it, so the only margin lever was price.
+   */
+  it('lists the register, with the id the command needs', async () => {
+    const printed = await transcript(['assumptions', 'quit']);
+    expect(printed).toContain('ASSUMPTIONS');
+    expect(printed).toContain('Food & beverage cost');
+    expect(printed).toContain('30.0%');
+    // Provenance shown, because which numbers are argued-for is the point.
+    expect(printed).toMatch(/BENCHMARK|CATALOG|LLM_ESTIMATE|PLAYER_/);
+  });
+
+  it('revises the rate the engine actually applies, not just a document', async () => {
+    const printed = await transcript([
+      'assume food 22% switched to a cheaper supplier',
+      '',
+      'costs',
+      'quit',
+    ]);
+    expect(printed).toMatch(/queued: assumption \w+ → 22\.0%/);
+    // After the quarter runs, the costs screen carries the new rate — the
+    // write-through half, without which this command is theatre.
+    expect(printed).toContain('22.0% of revenue');
+    expect(printed).not.toContain('30.0% of revenue');
+  });
+
+  it('warns outside the drafted range and models it anyway — D-5, mid-game', async () => {
+    const printed = await transcript(['assume food 2%', 'quit']);
+    expect(printed).toContain('outside the drafted range');
+    expect(printed).toContain('your assertion');
+    // Warned, not refused: the action still queued.
+    expect(printed).toMatch(/queued: assumption/);
+  });
+
+  it('records evidence as a sourced figure rather than an assertion', async () => {
+    const printed = await transcript(['assume food 2% signed supplier contract', 'quit']);
+    expect(printed).toContain('your sourced figure');
+  });
+
+  it('points a wrong id at the list instead of shrugging', async () => {
+    const printed = await transcript(['assume nonsense 12%', 'quit']);
+    expect(printed).toContain('No assumption matches');
+    expect(printed).toContain('`assumptions`');
+  });
+
+  it('names the current value when the new one is missing', async () => {
+    const printed = await transcript(['assume food', 'quit']);
+    expect(printed).toContain('currently 30.0%');
+  });
+
+  it('names the lever on the costs screen, where the player is looking', async () => {
+    const printed = await transcript(['costs', 'quit']);
+    expect(printed).toMatch(/% of revenue — `assume \w+` changes it/);
+  });
+});
+
 describe('narrating the quarter', () => {
   const CLEAN: TurnNarration = {
     headline: 'A quiet quarter with the ramp still climbing.',

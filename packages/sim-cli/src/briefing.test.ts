@@ -48,6 +48,17 @@ describe('the briefing', () => {
     expect(briefing.text).toMatch(/Staffing — .* \(id \w+\)/);
   });
 
+  it('carries the variable cost rates, which are the model’s actual assumptions', () => {
+    // A vending operator was told his "50-70% margins are already baked into
+    // the model" while the model carried a flat 50% product cost the advisor
+    // had never been shown. A model that cannot see an assumption cannot be
+    // honest about it.
+    const { briefing } = briefed();
+    expect(briefing.text).toMatch(/Cost rate — .+: .*% of revenue, a model assumption/);
+    // And the honest answer is actionable: the assumption id is right there.
+    expect(briefing.text).toMatch(/`assume \w+ <pct>` revises it/);
+  });
+
   it('lists what the deterministic advisor already said, so it is not repeated', () => {
     const { briefing } = briefed();
     expect(briefing.text).toContain('do not repeat these');
@@ -62,6 +73,15 @@ describe('the briefing', () => {
     expect(quoted.length).toBeGreaterThan(5);
     const reply = `Revenue is ${quoted[0]} and cash is ${quoted[1]}.`;
     expect(unverifiedFigures(reply, briefing, '')).toEqual([]);
+  });
+
+  it('renders the commands as a closed list, not a bag of verbs', () => {
+    // Handed only names, the model guessed at semantics — and told a vending
+    // operator that `quotes` would list new business sites with machine counts.
+    const { briefing } = briefed();
+    expect(briefing.text).toContain('ONLY levers in this build');
+    expect(briefing.text).toContain('- price');
+    expect(briefing.text).toContain('not modelled');
   });
 
   it('does not contain the engine’s state, only its output', () => {
@@ -132,6 +152,52 @@ describe('a model in the turn loop', () => {
     const printed = await transcript(['what now?', 'quit'], advisor);
     expect(printed).toContain('`price 400`');
     expect(printed).not.toContain('teleport');
+  });
+
+  it('remembers the conversation across questions and quarter boundaries', async () => {
+    // The vending session: the player explained that some machines sold
+    // higher-margin products — new information — and the very next question
+    // was answered by an amnesiac, because history was always passed as [].
+    // The account a player gives of their own business is not a quarterly
+    // figure; it must survive the quarter running.
+    const calls: string[][] = [];
+    const advisor: AdviceTransport = {
+      async advise(_system, messages) {
+        calls.push(messages.map((m) => m.content));
+        return { advice: advice('Noted — the split is the lever to look at.') };
+      },
+    };
+    await transcript(
+      [
+        'our landlord split should be on margin, not revenue',
+        '',
+        'so what do we change first?',
+        'quit',
+      ],
+      advisor,
+    );
+    expect(calls).toHaveLength(2);
+    const second = calls[1]!.join('\n');
+    expect(second).toContain('landlord split should be on margin');
+    expect(second).toContain('the split is the lever');
+  });
+
+  it('tells the model what each command actually does', async () => {
+    // The advisor once told a player `quotes` would list new business sites
+    // with machine counts and costs — a screen that has never existed. A model
+    // that knows only a command's name describes the command the player
+    // wishes existed.
+    let briefingText = '';
+    const advisor: AdviceTransport = {
+      async advise(_system, messages) {
+        briefingText = messages.at(-1)?.content ?? '';
+        return { advice: advice('Noted.') };
+      },
+    };
+    await transcript(['can I renegotiate my landlord deal?', 'quit'], advisor);
+    expect(briefingText).toContain('renegotiated deal terms are recorded');
+    expect(briefingText).toContain('Nothing here lists business sites');
+    expect(briefingText).toContain('ONLY levers in this build');
   });
 
   it('says nothing extra when the model invents a figure twice', async () => {

@@ -3,6 +3,7 @@ import { fromDisplay } from '@bizsim/money';
 import { getSeedTemplate, listSeedTemplates, validateMonthlyWeights } from '@bizsim/seeds';
 import type { BusinessModel } from '@bizsim/schemas';
 import { buildModelFromTemplate } from './buildModel.js';
+import { injectOmissionGuardLines } from './omissionGuard.js';
 import { validateBusinessModel } from './validate.js';
 import { computeMonthZeroOutlays, clampFreeplay } from './opening.js';
 
@@ -91,6 +92,44 @@ describe('the omission guard (§4.6)', () => {
     // Equipment 4% + leasehold 1.5% + FF&E 3%, quarterly.
     const expected = (180_000 * 0.04 + 250_000 * 0.015 + 90_000 * 0.03) / 4;
     expect(Number(maintenanceLines[0]!.amountPerQuarter) / 100).toBeCloseTo(expected, 2);
+    /**
+     * "Exactly once" has to mean across mechanisms, not within one. This test
+     * counted `og_maintenance` lines while `og_repairs` charged 2% of revenue
+     * for the same upkeep under a different id — a vending operator paid a
+     * $4.3k/quarter reserve on 40 machines AND the revenue-based line on top.
+     * With an asset base, the asset rate is the one mechanism; the
+     * revenue-based line must be absent.
+     */
+    expect(m.costs.variableWithRevenue.find((c) => c.id === 'og_repairs')).toBeUndefined();
+  });
+
+  it('falls back to revenue-based repairs only when there are no assets to derive it from', () => {
+    const empty = {
+      variableWithRevenue: [],
+      variableWithActivity: [],
+      stepFixed: [],
+      fixedPeriod: [],
+      payrollLoadPct: 0.12,
+    };
+    const base = {
+      template: getSeedTemplate('full_service_restaurant'),
+      archetypes: ['TRAFFIC' as const],
+      hasLocation: true,
+      hasEmployees: true,
+    };
+
+    // Premises but nothing owned: the revenue-based charge is the only source.
+    const noAssets = injectOmissionGuardLines(empty, { ...base, assets: [] });
+    expect(noAssets.variableWithRevenue.find((c) => c.id === 'og_repairs')).toBeDefined();
+    expect(noAssets.fixedPeriod.find((c) => c.id === 'og_maintenance')).toBeUndefined();
+
+    // An asset base switches the mechanism rather than adding a second one.
+    const withAssets = injectOmissionGuardLines(empty, {
+      ...base,
+      assets: [{ grossCost: 10_000_000n, maintenancePctOfGrossPerYear: 0.04 }],
+    });
+    expect(withAssets.fixedPeriod.find((c) => c.id === 'og_maintenance')).toBeDefined();
+    expect(withAssets.variableWithRevenue.find((c) => c.id === 'og_repairs')).toBeUndefined();
   });
 
   it('folds card mix into the processing rate', () => {

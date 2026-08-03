@@ -337,6 +337,115 @@ describe('a question gets an answer before it gets a financial model', () => {
   });
 });
 
+describe('figures the model states become commitments', () => {
+  /**
+   * Live, a vending-machine interview: turn 4 quoted "$75-$150/day in a strong
+   * location, $25-$50 in a mediocre one"; turn 6 called the player's plan
+   * "above the $15-$25/day a typical US machine does". The earlier range was
+   * prose in history and nothing made it binding. Now every money sentence the
+   * model has stated is extracted from the transcript and appended to the
+   * system prompt of every later call — including the draft call, whose
+   * parameters have to square with what the conversation promised.
+   */
+  // Figures deliberately different from the ones the static prompt uses in
+  // its own example, so these assertions cannot pass against the prompt text.
+  const QUOTED = asks(
+    'A well-placed machine does $60-$140 a day in a strong spot, $20-$40 in a mediocre one.',
+    'How many machines?',
+  );
+
+  it('hands the model its own figures back on the next call', async () => {
+    const transport = new ScriptedTransport([QUOTED, asks('And where?')]);
+    const interview = new ConceptInterview({ transport });
+
+    await interview.send('A vending machine business in Rochester.');
+    // The first call had nothing to commit to.
+    expect(transport.seen[0]!.system).not.toContain('## Figures you have already stated');
+
+    await interview.send('Forty machines.');
+    const second = transport.seen[1]!.system;
+    expect(second).toContain('## Figures you have already stated');
+    expect(second).toContain('$60-$140 a day in a strong spot');
+  });
+
+  it('carries the commitments into the draft call too', async () => {
+    const transport = new ScriptedTransport([QUOTED, ready('Building it now.')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A vending machine business.');
+    await interview.send('Forty machines, go ahead.');
+
+    const draftCall = transport.seen.at(-1)!;
+    expect(draftCall.system).toContain('$60-$140 a day in a strong spot');
+  });
+
+  it('adds nothing when the model has not stated a figure', async () => {
+    const transport = new ScriptedTransport([asks('Where is it?'), asks('How big?')]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A bistro.');
+    await interview.send('Austin.');
+    for (const call of transport.seen) {
+      expect(call.system).not.toContain('Figures you have already stated');
+    }
+  });
+
+  it('retracts the figures of an undone turn', async () => {
+    // Recomputed from the transcript, not accumulated — so taking back the
+    // exchange takes back its figures with no bookkeeping.
+    const transport = new ScriptedTransport([QUOTED, asks('Where is it?')]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A vending machine business.');
+    interview.undo();
+
+    await interview.send('A bistro, actually.');
+    expect(transport.seen[1]!.system).not.toContain('$60-$140');
+    expect(transport.seen[1]!.system).not.toContain('## Figures you have already stated');
+  });
+
+  it('tells the model the rule in the prompt as well', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('A figure you quote is a commitment');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('revise it openly');
+  });
+});
+
+describe('repairDraft', () => {
+  /**
+   * A schema-rejected draft used to go back to the model as a *player
+   * message*, which cost a full conversational turn — the model answering
+   * "resending it now" at 8-15 seconds and one billed call — before the
+   * re-draft. The correction is for the drafting call, so it goes to the
+   * drafting call.
+   */
+  it('re-drafts with the correction and without a conversational turn', async () => {
+    const transport = new ScriptedTransport([ready('Building it now.')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A soft-serve truck, go ahead.');
+    const callsBefore = transport.seen.length;
+
+    await interview.repairDraft('That draft did not match the schema — overheads.monthlyRent.');
+
+    // Exactly one more call reached the transport: the draft. No turn.
+    expect(transport.seen.length).toBe(callsBefore + 1);
+    const repairCall = transport.seen.at(-1)!;
+    expect(repairCall.messages.at(-1)?.content).toContain('overheads.monthlyRent');
+  });
+
+  it('replaces a previous correction rather than stacking user messages', async () => {
+    // Some providers reject non-alternating roles, and the newer correction
+    // supersedes the older one anyway.
+    const transport = new ScriptedTransport([ready('Building it now.')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A soft-serve truck, go ahead.');
+
+    await interview.repairDraft('First correction: fields were missing.');
+    await interview.repairDraft('Second correction: still missing.');
+
+    const lastCall = transport.seen.at(-1)!;
+    const userTail = lastCall.messages.filter((m) => m.content.includes('correction'));
+    expect(userTail).toHaveLength(1);
+    expect(userTail[0]!.content).toContain('Second correction');
+  });
+});
+
 describe('paramsToRecord', () => {
   it('folds the wire array into the record the engine expects', () => {
     const record = paramsToRecord(draft().stream.params);

@@ -104,7 +104,8 @@ export function parseMoneyToken(token: string): number | undefined {
  *
  * The player's own question counts as a source. "Would a $2M waterpark pay for
  * itself?" has to be answerable without the answer being flagged for repeating
- * the number back.
+ * the number back. Callers with a running conversation pass the whole exchange
+ * as `question` — figures already spoken there trace to a legal origin too.
  */
 export function unverifiedFigures(
   reply: string,
@@ -150,6 +151,22 @@ export const TURN_ADVISOR_PROMPT = `You are sitting with someone in the middle o
 The same rule in its general form: you never compute anything that belongs on a financial statement. "What would EBITDA be if I cut the night shift?" is answered by naming the lever and letting them run the quarter, not by doing the arithmetic in your head. The engine will tell them exactly, in ninety seconds, and your estimate would only be something for the real answer to contradict.
 
 Percentages, ratios and counts you were given are yours to reason with. Saying "you are running at about two-thirds of capacity" when the briefing says 68% is restating, not inventing.
+
+## The briefing's cost rates are the model's actual assumptions
+
+Every "Cost rate" line in the briefing is the number the engine really applies, every quarter, verbatim. Never tell the player their own different number is "already baked in" — if they say their margins should run 60-70% and the briefing says the product cost rate is 50% of revenue, then the model disagrees with them, and the honest answer says exactly that and names the fix: the \`assume\` command revises a model assumption, recorded as theirs.
+
+## Think like an operator, not an economist
+
+"We're not making money" is a business problem before it is a pricing problem, and price is one lever on a panel. The build carries most of what a real operator would reach for: price (\`price\`), demand (\`marketing\`, and \`market\` for a new territory), a better product (\`upgrade\`), capacity and staffing (\`expand\`, \`hire\`, \`fire\`), the cost structure and deal terms (\`assume\` — a COGS rate, a landlord or platform share, a cost per unit), and financing (\`debt\`, \`draw\`, \`inject\`). When margins are the complaint, look at the briefing's cost rates before reaching for price: switching suppliers, changing the product mix, or renegotiating a split is often the move an operator makes first, and every one of those is an \`assume\` away.
+
+## New information changes the model
+
+When the player tells you something about their business the model does not carry — "some of our machines sell higher-margin products", "on new sites I'll negotiate a different split" — that is not a debating point, it is a model correction, and recognising it is the most useful thing you do. Name the assumption as the briefing carries it, say what their claim would make it instead — blends and rate arithmetic are yours to do — and give the exact \`assume\` command that records it. A player who has just told you why the model is wrong should leave the exchange holding the command that fixes it.
+
+## The commands in the briefing are the whole game
+
+Suggest only what the briefing lists, and describe each command doing only what its description says. If the player's idea maps to no command, say plainly that it is not modelled in this build, in one sentence, and name the nearest thing that is. Never invent a screen, a quote list, a negotiation flow, or data the game does not have — a confident description of a mechanic that does not exist sends the player to a dead end wearing your authority.
 
 ## What you are for
 
@@ -218,8 +235,17 @@ export async function askAdvisor(
     { role: 'user' as const, content: `${briefing.text}\n\nThey asked: ${question}` },
   ];
 
+  /**
+   * The conversation is a source, same as the question. Every figure in the
+   * history either passed this guard when it was spoken or came from the
+   * player, so "as you said, the machines do $150 a day" traces to a legal
+   * origin — and a guard that flags the model for quoting the conversation it
+   * is in trains everyone to ignore it.
+   */
+  const sources = [...history.map((m) => m.content), question].join('\n');
+
   const first = await transport.advise(TURN_ADVISOR_PROMPT, messages);
-  const bad = unverifiedFigures(first.advice.reply, briefing, question);
+  const bad = unverifiedFigures(first.advice.reply, briefing, sources);
   if (bad.length === 0) {
     return {
       reply: first.advice.reply,
@@ -233,7 +259,7 @@ export async function askAdvisor(
     { role: 'assistant' as const, content: first.advice.reply },
     { role: 'user' as const, content: correction(bad) },
   ]);
-  if (unverifiedFigures(second.advice.reply, briefing, question).length > 0) return undefined;
+  if (unverifiedFigures(second.advice.reply, briefing, sources).length > 0) return undefined;
 
   return {
     reply: second.advice.reply,

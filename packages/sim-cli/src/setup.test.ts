@@ -396,6 +396,90 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
+  it('routes a structural objection at the challenge prompt back into the interview', async () => {
+    // "wait, I don't want to lease I want to buy the planes used at a good
+    // price" — typed at the challenge prompt, where the only grammar was
+    // `challenge <n> <value>`, and answered with a canned hint. A structural
+    // change is a drafting question: it goes back to the conversation, a
+    // fresh draft comes back, and pricing reruns on the new model.
+    const rethought: ConceptDraft = { ...draft, businessName: 'Telescope rental (owned fleet)' };
+    let drafts = 0;
+    const transport = {
+      turn: async () => ({
+        turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
+      draft: async () => {
+        drafts += 1;
+        return drafts === 1 ? draft : rethought;
+      },
+      usage: EMPTY_USAGE,
+    };
+    const input = scriptedInput([
+      '4',
+      '900000',
+      'Telescope rental on a dark-sky ridge.',
+      '', // nothing to argue with (first draft)
+      '', // take the proposed funding
+      "wait, I don't want to lease I want to buy the scopes used at a good price",
+      '', // nothing to argue with (second draft)
+      '', // take the proposed funding again
+      '', // done challenging
+      'y', // commit
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+
+      expect(drafts).toBe(2);
+      expect(printed).toContain('Taking that back to the interview');
+      // Pricing genuinely reran: the funding screen appeared twice.
+      expect(printed.match(/Opening costs/g)?.length).toBe(2);
+      // And what got committed is the redrafted business, not the first one.
+      expect(result?.committed).toBe(true);
+      expect(result?.world.businesses[0]?.name).toBe('Telescope rental (owned fleet)');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('still nudges on short noise at the challenge prompt instead of redrafting', async () => {
+    // The three-word floor: a mistyped verb must not trigger an expensive
+    // redraft. Two words gets the hint; the session carries on.
+    const transport = {
+      turn: async () => ({
+        turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      }),
+      advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
+      draft: async () => draft,
+      usage: EMPTY_USAGE,
+    };
+    const input = scriptedInput([
+      '4',
+      '900000',
+      'Telescope rental on a dark-sky ridge.',
+      '',
+      '',
+      'chalenge 3', // typo, two tokens — a nudge, not an objection
+      '',
+      'y',
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('argues with a number');
+      expect(printed.match(/Opening costs/g)?.length).toBe(1);
+      expect(result?.committed).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('repairs a malformed draft instead of ending the run over it', async () => {
     // Three missing `provenance` fields on a nine-parameter soft-serve truck
     // ended a session that had taken four turns to get there. Everything else
@@ -403,10 +487,14 @@ describe('the concept path reaches the same gate as the picker', () => {
     // the one that did not, for no reason but that it failed a different check.
     const broken = { ...draft, stream: { label: 'Only a label' } };
     let asked = 0;
+    let turnsMade = 0;
     const transport = {
-      turn: async () => ({
-        turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
-      }),
+      turn: async () => {
+        turnsMade += 1;
+        return {
+          turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+        };
+      },
       advise: () => Promise.reject(new Error('no advice in this double')),
       adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => {
@@ -429,6 +517,10 @@ describe('the concept path reaches the same gate as the picker', () => {
       const result = await runSetup(input, { transport });
       const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
       expect(asked).toBe(2);
+      // The repair goes straight back to the drafting call. It used to travel
+      // as a player message, which paid a full conversational turn — the model
+      // saying "resending it now" at 8-15 seconds — before every re-draft.
+      expect(turnsMade).toBe(1);
       expect(result?.committed).toBe(true);
       // And the player is told something is being fixed, not what — the
       // schema paths are the model's homework.
