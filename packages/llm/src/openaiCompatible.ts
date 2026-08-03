@@ -104,10 +104,24 @@ export const VENDORS: Record<string, VendorSpec> = {
     baseURL: 'https://api.moonshot.ai/v1',
     apiKeyVar: 'MOONSHOT_API_KEY',
     defaultModel: 'kimi-k3',
-    // K2.6 is 3-4x cheaper on output than K3 and the turns are the call
-    // volume. The draft and the adjudication stay on K3 — see the routing in
-    // the constructor and docs/plan/05 §3.
-    defaultTurnModel: 'kimi-k2.6',
+    /**
+     * No `defaultTurnModel`, deliberately, as of 2026-08-03.
+     *
+     * K2.6 spent half a day as the turn default and failed its live gate in
+     * two sessions: a turn returned double-encoded, a turn garbled twice in a
+     * row on the one-word input "oils", a silent retry on a first turn, and
+     * 23-60s thinking latencies against K3's 7-9s. Its thinking mode plus
+     * `response_format.json_schema` is evidently an unreliable pairing — the
+     * model's own docs carve thinking mode out of other structured features.
+     * K3 turns passed the same gate clean, so the 3-4x output saving was
+     * buying slower, less reliable turns.
+     *
+     * K2.6 stays one variable away (`BIZSIM_TURN_MODEL=kimi-k2.6`), and the
+     * dialect code, the double-encoding tolerance and the malformed-turn
+     * retry all remain — the next attempt should measure thinking *disabled*
+     * (`BIZSIM_TURN_EFFORT=low`), which is the configuration these failures
+     * never tested.
+     */
     reasoningEffort: true,
   },
   deepseek: {

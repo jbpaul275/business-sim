@@ -58,16 +58,26 @@ transport inside `packages/llm` does not touch that edge.
 
 ## 3. Model mapping
 
-**Decided: the split.** K2.6 for the conversational volume, K3 where the stakes are — the two caveats that
-blocked K2.6 were resolved when Moonshot's K2.6 parameter docs were supplied (2026-08-03).
+**Decided, then reversed the same day: everything on K3.** K2.6 took the turn default for half a day
+(2026-08-03) once its parameter docs arrived, and failed its live gate in two sessions: one turn returned
+double-encoded, one garbled twice in a row on the one-word input "oils", a first turn needed a silent
+retry, and thinking latencies ran 23-60s against K3's 7-9s. Its thinking mode plus
+`response_format.json_schema` is an unreliable pairing — the model's own docs carve thinking mode out of
+other structured features. A 3-4x output saving that buys slower, less reliable turns is not a saving.
 
 | Call | What it does | Model | Reasoning |
 |---|---|---|---|
-| `turn` | Interview reply: ~50 words and a CTA | `kimi-k2.6` | `thinking: enabled` |
-| `advise` | Turn-loop advisor, 4k budget | `kimi-k2.6` | `thinking: disabled` |
-| `narrate` | §11.5, one per quarter — the volume leader | `kimi-k2.6` | `thinking: disabled` |
+| `turn` | Interview reply: ~50 words and a CTA | `kimi-k3` | `reasoning_effort: low` |
+| `advise` | Turn-loop advisor, 4k budget | `kimi-k3` | `reasoning_effort: low` |
+| `narrate` | §11.5, one per quarter — the volume leader | `kimi-k3` | `reasoning_effort: low` |
 | `adjudicate` | Rules on a player's challenge | `kimi-k3` | `reasoning_effort: low` |
 | `draft` | Schema-constrained synthesis, the hardest call | `kimi-k3` | `reasoning_effort: high` |
+
+K2.6 stays one variable away — `BIZSIM_TURN_MODEL=kimi-k2.6` — and everything its failures taught remains
+in the transport: the per-model dialect, the double-encoding tolerance, the malformed-turn retry. The next
+attempt should measure thinking *disabled* (`BIZSIM_TURN_EFFORT=low`), the configuration the failures never
+tested. What the gate has now caught, in order: a fabricated range would have been caught by the money
+guard; a schema refusal by the latch; and loose enforcement by Zod — each one a stub could not find.
 
 **The two dialects.** K3 takes `reasoning_effort` (`low | high | max`, default `max` — never omitted) and
 always thinks. K2.6/K2.5 take `thinking: {type: enabled | disabled}` and nothing else: their docs fix
