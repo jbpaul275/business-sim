@@ -778,6 +778,27 @@ describe('the stream the mapper cannot see twice', () => {
   });
 });
 
+describe('terms of art', () => {
+  it('tells the model to gloss them in the same sentence', () => {
+    // "Do you have a PIP or inspection number for the building itself?" — a
+    // Property Improvement Plan, very likely the largest number in a hotel
+    // acquisition, asked of someone who had never heard the term and could
+    // not tell whether it was a document they should have, a number to go and
+    // get, or something that did not apply to them.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Gloss the jargon, in the same sentence');
+    // Named, so the rule has teeth rather than being a sentiment.
+    for (const term of ['cap rate', 'RevPAR', 'PIP', 'DSCR', 'retainage', 'FF&E']) {
+      expect(CONCEPT_INTERVIEW_SYSTEM, term).toContain(term);
+    }
+  });
+
+  it('says who the player is, since that is what the rule rests on', () => {
+    // Someone who already knows what a PIP is does not need a simulator to
+    // tell them a $15k-a-key hotel has deferred capex.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('entering this industry for the first time');
+  });
+});
+
 describe('the prompt carries D-5', () => {
   /**
    * The prompt is the only place the absurdity principle actually binds at
