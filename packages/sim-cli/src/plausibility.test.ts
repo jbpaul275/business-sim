@@ -77,7 +77,7 @@ const mcdonalds = (expectedAnnualRevenue: number): ConceptDraft => ({
     },
   ],
   capex: [
-    { label: 'Store acquisition', category: 'REAL_PROPERTY', grossCost: 3_500_000, usefulLifeYears: 30, quantity: 1, sourceNote: 'Going concern.' },
+    { label: 'Store acquisition', category: 'REAL_PROPERTY', grossCost: 3_500_000, usefulLifeYears: 30, quantity: 1, sourceNote: 'Going concern.', provenance: 'PLAYER_SOURCED' },
   ],
   workingCapital: {
     dsoDays: 0,

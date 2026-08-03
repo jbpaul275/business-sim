@@ -101,8 +101,8 @@ const draft: ConceptDraft = {
     },
   ],
   capex: [
-    { label: 'Telescopes', category: 'EQUIPMENT', grossCost: 3_500, usefulLifeYears: 8, quantity: 24, sourceNote: 'Quoted.' },
-    { label: 'Buildout', category: 'LEASEHOLD_IMPROVEMENTS', grossCost: 90_000, usefulLifeYears: 15, quantity: 1, sourceNote: 'Contractor estimate.' },
+    { label: 'Telescopes', category: 'EQUIPMENT', grossCost: 3_500, usefulLifeYears: 8, quantity: 24, sourceNote: 'Quoted.', provenance: 'PLAYER_SOURCED' },
+    { label: 'Buildout', category: 'LEASEHOLD_IMPROVEMENTS', grossCost: 90_000, usefulLifeYears: 15, quantity: 1, sourceNote: 'Contractor estimate.', provenance: 'LLM_ESTIMATE' },
   ],
   workingCapital: {
     dsoDays: 1,
@@ -199,6 +199,14 @@ describe('the concept path reaches the same gate as the picker', () => {
     expect(at('streams.s1.params.capacityModel.seats')).toBe('PLAYER_SOURCED');
     expect(at('streams.s1.params.addressableTrafficPerQuarter')).toBe('PLAYER_SOURCED');
     expect(at('costs.llm_2_rent.amountPerQuarter')).toBe('PLAYER_SOURCED');
+
+    // Capex carries its own tag. A live session registered a building the
+    // player had personally priced — "I found a 5,000 sq ft property for
+    // $400k" — as LLM_ESTIMATE, because the draft schema had nowhere to say
+    // otherwise. The quoted telescopes are the player's; the contractor
+    // estimate stays the model's.
+    expect(at('capex.Telescopes.grossCost')).toBe('PLAYER_SOURCED');
+    expect(at('capex.Buildout.grossCost')).toBe('LLM_ESTIMATE');
 
     // Statutory and spec constants stay CATALOG regardless of who assembled
     // the template: the model is not consulted about FICA or the §3.7 curves.
@@ -345,6 +353,53 @@ describe('the concept path reaches the same gate as the picker', () => {
       // Whether they committed depends on the seeded answers; what matters is
       // that setup completed rather than throwing.
       expect(result === undefined || typeof result.committed === 'boolean').toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('shows the biggest capex items and never hides the largest behind the fold', async () => {
+    // A $4M month zero showed a $400k building, $150k of fit-out and $154k of
+    // machines — and hid a single $3.26M item behind "…and 1 more", because
+    // the sub-lines printed in draft order and truncated at four. The player
+    // committed 80% of their capital to a line they never saw.
+    const heavy: ConceptDraft = {
+      ...draft,
+      capex: [
+        { label: 'Signage', category: 'FF&E', grossCost: 8_000, usefulLifeYears: 10, quantity: 1, sourceNote: '', provenance: 'LLM_ESTIMATE' },
+        { label: 'Shelving', category: 'FF&E', grossCost: 12_000, usefulLifeYears: 10, quantity: 1, sourceNote: '', provenance: 'LLM_ESTIMATE' },
+        { label: 'Telescopes', category: 'EQUIPMENT', grossCost: 3_500, usefulLifeYears: 8, quantity: 24, sourceNote: 'Quoted.', provenance: 'PLAYER_SOURCED' },
+        { label: 'Security system', category: 'EQUIPMENT', grossCost: 20_000, usefulLifeYears: 8, quantity: 1, sourceNote: '', provenance: 'LLM_ESTIMATE' },
+        { label: 'Buildout', category: 'LEASEHOLD_IMPROVEMENTS', grossCost: 90_000, usefulLifeYears: 15, quantity: 1, sourceNote: '', provenance: 'LLM_ESTIMATE' },
+        // The landmine: largest item, last in draft order.
+        { label: 'General building renovation', category: 'LEASEHOLD_IMPROVEMENTS', grossCost: 3_260_000, usefulLifeYears: 20, quantity: 1, sourceNote: '', provenance: 'LLM_ESTIMATE' },
+      ],
+    };
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Press enter.', readyToDraft: true },
+      ],
+      [heavy],
+    );
+    const input = scriptedInput([
+      '4',
+      '5000000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '', // nothing to argue with
+      '', // take the proposed funding
+      '', // done challenging
+      'y',
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      // The largest item is on screen, and the tail names what it adds up to —
+      // a big remainder cannot hide inside a count.
+      expect(printed).toContain('General building renovation');
+      expect(printed).toContain('…and 2 more, $20,000 together');
     } finally {
       log.mockRestore();
     }

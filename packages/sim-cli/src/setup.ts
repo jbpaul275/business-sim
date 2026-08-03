@@ -77,6 +77,20 @@ const pad = (s: string, n: number): string => (s.length > n ? s.slice(0, n) : s.
 const rpad = (s: string, n: number): string => s.padStart(n);
 const pctText = (v: number): string => `${(v * 100).toFixed(1)}%`;
 
+/**
+ * An assumption's value in its own units — never a raw float.
+ *
+ * The register printed "Credit card processing 0.023799999999999998": the
+ * card rate times the card mix, folded at injection, shown with every bit of
+ * IEEE 754 noise attached. A rate renders as a percentage, a dollar amount as
+ * dollars, and any other number trimmed to what a person would have written.
+ */
+const assumptionText = (a: Assumption): string => {
+  if (typeof a.value === 'bigint') return toDisplay(a.value, { showCents: false });
+  if (a.unit === 'pct') return `${Number((a.value * 100).toPrecision(4))}%`;
+  return String(Number(a.value.toPrecision(6)));
+};
+
 /** §10.3 orders provenance; the colours carry that ordering into the register. */
 const PROVENANCE_COLOUR: Record<Provenance, string> = {
   CATALOG: GREEN,
@@ -284,7 +298,7 @@ function renderRegister(model: BusinessModel): void {
         `${outOfBand.length === 1 ? 'is outside its' : 'are outside their'} benchmark band:${RESET}`,
     );
     for (const a of outOfBand.slice(0, 8)) {
-      const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
+      const value = assumptionText(a);
       const band = a.benchmarkBand;
       const magnitude = deviationLabel(a);
       console.log(
@@ -332,7 +346,7 @@ function renderRegister(model: BusinessModel): void {
         `${RESET}`,
     );
     for (const a of assumed.slice(0, 6)) {
-      const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
+      const value = assumptionText(a);
       console.log(`    ${pad(a.label, 34)}${rpad(value, 12)}  ${DIM}${a.sourceNote}${RESET}`);
     }
   }
@@ -405,12 +419,23 @@ async function challengeLoop(
   model: BusinessModel,
   transport?: ConceptTransport,
 ): Promise<string | undefined> {
-  // Worth arguing with first: furthest out of band, then the unsourced.
+  /**
+   * Worth arguing with first: furthest out of band, then the biggest money.
+   *
+   * The tiebreak used to be alphabetical, which on a synthetic concept — no
+   * benchmark bands, so EVERY deviation is zero — meant the whole list was
+   * alphabetical: a $4M model led with "Accounting & legal $1,500" while a
+   * $3.26M capex estimate sat below the fold, unshown and unchallenged.
+   * Dollar magnitude is the honest second sort: the numbers most worth
+   * arguing with are the ones that move the model most.
+   */
+  const dollars = (a: Assumption): number => (typeof a.value === 'bigint' ? Number(a.value) : 0);
   const arguable = [...model.assumptions]
     .filter((a) => a.outsideBenchmark || !isWellSourced(a.provenance))
     .sort(
       (a, b) =>
         Math.abs(b.benchmarkDeviation ?? 0) - Math.abs(a.benchmarkDeviation ?? 0) ||
+        dollars(b) - dollars(a) ||
         a.label.localeCompare(b.label),
     )
     .slice(0, 12);
@@ -423,7 +448,7 @@ async function challengeLoop(
       ` itself and the model redrafts it.${RESET}`,
   );
   arguable.forEach((a, i) => {
-    const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
+    const value = assumptionText(a);
     console.log(`    ${rpad(String(i + 1), 3)}  ${pad(a.label, 38)}${rpad(value, 12)}  ${DIM}${a.provenance}${RESET}`);
   });
 
@@ -593,14 +618,30 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
     // tell what it is; the draft named every item and the screen was throwing
     // the names away.
     if (label === capexLabel(model)) {
-      for (const item of model.capex.slice(0, 4)) {
+      /**
+       * Largest first, and line totals rather than per-unit costs.
+       *
+       * In draft order, a $4M month zero showed a $400k building, $150k of
+       * fit-out, $154k of machines and $20k of security — and hid a single
+       * $3.26M item behind "…and 1 more". The player committed 80% of their
+       * capital to a line they never saw. Whatever gets truncated must be
+       * the smallest, and the tail says what it adds up to so a big remainder
+       * cannot hide in a count.
+       */
+      const items = model.capex
+        .map((item) => ({ item, total: mulRate(item.grossCost, item.quantity) }))
+        .sort((a, b) => (b.total > a.total ? 1 : b.total < a.total ? -1 : 0));
+      for (const { item, total } of items.slice(0, 4)) {
         const each = item.quantity > 1 ? ` × ${item.quantity}` : '';
         console.log(
-          `    ${DIM}${pad(item.label + each, 40)}${toDisplay(item.grossCost, { showCents: false })}${RESET}`,
+          `    ${DIM}${pad(item.label + each, 40)}${toDisplay(total, { showCents: false })}${RESET}`,
         );
       }
-      if (model.capex.length > 4) {
-        console.log(`    ${DIM}…and ${model.capex.length - 4} more${RESET}`);
+      if (items.length > 4) {
+        const rest = items.slice(4).reduce<Money>((a, i) => a + i.total, 0n);
+        console.log(
+          `    ${DIM}…and ${items.length - 4} more, ${toDisplay(rest, { showCents: false })} together${RESET}`,
+        );
       }
     }
   }

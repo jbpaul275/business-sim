@@ -200,6 +200,32 @@ describe('a model in the turn loop', () => {
     expect(briefingText).toContain('ONLY levers in this build');
   });
 
+  it('never says "same answer as last time" over a fresh model reply', async () => {
+    // The deterministic findings dedup per quarter, and once exhausted the
+    // fallback line fired above the model's answer to a brand-new question —
+    // "what are our major sales categories?" was met with "Same answer as
+    // last time — nothing has moved since you asked", which reads as the game
+    // not listening. The line survives only where it is true and alone: no
+    // model advisor to answer instead.
+    const advisor: AdviceTransport = {
+      async advise() {
+        return { advice: advice('The model carries one blended rate; give me your mix.') };
+      },
+    };
+    const printed = await transcript(
+      [
+        'should we raise marketing spend?',
+        'so we are overspending on marketing?',
+        'what are our major sales categories?',
+        'what margins do we make per category?',
+        'quit',
+      ],
+      advisor,
+    );
+    expect(printed).not.toMatch(/Same answer as last time/);
+    expect(printed).toContain('give me your mix');
+  });
+
   it('says nothing extra when the model invents a figure twice', async () => {
     const advisor: AdviceTransport = {
       async advise() {

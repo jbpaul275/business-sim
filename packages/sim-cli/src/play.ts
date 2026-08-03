@@ -584,6 +584,7 @@ function advise(
   history: readonly RunPoint[],
   question = '',
   memory?: AdvisorMemory,
+  modelWillSpeak = false,
 ): string[] {
   const entry = result.statements.byBusiness[business.id];
   if (!entry) return ['No statements yet — run a quarter first.'];
@@ -1113,7 +1114,7 @@ function advise(
     );
   }
 
-  return remember(out, generalDiagnosis, memory);
+  return remember(out, generalDiagnosis, memory, modelWillSpeak);
 }
 
 /**
@@ -1127,6 +1128,7 @@ function remember(
   lines: string[],
   fallback: () => string[],
   memory: AdvisorMemory | undefined,
+  modelWillSpeak = false,
 ): string[] {
   if (!memory) return lines;
   const keep = (candidates: string[]): string[] => candidates.filter((l) => !memory.said.has(l));
@@ -1134,6 +1136,15 @@ function remember(
   let fresh = keep(lines);
   if (fresh.length === 0) fresh = keep(fallback());
   if (fresh.length === 0) {
+    /**
+     * Everything deterministic has been said this quarter. When a model
+     * advisor is about to answer the same question, the honest contribution
+     * is silence — a player who asked something NEW was being told "same
+     * answer as last time" directly above a fresh, correct reply, which
+     * reads as the game not listening. The line survives only where it is
+     * true and alone: no model, so the stale findings really were the answer.
+     */
+    if (modelWillSpeak) return [];
     return [
       `Same answer as last time — nothing in this quarter's numbers has moved since you asked. ` +
         `\`skip 1\` runs a quarter and changes them.`,
@@ -2291,7 +2302,7 @@ async function parseCommand(
          * game exactly as it was before, and the best case is the half the
          * arithmetic could never reach.
          */
-        const answered = advise(business, result, world, history, line, memory);
+        const answered = advise(business, result, world, history, line, memory, advisor !== undefined);
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
 
         const spoken = advisor

@@ -174,7 +174,7 @@ const DRAFT: ConceptDraft = {
     },
   ],
   capex: [
-    { label: 'Core banking platform', category: 'EQUIPMENT', grossCost: 4_000_000, usefulLifeYears: 7, quantity: 1, sourceNote: 'Licence and build.' },
+    { label: 'Core banking platform', category: 'EQUIPMENT', grossCost: 4_000_000, usefulLifeYears: 7, quantity: 1, sourceNote: 'Licence and build.', provenance: 'LLM_ESTIMATE' },
   ],
   workingCapital: {
     dsoDays: 2, dioDays: 0, dpoDays: 30,
