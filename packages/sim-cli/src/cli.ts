@@ -26,9 +26,29 @@ import { summariseFaults } from './faults.js';
  * session costs. One transcript pasted into a chat answers none of those.
  */
 function reportSessions(): void {
-  const sessions = listSessions();
+  const all = listSessions();
+  /**
+   * A session where no model was ever called is not a run, it is a fixture.
+   *
+   * Scripted-transport sessions commit reliably and cost nothing, so leaving
+   * them in drags every rate in the table toward "always works, free" — the
+   * exact direction that makes a provider comparison meaningless. The suite no
+   * longer writes them (see `vitest.setup.ts`), but a working directory that
+   * accumulated them before that fix should not have to be deleted to get a
+   * readable answer.
+   *
+   * Counted and reported rather than silently dropped: a filter nobody is told
+   * about is indistinguishable from a bug.
+   */
+  const sessions = all.filter((s) => s.calls > 0);
+  const fixtures = all.length - sessions.length;
   if (sessions.length === 0) {
-    console.log(`No recorded sessions in ${journalDir()}.`);
+    console.log(
+      all.length === 0
+        ? `No recorded sessions in ${journalDir()}.`
+        : `No sessions with a model call in ${journalDir()} ` +
+          `(${all.length} scripted or pre-instrumentation session(s) skipped).`,
+    );
     return;
   }
 
@@ -163,6 +183,12 @@ function reportSessions(): void {
     }
   }
 
+  if (fixtures > 0) {
+    console.log(
+      `\n${DIM}${fixtures} session(s) hidden: no model was called, so there is nothing to ` +
+        `compare.\nScripted test runs and anything recorded before per-call logging.${RESET}`,
+    );
+  }
   console.log(`\n${DIM}Raw events: ${journalDir()}/*.jsonl${RESET}`);
 }
 
