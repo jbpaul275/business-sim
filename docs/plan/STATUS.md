@@ -14,6 +14,14 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
 
+**Cross-cutting, added since the milestone plan was written:**
+
+| | State | Notes |
+|---|---|---|
+| **Provider routing** | ✅ Done | `OpenAICompatibleTransport` over a `VENDORS` table — Moonshot, DeepSeek, Groq, Together, OpenRouter, Gemini, OpenAI — plus Anthropic on its own. Kimi K3 is the default. [05](./05-provider-migration.md) |
+| **Per-call telemetry** | ✅ Done | One journal row per model call: type, provider, model, effort, wall clock, four token counts, cost. `--sessions` reports a head-to-head by model on cost, latency and three quality signals |
+| **Telemetry upload** | 🟡 Built, unwired | Supabase schema, two-tier opt-in, insert-only RLS, redaction with tests. Migration never applied; no in-game consent screen; no retention or deletion path. [06](./06-telemetry-upload.md) |
+
 ## M1 exit criteria
 
 > `sim run` executes 40 quarters from a hardcoded model, prints three statements that tie to the cent at every
@@ -185,6 +193,12 @@ which the reference model omitted — the same reason its year three sat above b
   buildout and unit count; this build takes one size multiplier covering all of them.
 - **`TurnNarration` (§11.5).** The quarterly screen is still engine output with no prose over it. A model
   now answers questions mid-game (§11.4), but it does not narrate the result of a quarter.
+- **Any live-call test, anywhere.** Every LLM path in this repo is verified against scripted or stubbed
+  transports. Nothing has ever asserted that a real provider accepts the request a transport builds. That
+  was a tolerable gap while there was one provider that had visibly worked; it is the largest unverified
+  surface in the build now that the default provider changed on the strength of stubs alone.
+- **One real session on the meter.** Every `spend` record in `.bizsim/` is a test fixture with zero tokens.
+  The cost case for the provider switch is entirely arithmetic on published rates.
 
 ## Simplifications taken, and where they are recorded
 
