@@ -54,6 +54,28 @@ export const zCapacitySpec = z.object({
    */
   deltaDemandHoursPerQuarter: zNonNegative.optional(),
   deltaAddressableTrafficPerQuarter: zNonNegative.optional(),
+  /**
+   * A better product, rather than more of the same one.
+   *
+   * "I want to add a small indoor waterpark" — asked three times of a hotel at
+   * 70% occupancy, answered three times with "you already have 19 idle". Idle
+   * rooms are the reason to build the waterpark, not the argument against it:
+   * the point of an amenity is that it changes who is willing to stay and what
+   * they will pay, and the game had no way to express that at all.
+   *
+   * Modelled as an uplift to the REFERENCE price — the price the market thinks
+   * this product is worth — not to the price charged. Demand responds to the
+   * ratio between the two (§3.0.1), so a 15% uplift with the rate held gives
+   * 15% more perceived value and the demand that follows from it, while the
+   * player who would rather bank it can raise the rate 15% and keep occupancy
+   * flat. One knob, and the player chooses which side to take it out of. It
+   * works for every archetype because every archetype has a reference price.
+   *
+   * The size of the claim is the player's. Nothing here knows what a waterpark
+   * does to a highway hotel in Kansas; what the game can do is charge for the
+   * buildout, hold the claim to the model, and show what it was worth.
+   */
+  qualityUpliftPct: zNonNegative.optional(),
   buildoutCost: zMoney,
 });
 export type CapacitySpec = z.infer<typeof zCapacitySpec>;

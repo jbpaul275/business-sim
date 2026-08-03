@@ -493,3 +493,88 @@ describe('money in the deal that is neither yours nor a loan', () => {
     expect(model.financingPlan.outsideCapital).toBe(0n);
   });
 });
+
+/**
+ * "I want to add a small indoor waterpark."
+ *
+ * Asked three times of a hotel at 70% occupancy and answered three times with
+ * "you already have 19 idle". Every lever the game owned was a quantity — more
+ * rooms, more marketing, a different price — and none of them is what a player
+ * means by building something new. An amenity is a claim that the product is
+ * worth more, which is a claim about the REFERENCE price: demand reads the
+ * ratio between what you charge and what the market thinks it is worth, so
+ * moving the second one with the first held is exactly "better, same price".
+ */
+describe('a better product, not more of the same one (§3.0.1)', () => {
+  const hotel = (): WorldState =>
+    createWorld({
+      id: 'hotel',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [
+        buildModelFromTemplate({
+          businessName: 'Hotel',
+          template: getSeedTemplate('self_storage'),
+          scale: { units: 64, price: fromDisplay(8_213) },
+          equityInjection: fromDisplay(2_400_000),
+        }),
+      ],
+    });
+
+  const upgrade = (state: WorldState, pct: number): Action => ({
+    kind: 'EXPAND_CAPACITY',
+    businessId: state.businesses[0]!.id,
+    spec: {
+      streamId: state.businesses[0]!.streams[0]!.id,
+      buildoutCost: fromDisplay(800_000),
+      qualityUpliftPct: pct,
+    },
+  });
+
+  it('turns a quality claim into demand at the same price', () => {
+    const base = run(hotel(), 8).results;
+    const improved = run(hotel(), 8, (p) => (p === 1 ? [upgrade(hotel(), 0.15)] : [])).results;
+
+    const occupancyOf = (r: TickResult): number =>
+      Object.values(r.statements.byBusiness)[0]?.derivedMetrics.streamMetrics[0]?.occupancy ?? 0;
+
+    // Two quarters of lead time: nothing before it lands.
+    expect(occupancyOf(improved[1]!)).toBeCloseTo(occupancyOf(base[1]!), 5);
+    // And more of them after.
+    expect(occupancyOf(improved[7]!)).toBeGreaterThan(occupancyOf(base[7]!));
+    expect(revenueOf(improved[7]!)).toBeGreaterThan(revenueOf(base[7]!));
+  });
+
+  it('can be taken as rate instead of volume, at the player’s choice', () => {
+    // The same uplift with the price raised by the same amount: volume holds
+    // roughly flat and the money arrives as revenue per unit instead. This is
+    // the whole reason the lever moves the reference price rather than demand
+    // directly — one knob, two ways to spend it.
+    const state = hotel();
+    const streamId = state.businesses[0]!.streams[0]!.id;
+    const bothResults = run(hotel(), 8, (p) =>
+      p === 1
+        ? [
+            upgrade(state, 0.15),
+            { kind: 'SET_PRICE', streamId, newPrice: fromDisplay(8_213 * 1.15) },
+          ]
+        : [],
+    ).results;
+    const base = run(hotel(), 8).results;
+
+    const occ = (r: TickResult): number =>
+      Object.values(r.statements.byBusiness)[0]?.derivedMetrics.streamMetrics[0]?.occupancy ?? 0;
+    // Price rises the moment it is set; the uplift lands two quarters later, so
+    // by period 7 the two have met and occupancy is back where it started.
+    expect(occ(bothResults[7]!)).toBeCloseTo(occ(base[7]!), 2);
+    expect(revenueOf(bothResults[7]!)).toBeGreaterThan(revenueOf(base[7]!));
+  });
+
+  it('costs what it costs, and capitalises rather than vanishing', () => {
+    const improved = run(hotel(), 8, (p) => (p === 1 ? [upgrade(hotel(), 0.15)] : [])).results;
+    const base = run(hotel(), 8).results;
+    // $800k of buildout, half in each of two quarters, onto PP&E.
+    const ppeOf = (r: TickResult): Money => r.statements.consolidated.balanceSheet.ppeGross;
+    expect(ppeOf(improved[7]!) - ppeOf(base[7]!)).toBe(fromDisplay(800_000));
+  });
+});

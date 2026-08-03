@@ -368,6 +368,64 @@ describe('asking what to do', () => {
     }
   });
 
+  it('engages with building something new instead of pointing at idle capacity', async () => {
+    // "I want to expand the hotel, add a small indoor waterpark" — asked three
+    // times, answered three times with "you already have 19 idle". The idle
+    // rooms are the reason to build the waterpark, not the argument against it.
+    const printed = await transcript(['i want to add an indoor waterpark', 'quit'], 'storage');
+    expect(printed).toMatch(/`upgrade <pct> <cost>`/);
+    expect(printed).not.toMatch(/sat empty this quarter/);
+    // It prices the trade in both directions rather than picking one.
+    expect(printed).toMatch(/more volume at today's rate/);
+    expect(printed).toMatch(/a quarter instead/);
+  });
+
+  it('books the improvement on the player’s own numbers', async () => {
+    const printed = await transcript(['upgrade 15% 800k', 'quit'], 'storage');
+    expect(printed).toMatch(/queued: \+15% willingness to pay for \$800,000/);
+    expect(printed).toMatch(/the improvement opens in two/);
+  });
+
+  it('will not invent the number the player has to supply', async () => {
+    const printed = await transcript(['upgrade', 'quit'], 'storage');
+    expect(printed).toMatch(/needs a claim and a cost/);
+    expect(printed).not.toContain('queued');
+  });
+
+  it('tells an occupancy business that rooms are not seats', async () => {
+    // "You already have 19 idle — more capacity earns nothing until demand
+    // catches up" is true of a demand pool fixed at concept lock, and false
+    // here: OCCUPANCY demand is units × occupancy, so more units is more
+    // demand at the same rate.
+    const printed = await transcript(['should we double the room count?', 'quit'], 'storage');
+    expect(printed).toMatch(/occupancy is a rate here/);
+    expect(printed).not.toMatch(/earns nothing until demand catches up/);
+    // And it flags where the model is being generous rather than hiding it.
+    expect(printed).toMatch(/generous case/);
+  });
+
+  it('says a second property is not in this build, once, instead of answering something else', async () => {
+    // "I want to use the cash flow from this one to buy a 256 room property in
+    // Des Moines" was answered with "you are at 57.6% of capacity, so the
+    // constraint is demand".
+    const printed = await transcript(['i want to buy another hotel', 'quit'], 'storage');
+    expect(printed).toMatch(/not in this build/);
+    expect(printed).not.toMatch(/the constraint is demand/);
+  });
+
+  it('does not silently throw away queued decisions when you skip', async () => {
+    // `upgrade 15% 800k` then `skip 6` ran six quarters that looked exactly
+    // like doing nothing, because skip advanced with an empty action list and
+    // the queue was dropped without a word.
+    const withUpgrade = await transcript(['upgrade 15% 800k', 'skip 6', 'quit'], 'storage');
+    const without = await transcript(['skip 6', 'quit'], 'storage');
+    expect(withUpgrade).toMatch(/Running 1 queued decision/);
+    // The message is not the fix. The quarters have to actually differ.
+    const revenue = (t: string): string[] => t.match(/Revenue\s+\$[\d.]+k/g) ?? [];
+    expect(revenue(withUpgrade).length).toBeGreaterThan(1);
+    expect(revenue(withUpgrade)).not.toEqual(revenue(without));
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);

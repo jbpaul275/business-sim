@@ -92,7 +92,12 @@ function describeAction(a: Action): string {
       const market =
         a.spec.deltaDemandHoursPerQuarter !== undefined ||
         a.spec.deltaAddressableTrafficPerQuarter !== undefined;
-      return `${market ? 'new territory' : 'more capacity'} for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
+      const better = a.spec.qualityUpliftPct !== undefined;
+      const what =
+        better ? `+${Math.round((a.spec.qualityUpliftPct ?? 0) * 100)}% willingness to pay`
+        : market ? 'new territory'
+        : 'more capacity';
+      return `${what} for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
     }
     case 'SET_CRISIS_POLICY':
       return `crisis order → ${a.policy.join(', ')}`;
@@ -246,6 +251,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}distribute${RESET} 20k        business → household
   ${BOLD}expand${RESET} 20 150k        add capacity (seats/units) for a buildout cost ${DIM}— +2 quarters${RESET}
   ${BOLD}market${RESET} 40% 150k       open a new territory: more demand, not more room ${DIM}— +2 quarters${RESET}
+  ${BOLD}upgrade${RESET} 15% 800k      build something better: +15% to what a customer will pay ${DIM}— +2 quarters${RESET}
   ${BOLD}policy${RESET} revolver,inject,defer,emergency,insolvency
                         reorder the cash-crisis ladder (§9.4)
 
@@ -304,6 +310,8 @@ interface ParseResult {
  */
 type Topic =
   | 'capacity'
+  | 'product'
+  | 'secondSite'
   | 'demand'
   | 'price'
   | 'marketing'
@@ -327,6 +335,30 @@ type Topic =
  * archetype is named after.
  */
 const TOPIC_PATTERNS: [Topic, RegExp][] = [
+  /**
+   * Buying a second one, which this build cannot do.
+   *
+   * "I want to use the cash flow from this one to buy a 256 room property in
+   * Des Moines" was answered with "you are at 57.6% of capacity, so the
+   * constraint is demand". Multi-business is M7 and START_BUSINESS is stubbed
+   * in the engine; the honest answer is that, said once, rather than an answer
+   * to a question nobody asked.
+   */
+  [
+    'secondSite',
+    /\b(another (hotel|property|location|site|store|shop|business)|second (hotel|property|location|site|store)|buy a\b.*\b(hotel|property|building|business)|new market|another market|acquire|acquisition|portfolio)\b/,
+  ],
+  /**
+   * Building something that was not there before.
+   *
+   * A waterpark, a pool, a restaurant in the lobby, a renovation. Every one of
+   * these is a claim that the product becomes worth more, and every one of them
+   * used to be answered with the idle-capacity paragraph.
+   */
+  [
+    'product',
+    /\b(waterpark|water park|pool|slide|amenit\w*|renovat\w*|refurbish\w*|remodel|upgrade|upgrades|improve|improvement|restaurant|bar|gym|spa|build (a|an|some)|add (a|an) )\b/,
+  ],
   [
     'demand',
     /\b(occupanc\w*|occupied|utili[sz]ation|fill|filling|filled|empty|vacan\w*|booked|bookings|footfall|traffic|more customers|more guests|demand)\b/,
@@ -469,7 +501,33 @@ function advise(
     // had "186 idle — 17.9% sat empty", which is what target utilisation looks
     // like when nobody is idle at all. Nobody bills 100% of paid hours.
     const genuinelyIdle = stream.benchStress === undefined || stream.benchStress > 1;
-    if (stream.lostDemand > 0.5) {
+    const occupancyParams = business.streams[0]?.params;
+
+    /**
+     * Idle rooms are not idle seats.
+     *
+     * "You already have 19 idle — more capacity earns nothing until demand
+     * catches up" was said to a hotel owner who wanted to double his room
+     * count, and it is simply wrong for this archetype. OCCUPANCY demand is
+     * `units × occupancy`: occupancy is a RATE, so doubling the units doubles
+     * the demand and the empty-room count with it. Every other archetype draws
+     * from a demand pool fixed at concept lock, which is where that sentence
+     * came from and where it belongs.
+     */
+    if (occupancyParams?.kind === 'OCCUPANCY') {
+      const rate = stream.occupancy ?? used;
+      out.push(
+        `Rooms are not seats: occupancy is a rate here, so ${occupancyParams.units} units at ` +
+          `${pct(rate)} become ${occupancyParams.units * 2} units at ${pct(rate)} — the empty ones ` +
+          `scale up too, and so does the revenue. \`expand <units> <cost>\` adds them, two quarters out.`,
+      );
+      out.push(
+        `Worth knowing that this is the generous case: the model has no view on whether a second ` +
+          `${occupancyParams.units} units in the same town would fill at the same ${pct(rate)}, and ` +
+          `in a small market they would not. \`upgrade <pct> <cost>\` is the other half — a better ` +
+          `property rather than a bigger one.`,
+      );
+    } else if (stream.lostDemand > 0.5) {
       out.push(
         `Worth doing: you turned away ${Math.round(stream.lostDemand).toLocaleString()} this quarter. ` +
           `\`expand <units> <cost>\` adds capacity, and it lands two quarters out, not now.`,
@@ -494,6 +552,54 @@ function advise(
   }
 
   const first = business.streams[0];
+
+  /**
+   * "I want to add a small indoor waterpark."
+   *
+   * The one question the game had no shape for. Every lever it owned was
+   * quantity — more rooms, more marketing, a different price — and none of them
+   * is what a player means by building something new. The answer cannot be a
+   * cost, because nothing here knows what a waterpark costs in Russell, Kansas.
+   * It can be the trade, stated precisely enough that the player's own number
+   * becomes a decision the game will hold them to.
+   */
+  if (topic === 'product' && first && stream) {
+    const priceNow = streamPrice(first);
+    const units = priceUnits(first, priceNow);
+    const elasticity = first.modifiers.priceElasticity;
+    // What a 10% claim is worth at today's volume, both ways round, so the
+    // player can size their own number against something real.
+    const asVolume = Math.pow(1.1, elasticity) - 1;
+    const asRate = mulRate(is.revenue, 0.1);
+    out.push(
+      `That is a claim about what the product is worth, and it is a real lever: ` +
+        `\`upgrade <pct> <cost>\` books it. You say how much more a customer would pay for the ` +
+        `finished thing and what it costs to build; the buildout capitalises and it lands in two quarters.`,
+    );
+    out.push(
+      `To size it: a 10% claim moves the reference price from ${units.colloquial ?? `$${units.command.toLocaleString()}`} ` +
+        `up 10%, which at an elasticity of ${elasticity.toFixed(1)} is about ${pct(asVolume)} more ` +
+        `volume at today's rate — or hold the volume, raise the rate 10%, and take ` +
+        `${toCompact(asRate)} a quarter instead. The game will not tell you a waterpark is worth 10%; ` +
+        `that number is yours, and the run is what tests it.`,
+    );
+  }
+
+  /**
+   * "I want to buy a 256 room property in Des Moines."
+   */
+  if (topic === 'secondSite') {
+    out.push(
+      `A second property is not in this build — multi-business is M7, and the engine stubs ` +
+        `START_BUSINESS rather than pretending. Saying so is the whole answer; there is no ` +
+        `workaround worth typing.`,
+    );
+    out.push(
+      `Inside this one: \`expand <units> <cost>\` buys more of it, \`upgrade <pct> <cost>\` makes it ` +
+        `worth more, \`repay\` retires the debt, and \`distribute\` moves the cash to your household, ` +
+        `where a real second deal would be funded from.`,
+    );
+  }
 
   /**
    * "how can we get occupancy up?"
@@ -875,7 +981,8 @@ function remember(
  */
 const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
-  'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market', 'policy',
+  'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
+  'upgrade', 'renovate', 'policy',
 ]);
 
 /**
@@ -1329,11 +1436,56 @@ function parseCommand(
       // Saying which lever does move this archetype beats a flat refusal.
       return fail(
         p.kind === 'OCCUPANCY'
-          ? 'An occupancy business grows by building units — `expand <units> <cost>`.'
+          ? 'An occupancy business grows by building units — `expand <units> <cost>` — or by being ' +
+            'worth more per unit: `upgrade <pct> <cost>`.'
           : p.kind === 'PROJECT_BACKLOG'
             ? 'A contractor grows by bidding more and delivering more — `expand` raises execution capacity.'
             : 'This archetype grows through acquisition spend rather than territory — `marketing <amount>`.',
       );
+    }
+
+    /**
+     * "I want to add a small indoor waterpark."
+     *
+     * Asked three times, answered three times with "you already have 19 idle".
+     * The idle rooms are the reason to build the waterpark, not the argument
+     * against it — an amenity changes who is willing to stay and what they will
+     * pay, and the game had no way to say that at all.
+     *
+     * The player supplies both numbers. Nothing here knows what a waterpark
+     * does to a highway hotel in Kansas, and pretending to would be worse than
+     * asking: what the game can do is charge for the buildout, hold the claim
+     * to the model, and show what it turned out to be worth.
+     */
+    case 'upgrade':
+    case 'renovate': {
+      const uplift = parseNumber((rest[0] ?? '').replace('%', ''));
+      const cost = parseMoney(rest[1] ?? '');
+      if (uplift === undefined || uplift <= 0 || cost === undefined) {
+        return fail(
+          'upgrade needs a claim and a cost: `upgrade 15% 800k` — you think the improvement makes ' +
+            'the product 15% more valuable to a customer, and it costs $800k to build.',
+        );
+      }
+      if (uplift > 100) {
+        return fail('An upgrade that more than doubles what customers will pay is a different business, not an improvement to this one.');
+      }
+      const stream = business.streams[0];
+      if (!stream) return fail('No stream to improve.');
+      console.log(
+        `  ${DIM}Taken as a claim: ${uplift}% more willingness to pay, ${toCompact(cost)} to build, ` +
+          `landing in two quarters. It arrives as demand at today's price — raise the price by the ` +
+          `same ${uplift}% instead and you keep the volume and bank the difference.${RESET}`,
+      );
+      return {
+        actions: [
+          {
+            kind: 'EXPAND_CAPACITY',
+            businessId: business.id,
+            spec: { streamId, buildoutCost: cost, qualityUpliftPct: uplift / 100 },
+          },
+        ],
+      };
     }
 
     case 'policy': {
@@ -1497,10 +1649,11 @@ export async function play(
               const market =
                 a.spec.deltaDemandHoursPerQuarter !== undefined ||
                 a.spec.deltaAddressableTrafficPerQuarter !== undefined;
-              console.log(
-                `  ${YELLOW}buildout spread over two quarters; ` +
-                  `${market ? 'the new market opens' : 'capacity arrives'} in two${RESET}`,
-              );
+              const arrives =
+                a.spec.qualityUpliftPct !== undefined ? 'the improvement opens'
+                : market ? 'the new market opens'
+                : 'capacity arrives';
+              console.log(`  ${YELLOW}buildout spread over two quarters; ${arrives} in two${RESET}`);
             }
           }
           continue;
@@ -1511,8 +1664,18 @@ export async function play(
       if (quit) break;
 
       if (skip > 0) {
+        // Anything already queued belongs to the first of the skipped quarters.
+        // `upgrade 15% 800k` then `skip 6` silently threw the buildout away and
+        // ran six quarters that looked exactly like doing nothing — which is
+        // what the player saw, and reasonably concluded about the lever.
+        if (queued.length > 0) {
+          console.log(
+            `  ${DIM}Running ${queued.length} queued ${queued.length === 1 ? 'decision' : 'decisions'} ` +
+              `in the first of those quarters.${RESET}`,
+          );
+        }
         for (let i = 0; i < skip && state.currentPeriod < milestonePeriod; i++) {
-          last = advance([]);
+          last = advance(i === 0 ? queued : []);
           record(last);
           const b = state.businesses.find((x) => x.id === businessId)!;
           if (b.status === 'CLOSED') break;

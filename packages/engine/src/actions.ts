@@ -404,6 +404,13 @@ export function applyAction(
       if (params.kind === 'TRAFFIC' && action.spec.deltaAddressableTrafficPerQuarter) {
         params.addressableTrafficPerQuarter += action.spec.deltaAddressableTrafficPerQuarter;
       }
+
+      // A better product: the reference price moves, the price charged does
+      // not. Demand reads the ratio, so the improvement arrives as volume
+      // until the player decides to take it as rate instead.
+      if (action.spec.qualityUpliftPct) {
+        params.referencePrice = mulRate(params.referencePrice, 1 + action.spec.qualityUpliftPct);
+      }
       return events;
     }
 
