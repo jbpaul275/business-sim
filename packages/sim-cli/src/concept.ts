@@ -12,7 +12,7 @@ import {
 import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
-import { revenueRealityIssues } from './plausibility.js';
+import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -206,10 +206,17 @@ export async function runConceptInterview(
     // draft says this business does? A model that states $3.5M and builds
     // $1.4M has contradicted itself, and the costs it wrote are sized for the
     // first number.
-    const issues = [
+    // ...and one the engine already knows how to make. Running the validator
+    // here rather than only at the commit gate is the difference between a
+    // repair round and a dead end: an offshore rave ship put 700 guests into
+    // 2,000 square feet, and the player found out after five financing
+    // questions and a million dollars, with the conversation gone.
+    const faults = () => [
       ...draftIssues(state.draft),
-      ...(repairs < MAX_REPAIRS ? revenueRealityIssues(state.draft) : []),
+      ...buildabilityIssues(state.draft),
+      ...revenueRealityIssues(state.draft),
     ];
+    const issues = faults();
     if (issues.length > 0 && repairs < MAX_REPAIRS) {
       repairs += 1;
       console.log(`  ${YELLOW}The draft has problems I need to fix:${RESET}`);
@@ -219,18 +226,46 @@ export async function runConceptInterview(
         `Please correct them and emit the draft again.`;
       continue;
     }
-    // Out of repair attempts and still faulty. A structural fault cannot be
-    // built at all; a revenue contradiction can, and the player is better off
-    // seeing the numbers and arguing with them than losing the conversation.
-    const structural = draftIssues(state.draft);
-    if (structural.length > 0) {
+    // Out of repair attempts and still faulty. A draft that will not build
+    // cannot be shown at all; a revenue contradiction can, and the player is
+    // better off seeing the numbers and arguing with them than losing the
+    // conversation over them.
+    const unbuildable = [...draftIssues(state.draft), ...buildabilityIssues(state.draft)];
+    if (unbuildable.length > 0) {
       console.log(`\n  ${RED}The model could not produce a buildable draft:${RESET}`);
-      for (const issue of structural) console.log(`    ${RED}- ${issue}${RESET}`);
+      for (const issue of unbuildable) {
+        console.log(`    ${RED}- ${wrap(issue, 70, '      ').trimStart()}${RESET}`);
+      }
       console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
       return undefined;
     }
     for (const issue of revenueRealityIssues(state.draft)) {
       console.log(`\n  ${YELLOW}⚠ ${wrap(issue, 70, '    ').trimStart()}${RESET}`);
+    }
+
+    renderConceptNotes(state.draft);
+
+    /**
+     * "Worth arguing with first" — and then, until now, nothing to argue with.
+     *
+     * The draft names the three figures it is least sure of and the CLI went
+     * straight to asking for a marketing budget. Offering the three most
+     * uncertain numbers in a business and then refusing to discuss them is
+     * worse than not offering: it reads as a feature that does not work.
+     */
+    const objection = await ask(
+      input,
+      `\n${BOLD}Argue with any of it, or press enter to price it up: ${RESET}`,
+      '',
+      (raw) => raw.trim() || undefined,
+    );
+    if (objection.trim()) {
+      // A fresh drafting attempt the player asked for, so it gets fresh repair
+      // rounds. Carrying the old count forward would mean a concept that took
+      // two repairs early can never be argued with later.
+      repairs = 0;
+      reply = objection;
+      continue;
     }
 
     return { mapped: draftToTemplate(state.draft), draft: state.draft };

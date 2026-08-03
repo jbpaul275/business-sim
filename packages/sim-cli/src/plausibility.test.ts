@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ConceptDraft } from '@bizsim/llm';
-import { projectMatureRevenue, revenueRealityIssues } from './plausibility.js';
+import { buildabilityIssues, projectMatureRevenue, revenueRealityIssues } from './plausibility.js';
 
 /**
  * The McDonald's run, reduced to its arithmetic.
@@ -153,3 +153,42 @@ describe('does the draft build the business the draft says it is building', () =
 
 /** The threshold the module uses, restated so the test fails if it moves. */
 const TOO_LOW_FOR_TEST = 0.6;
+
+describe('the validator runs while there is still someone to tell', () => {
+  it('catches a footprint fault at the draft, not at the commit gate', () => {
+    // An offshore rave ship drafted 700 guests into 2,000 square feet. The
+    // engine caught it exactly as designed — and caught it after the player had
+    // answered five financing questions and put in a million dollars, at which
+    // point the run ended and took the conversation with it.
+    const overcrowded = mcdonalds(3_600_000);
+    const params = overcrowded.streams[0]!.params;
+    params.find((p) => p.name === 'seats')!.value = 700;
+    params.find((p) => p.name === 'floorAreaSqFt')!.value = 2_000;
+
+    const issues = buildabilityIssues(overcrowded);
+    expect(issues.some((i) => i.startsWith('CAPACITY_EXCEEDS_FOOTPRINT'))).toBe(true);
+    // The engine's message already says what would have to be true, and it goes
+    // back to the model verbatim rather than being paraphrased into advice.
+    expect(issues.join(' ')).toContain('700 seats will not fit');
+  });
+
+  it('says nothing about a draft the engine is happy with', () => {
+    expect(buildabilityIssues(mcdonalds(3_600_000))).toEqual([]);
+  });
+
+  it('reports a draft that cannot be assembled at all rather than throwing', () => {
+    const noStream = { ...mcdonalds(3_600_000), streams: [] };
+    const issues = buildabilityIssues(noStream);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('could not be assembled');
+  });
+
+  it('never reports a financing problem — that is the player\'s question, later', () => {
+    // Built with a billion dollars behind it on purpose. A draft flagged here
+    // for being underfunded would send the model off correcting the wrong
+    // thing, and would hide whatever the real fault was.
+    const expensive = mcdonalds(3_600_000);
+    expensive.capex[0]!.grossCost = 400_000_000;
+    expect(buildabilityIssues(expensive)).toEqual([]);
+  });
+});

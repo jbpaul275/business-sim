@@ -22,12 +22,7 @@ import {
 import { listSeedTemplates } from '@bizsim/seeds';
 import type { ConceptTransport } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
-import {
-  conceptPathAvailable,
-  renderConceptNotes,
-  runConceptInterview,
-  type ConceptResult,
-} from './concept.js';
+import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
 
 /**
  * Game setup — spec §9.1 Phases 0 through 4.
@@ -351,7 +346,6 @@ export async function runSetup(
     archetype = concept.mapped.archetype;
     scale = concept.mapped.scale;
     businessName = concept.mapped.businessName;
-    renderConceptNotes(concept.draft);
   } else {
     console.log(
       `\n${DIM}  No ANTHROPIC_API_KEY, so the conversational path is unavailable and this${RESET}\n` +

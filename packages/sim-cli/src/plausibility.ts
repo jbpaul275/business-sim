@@ -1,5 +1,11 @@
 import { toDisplay, fromDisplay, type Money } from '@bizsim/money';
-import { buildModelFromTemplate, createWorld, createWorldConfig, tick } from '@bizsim/engine';
+import {
+  buildModelFromTemplate,
+  createWorld,
+  createWorldConfig,
+  tick,
+  validateBusinessModel,
+} from '@bizsim/engine';
 import { draftToTemplate, type ConceptDraft } from '@bizsim/llm';
 
 /**
@@ -65,12 +71,13 @@ export function projectMatureRevenue(draft: ConceptDraft): RevenueProjection | u
       template: mapped.template,
       archetype: mapped.archetype,
       scale: mapped.scale,
-      // Marketing is left at the template's own default rather than passed
-      // through: the question is what the business the model drafted earns,
-      // not what it earns after the player has touched a dial.
-      // Funded well past anything it could need. The question is what the
-      // business earns, and a cash crisis part-way through would cut marketing
-      // and answer a different one.
+      // Marketing stays at the template's own default rather than being
+      // passed through: the question is what the business the model drafted
+      // earns, not what it earns after the player has touched a dial.
+      //
+      // Funded well past anything it could need, for the same reason — a cash
+      // crisis part-way through would cut marketing and answer a different
+      // question than the one being asked.
       equityInjection: fromDisplay(1_000_000_000),
     });
 
@@ -105,6 +112,47 @@ export function projectMatureRevenue(draft: ConceptDraft): RevenueProjection | u
     // will say so precisely a moment later. Swallowing it here keeps this from
     // reporting "revenue is $0" about a model that never ran.
     return undefined;
+  }
+}
+
+/**
+ * What the engine's validator says about the drafted model, in the model's own
+ * words, while there is still someone to tell.
+ *
+ * An offshore rave ship drafted 700 guests into 2,000 square feet. The engine
+ * caught it exactly as designed — `CAPACITY_EXCEEDS_FOOTPRINT`, with the
+ * arithmetic and both ways out — but it caught it at the commit gate, after the
+ * player had answered five financing questions and put a million dollars in.
+ * The run ended there, and the whole conversation went with it.
+ *
+ * The validator is not the problem; *when* it ran was. Running it against the
+ * draft puts the same message in front of the model that wrote the fault, in a
+ * repair round that costs one call instead of the session.
+ *
+ * Funded past anything it could need, so nothing here reports a financing
+ * problem: how the business gets paid for is the player's question, asked
+ * later, and answering it on their behalf would hide the real fault.
+ */
+export function buildabilityIssues(draft: ConceptDraft): string[] {
+  try {
+    const mapped = draftToTemplate(draft);
+    const model = buildModelFromTemplate({
+      businessName: mapped.businessName,
+      template: mapped.template,
+      archetype: mapped.archetype,
+      legalForm: mapped.legalForm,
+      scale: mapped.scale,
+      equityInjection: fromDisplay(1_000_000_000),
+      provenanceFor: mapped.provenanceFor,
+    });
+    return validateBusinessModel(model)
+      .issues.filter((i) => i.severity === 'ERROR')
+      .map((i) => `${i.code}: ${i.message}`);
+  } catch (error) {
+    // Throwing at all means the draft cannot even be assembled. That is still
+    // a fault the model can fix, so it goes back rather than escaping as a
+    // stack trace.
+    return [`The draft could not be assembled: ${(error as Error).message}`];
   }
 }
 

@@ -257,6 +257,79 @@ describe('ConceptInterview', () => {
   });
 });
 
+describe('a question gets an answer before it gets a financial model', () => {
+  /**
+   * Live: asked how many people per event and at what ticket price, the player
+   * said "well to know that I need to know the biggest vessel I can get for
+   * $1m" — the information needed to answer — and the interview spent 85
+   * seconds building the whole model without a word about the ship.
+   */
+  const SHIP = 'well to know that I need to know the biggest vessel I can get for $1m';
+
+  it('does not draft on a turn where the player asked for information', async () => {
+    const transport = new ScriptedTransport([ready('Enough to build against.')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+
+    const state = await interview.send(SHIP);
+    expect(state.status).toBe('ASKING');
+    // The model's own words still reach the player — this withholds the
+    // drafting, not the reply, so it costs no extra call.
+    expect(state.message).toBe('Enough to build against.');
+    expect(state.cta).toContain('go ahead');
+  });
+
+  it('drafts as soon as the player says they have heard enough', async () => {
+    const transport = new ScriptedTransport(
+      [ready('Enough to build against.'), ready('Building it now.')],
+      [draft()],
+    );
+    const interview = new ConceptInterview({ transport });
+
+    expect((await interview.send(SHIP)).status).toBe('ASKING');
+    // Not a trap: the player is allowed to decide the question does not matter.
+    expect((await interview.send('go ahead')).status).toBe('DRAFTED');
+  });
+
+  it('is narrow enough not to cost a turn on an ordinary answer', async () => {
+    // A guard that fires on hedged answers would add a turn to the flow the
+    // player already thinks is too long. These all carry an answer.
+    for (const said of [
+      'about 450 people at $60 a head',
+      'not sure, call it 450',
+      'Austin, roughly 900 square feet',
+      'the ship is 40 years old',
+    ]) {
+      const transport = new ScriptedTransport([ready('Right.')], [draft()]);
+      const interview = new ConceptInterview({ transport });
+      expect((await interview.send(said)).status, said).toBe('DRAFTED');
+    }
+  });
+
+  it('catches the shapes that mean "I cannot answer that yet"', async () => {
+    for (const said of [
+      'what do you think?',
+      'which market would you pick',
+      'you tell me',
+      "I don't know, what's typical?",
+      SHIP,
+    ]) {
+      const transport = new ScriptedTransport([ready('Right.')], [draft()]);
+      const interview = new ConceptInterview({ transport });
+      expect((await interview.send(said)).status, said).toBe('ASKING');
+    }
+  });
+
+  it('leaves a turn that was not ready to draft exactly as it was', async () => {
+    // The guard only ever removes an intention to draft. A model still asking
+    // questions keeps its own cta.
+    const transport = new ScriptedTransport([asks('Right.', 'How big is the ship?')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+    const state = await interview.send('what do you think?');
+    expect(state.status).toBe('ASKING');
+    expect(state.cta).toBe('How big is the ship?');
+  });
+});
+
 describe('paramsToRecord', () => {
   it('folds the wire array into the record the engine expects', () => {
     const record = paramsToRecord(draft().streams[0]!.params);

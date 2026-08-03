@@ -309,6 +309,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       '900000',
       'A place that rents telescopes by the hour on a dark-sky ridge.',
       '24 scopes, about 1400 square feet.',
+      '', // nothing to argue with
       '', // marketing — accept suggestion
       '', // equity — accept suggestion
       '', // debt
@@ -357,6 +358,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       '900000',
       'A place that rents telescopes by the hour on a dark-sky ridge.',
       '24 scopes, about 1400 square feet.',
+      '', // nothing to argue with
       '', // marketing
       '0', // no loan
       '', // revolver
@@ -384,6 +386,53 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
+  it('lets the player argue with the draft it told them to argue with', async () => {
+    // The draft prints "Worth arguing with first" and names the three figures
+    // it trusts least — and then went straight to asking for a marketing
+    // budget. Offering the three most uncertain numbers in a business and then
+    // refusing to discuss them is worse than not offering.
+    const revised: ConceptDraft = {
+      ...draft,
+      businessName: 'Telescope rental, forty scopes',
+    };
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Press enter.', readyToDraft: true },
+        { message: 'Forty it is — that changes the counter.', cta: 'Here it is again.', readyToDraft: true },
+      ],
+      [revised],
+    );
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      'the capture rate is way too low, we get far more foot traffic than that',
+      '', // and now leave it alone
+      '', // marketing
+      '900000',
+      '',
+      '',
+      'y',
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+
+      // The objection went to the model and came back as a new draft, rather
+      // than being swallowed by the next numeric prompt.
+      expect(printed).toContain('Forty it is');
+      // And the revised draft is what got committed, not the first one.
+      expect(printed).toContain('Telescope rental, forty scopes');
+      expect(result?.committed).toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('warns before the player empties the household into the business', async () => {
     // A live run put $1,000,000 of a $1,000,000 household into the buildout and
     // printed "Household keeps $0.00" as though it were a line item.
@@ -399,7 +448,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
-      '',
+      '', // nothing to argue with
+      '', // marketing
       '0',
       '',
       '900000', // everything
@@ -430,7 +480,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
-      '',
+      '', // nothing to argue with
+      '', // marketing
       '0',
       '',
       '1000',

@@ -56,6 +56,27 @@ const wordCount = (text: string): number => text.trim().split(/\s+/).length;
 
 const DEFAULT_MAX_TURNS = 20;
 
+/**
+ * Did the player just ask a question rather than answer one?
+ *
+ * Live: asked how many people per event and at what ticket price, the player
+ * said "well to know that I need to know the biggest vessel I can get for $1m"
+ * — a perfectly reasonable request for the information needed to answer — and
+ * the interview went straight to synthesising the model without a word about
+ * the ship. "Two or three questions, then draft" is a budget, and it had
+ * quietly become a rule that outranked reading the room.
+ *
+ * The prompt is where this is really fixed. This is the backstop, and it is
+ * deliberately narrow: a question mark, or one of a few phrases that mean "I
+ * cannot answer that yet". Vaguer signals like "not sure" are left out, because
+ * a guard that fires on "not sure, let's say 450" costs a turn in the flow the
+ * player already thinks is too long.
+ */
+const ASKS_FOR_INFORMATION =
+  /\?|\b(i need to know|i don't know|i dont know|no idea|you tell me|tell me|help me understand|would you|should i|what do you (think|reckon|suggest))\b/i;
+
+export const playerAskedSomething = (text: string): boolean => ASKS_FOR_INFORMATION.test(text);
+
 export class ConceptInterview {
   private readonly transport: ConceptTransport;
   private readonly system: string;
@@ -128,11 +149,19 @@ export class ConceptInterview {
       this.verboseTurns += 1;
     }
 
-    if (!turn.readyToDraft) {
+    // A question gets an answer before it gets a financial model. Costs no
+    // extra call: the model's own message is shown, and only the intention to
+    // draft is withheld. Saying "go ahead" clears it, because the player is
+    // allowed to decide they have heard enough.
+    const holdForAnswer = turn.readyToDraft && playerAskedSomething(said);
+
+    if (!turn.readyToDraft || holdForAnswer) {
       return {
         status: 'ASKING',
         message: turn.message,
-        cta: turn.cta,
+        cta: holdForAnswer
+          ? 'Anything else you need from me before I build it? Say `go ahead` when you are ready.'
+          : turn.cta,
         transcript: this.transcript,
       };
     }
