@@ -92,8 +92,16 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
   ...over,
 });
 
-const asks = (message: string): InterviewTurn => ({ message, readyToDraft: false });
-const ready = (message: string): InterviewTurn => ({ message, readyToDraft: true });
+const asks = (message: string, cta = 'Tell me.'): InterviewTurn => ({
+  message,
+  cta,
+  readyToDraft: false,
+});
+const ready = (message: string, cta = 'Press enter to see the numbers.'): InterviewTurn => ({
+  message,
+  cta,
+  readyToDraft: true,
+});
 
 describe('ConceptInterview', () => {
   it('asks one question at a time and carries the transcript forward', async () => {
@@ -122,7 +130,10 @@ describe('ConceptInterview', () => {
     const draftCall = transport.seen.at(-1)!;
     expect(draftCall.messages).toHaveLength(6);
     expect(draftCall.messages[0]?.content).toContain('256 flavours');
-    expect(draftCall.messages.at(-1)?.content).toBe("Here's the model.");
+    // The transcript carries the CTA too, so the draft call sees the same
+    // conversation the player did — including the question they answered.
+    expect(draftCall.messages.at(-1)?.content).toContain("Here's the model.");
+    expect(draftCall.messages.at(-1)?.content).toContain('Press enter to see the numbers.');
   });
 
   it('does not offer a list of business types to choose from', async () => {
@@ -149,6 +160,35 @@ describe('ConceptInterview', () => {
     const system = transport.seen[0]!.system;
     expect(system).toContain('`full_service_restaurant`');
     expect(system).toContain('Otherwise null');
+  });
+
+  it('carries a call to action on every turn, including the last', async () => {
+    // The player's ask: every reply ends with one bold sentence saying what to
+    // do next. A structured field rather than a convention inside `message`,
+    // because "remember to end with a bold sentence" is an instruction that
+    // silently stops being followed and nobody notices.
+    const transport = new ScriptedTransport(
+      [asks('A ridge changes the draw.', 'How many scopes?'), ready('Enough to build on.', 'Press enter.')],
+      [draft()],
+    );
+    const interview = new ConceptInterview({ transport });
+
+    const asking = await interview.send('Telescope rental.');
+    expect(asking.cta).toBe('How many scopes?');
+
+    const drafted = await interview.send('Twenty-four.');
+    expect(drafted.cta).toBe('Press enter.');
+  });
+
+  it('notices when a turn stops being a turn and starts being a memo', async () => {
+    const wall = Array.from({ length: 200 }, (_, i) => `word${i}`).join(' ');
+    const transport = new ScriptedTransport([asks(wall), asks('short one')]);
+    const interview = new ConceptInterview({ transport });
+
+    await interview.send('A bistro.');
+    expect(interview.verboseTurns).toBe(1);
+    await interview.send('Austin.');
+    expect(interview.verboseTurns).toBe(1);
   });
 
   it('stops rather than interviewing forever', async () => {
@@ -331,11 +371,15 @@ describe('the wire schema', () => {
   it('keeps the turn schema small, which is why the draft is a separate call', () => {
     // Nesting the draft here compiled its whole grammar on every question and
     // the API rejected it outright: "the compiled grammar is too large".
-    const turn = zInterviewTurn.parse({ message: 'Where is it?', readyToDraft: false });
-    expect(Object.keys(turn)).toEqual(['message', 'readyToDraft']);
+    const turn = zInterviewTurn.parse({
+      message: 'Where is it?',
+      cta: 'Name the neighbourhood.',
+      readyToDraft: false,
+    });
+    expect(Object.keys(turn)).toEqual(['message', 'cta', 'readyToDraft']);
   });
 
   it('requires readiness to be stated, not inferred from the prose', () => {
-    expect(() => zInterviewTurn.parse({ message: 'Where is it?' })).toThrow();
+    expect(() => zInterviewTurn.parse({ message: 'Where is it?', cta: 'Say where.' })).toThrow();
   });
 });

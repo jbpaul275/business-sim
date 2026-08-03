@@ -26,9 +26,26 @@ export interface InterviewOptions {
 }
 
 export type InterviewState =
-  | { status: 'ASKING'; message: string; transcript: InterviewMessage[] }
-  | { status: 'DRAFTED'; message: string; draft: ConceptDraft; transcript: InterviewMessage[] }
-  | { status: 'EXHAUSTED'; message: string; transcript: InterviewMessage[] };
+  | { status: 'ASKING'; message: string; cta: string; transcript: InterviewMessage[] }
+  | {
+      status: 'DRAFTED';
+      message: string;
+      cta: string;
+      draft: ConceptDraft;
+      transcript: InterviewMessage[];
+    }
+  | { status: 'EXHAUSTED'; message: string; cta: string; transcript: InterviewMessage[] };
+
+/**
+ * Words past which a terminal turn stops being a turn and starts being a memo.
+ * The prompt asks for roughly fifty; this is the point at which we stop taking
+ * its word for it. Not a hard failure — truncating a model's reasoning mid
+ * sentence is worse than a long turn — but it is worth surfacing, because a
+ * prompt instruction that quietly stops being followed is invisible otherwise.
+ */
+const VERBOSE_TURN_WORDS = 120;
+
+const wordCount = (text: string): number => text.trim().split(/\s+/).length;
 
 const DEFAULT_MAX_TURNS = 20;
 
@@ -37,6 +54,8 @@ export class ConceptInterview {
   private readonly system: string;
   private readonly maxTurns: number;
   private turnsTaken = 0;
+  /** Turns that blew the length budget. Read by the CLI, not enforced here. */
+  verboseTurns = 0;
   readonly transcript: InterviewMessage[] = [];
 
   constructor(options: InterviewOptions) {
@@ -57,16 +76,26 @@ export class ConceptInterview {
         message:
           `The interview ran to ${this.maxTurns} turns without settling on a model. ` +
           `Starting again with a sharper description of the business usually gets there faster.`,
+        cta: 'Run `pnpm sim --new` and lead with what the business actually is.',
         transcript: this.transcript,
       };
     }
 
     const turn = await this.transport.turn(this.system, this.transcript);
     this.turnsTaken += 1;
-    this.transcript.push({ role: 'assistant', content: turn.message });
+    this.transcript.push({ role: 'assistant', content: `${turn.message}\n\n${turn.cta}` });
+
+    if (wordCount(turn.message) > VERBOSE_TURN_WORDS) {
+      this.verboseTurns += 1;
+    }
 
     if (!turn.readyToDraft) {
-      return { status: 'ASKING', message: turn.message, transcript: this.transcript };
+      return {
+        status: 'ASKING',
+        message: turn.message,
+        cta: turn.cta,
+        transcript: this.transcript,
+      };
     }
 
     // A second call, with the draft schema this time. Splitting the two is what
@@ -74,7 +103,13 @@ export class ConceptInterview {
     // also stops the model juggling seventeen overhead fields while asking
     // where the shop is.
     const draft = zConceptDraft.parse(await this.transport.draft(this.system, this.transcript));
-    return { status: 'DRAFTED', message: turn.message, draft, transcript: this.transcript };
+    return {
+      status: 'DRAFTED',
+      message: turn.message,
+      cta: turn.cta,
+      draft,
+      transcript: this.transcript,
+    };
   }
 }
 

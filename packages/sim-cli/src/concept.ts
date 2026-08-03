@@ -110,7 +110,8 @@ export async function runConceptInterview(
       return undefined;
     }
 
-    console.log(`\n${wrap(state.message)}\n`);
+    console.log(`\n${wrap(state.message)}`);
+    console.log(`\n${BOLD}${wrap(state.cta, 74)}${RESET}\n`);
 
     if (state.status === 'ASKING') {
       reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);

@@ -195,8 +195,20 @@ export type ConceptDraft = z.infer<typeof zConceptDraft>;
  * and the draft is requested in its own call once the interview is done.
  */
 export const zInterviewTurn = z.object({
-  /** Free text shown to the player: the question, or the framing for a draft. */
+  /**
+   * What the model has to say, before the ask. Short: this runs in a terminal
+   * and the person is playing a game, not reading a memo.
+   */
   message: z.string(),
+  /**
+   * The one thing to do next, as a single sentence, rendered in bold.
+   *
+   * A separate field rather than a convention inside `message`, for the same
+   * reason `readyToDraft` is a flag: a structured field is always present and
+   * always renderable, where "end with a bold sentence" is an instruction that
+   * silently stops being followed three turns in.
+   */
+  cta: z.string(),
   /**
    * True when the next call should ask for the draft. Kept as a flag rather
    * than inferred from the message, because inferring intent from prose is how
