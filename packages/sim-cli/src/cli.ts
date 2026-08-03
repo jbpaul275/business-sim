@@ -69,32 +69,80 @@ function reportSessions(): void {
   );
 
   /**
-   * Cost per *committed* session, by model — the number a routing decision is
-   * actually made on.
+   * The head-to-head, by model — cost, latency and the three quality signals.
    *
-   * Not cost per session. A cheap model that gets abandoned half the time is
-   * not cheap, it just fails earlier; averaging its abandonments in with its
-   * successes is how a worse model wins a spreadsheet. This divides total spend
-   * by the runs that reached a business, so a model pays for its own failures.
+   * Cost per *committed* session rather than per session, because a cheap model
+   * that gets abandoned half the time is not cheap, it just fails earlier;
+   * averaging its abandonments in with its successes is how a worse model wins
+   * a spreadsheet. Dividing by the runs that reached a business makes a model
+   * pay for its own failures.
+   *
+   * And cost is only half of it. `retried` counts the attempts beyond the first
+   * — an empty turn, a truncated draft, a refused schema — all of which the
+   * session paid for twice. `fabricated` counts the times the mid-game advisor
+   * quoted money the ledger never produced and had to be re-asked, which is the
+   * §1.1 failure and the one nobody can spot by reading the answer.
+   *
+   * Small-n is stated rather than smoothed over. Three sessions is not a
+   * finding, and a table that looks like a result at n=3 will be quoted as one.
    */
-  const byModel = new Map<string, { runs: number; committed: number; cost: number; wait: number }>();
+  interface ModelRow {
+    runs: number;
+    committed: number;
+    cost: number;
+    wait: number;
+    calls: number;
+    retried: number;
+    failed: number;
+    asked: number;
+    fabricated: number;
+    cancelled: number;
+  }
+  const byModel = new Map<string, ModelRow>();
   for (const s of sessions) {
     if (s.models.length === 0) continue;
     const key = s.models.join('+');
-    const row = byModel.get(key) ?? { runs: 0, committed: 0, cost: 0, wait: 0 };
+    const row: ModelRow = byModel.get(key) ?? {
+      runs: 0, committed: 0, cost: 0, wait: 0, calls: 0,
+      retried: 0, failed: 0, asked: 0, fabricated: 0, cancelled: 0,
+    };
     row.runs += 1;
     if (s.outcome === 'committed') row.committed += 1;
     row.cost += s.costUsd ?? 0;
     row.wait += s.waitedSeconds;
+    row.calls += s.calls;
+    row.retried += s.retriedCalls;
+    row.failed += s.failedCalls;
+    row.asked += s.questionsAsked;
+    row.fabricated += s.fabricatedFigures;
+    row.cancelled += s.cancelled;
     byModel.set(key, row);
   }
   if (byModel.size > 0) {
-    console.log(`\n${BOLD}COST PER COMMITTED SESSION, BY MODEL${RESET}`);
+    const pct = (n: number, d: number): string => (d > 0 ? `${Math.round((n / d) * 100)}%` : '—');
+    console.log(`\n${BOLD}HEAD TO HEAD, BY MODEL${RESET}`);
+    console.log(
+      `${DIM}  ${pad('MODEL', 22)}${pad('RUNS', 6)}${pad('COMMIT', 8)}${pad('$/COMMIT', 10)}` +
+        `${pad('WAIT', 8)}${pad('RETRIED', 9)}${pad('FAILED', 8)}FABRICATED${RESET}`,
+    );
     for (const [model, r] of [...byModel].sort((a, b) => b[1].runs - a[1].runs)) {
-      const per = r.committed > 0 ? `$${(r.cost / r.committed).toFixed(2)}` : 'never committed';
       console.log(
-        `  ${pad(model, 20)}${pad(`${r.committed}/${r.runs} committed`, 20)}` +
-          `${pad(per, 16)}${DIM}${Math.round(r.wait / r.runs)}s of waiting per run${RESET}`,
+        `  ${pad(model, 22)}${pad(String(r.runs), 6)}` +
+          `${pad(pct(r.committed, r.runs), 8)}` +
+          `${pad(r.committed > 0 ? `$${(r.cost / r.committed).toFixed(2)}` : '—', 10)}` +
+          `${pad(`${Math.round(r.wait / r.runs)}s`, 8)}` +
+          `${pad(pct(r.retried, r.calls), 9)}` +
+          `${pad(pct(r.failed, r.calls), 8)}` +
+          `${pct(r.fabricated, r.asked)} of ${r.asked} answers`,
+      );
+    }
+    const total = [...byModel.values()].reduce((a, r) => a + r.runs, 0);
+    if (total < 10) {
+      // Said out loud, because a table always looks like a result. Two runs of
+      // the same idea differ by more than the model does.
+      console.log(
+        `\n${DIM}  ${total} run(s). Not a finding — session-to-session variance on the same` +
+          ` concept\n  is larger than the gap between two competent models. Run more.${RESET}`,
       );
     }
   }

@@ -101,6 +101,35 @@ describe('reading sessions back', () => {
     expect(s!.waitedSeconds).toBe(62);
   });
 
+  it('counts the quality signals, which cost alone cannot settle', () => {
+    /**
+     * A model is only cheaper if it does the job. `fabricatedFigures` is the
+     * one that matters most: every time the advisor quoted money the ledger
+     * never produced and had to be re-asked. §1.1 forbids the model computing
+     * anything that lands on a statement, and nobody can tell a fabricated
+     * figure from a real one by reading it — so a model that does this more
+     * often is worse in the way hardest to notice and most expensive to miss.
+     */
+    write('2026-02-01-q.jsonl', [
+      { kind: 'session', build: 'q', startedAt: '2026-02-01T10:00:00Z' },
+      { kind: 'call', call: 'draft', provider: 'kimi', model: 'kimi-k3', effort: 'high', ms: 40_000, inputTokens: 9_000, cachedInputTokens: 8_000, outputTokens: 30_000, thinkingTokens: 28_000, costUsd: 0.45, ratesKnown: true, attempt: 1, ok: false, failure: 'BudgetExhaustedError' },
+      { kind: 'call', call: 'draft', provider: 'kimi', model: 'kimi-k3', effort: 'low', ms: 52_000, inputTokens: 9_000, cachedInputTokens: 8_000, outputTokens: 12_000, thinkingTokens: 9_000, costUsd: 0.19, ratesKnown: true, attempt: 2, ok: true },
+      { kind: 'asked', question: 'how do i grow', answered: ['x'] },
+      { kind: 'asked', question: 'should i raise price', answered: ['x'] },
+      { kind: 'advice_corrected', question: 'how do i grow', figures: ['$412k'] },
+      { kind: 'cancelled' },
+    ]);
+    const s = listSessions(dir).find((x) => x.build === 'q')!;
+    expect(s.retriedCalls).toBe(1);
+    expect(s.failedCalls).toBe(1);
+    expect(s.questionsAsked).toBe(2);
+    expect(s.fabricatedFigures).toBe(1);
+    expect(s.cancelled).toBe(1);
+    // The truncated attempt is priced in. It was billed, and a comparison that
+    // drops it makes the model that truncates look like the cheap one.
+    expect(s.costUsd).toBeCloseTo(0.64, 6);
+  });
+
   it('reports no cost for a session recorded before per-call pricing', () => {
     // Rather than pricing it against today's rates and presenting a guess about
     // an unknown model as a measurement.

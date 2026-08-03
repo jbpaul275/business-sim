@@ -238,7 +238,43 @@ session, because a cheap model that gets abandoned half the time is not cheap, i
 Sessions recorded before this carry no call rows and report no cost, rather than being priced against
 today's rates as if the model were known.
 
-## 8. Standing risk
+## 8. Running the A/B
+
+Kimi against Anthropic, on the same concept. Both keys exported; one variable moves.
+
+```sh
+export MOONSHOT_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+
+BIZSIM_LLM_PROVIDER=kimi      pnpm sim --new
+BIZSIM_LLM_PROVIDER=anthropic pnpm sim --new
+
+pnpm sim --sessions
+```
+
+Describe the **same business, in the same words**, both times, and take each run to the same place — either
+both to a commit or both to the same abandonment. Session-to-session variance on one concept is larger than
+the gap between two competent models, so a comparison across different ideas measures the ideas.
+
+`--sessions` then prints:
+
+```
+HEAD TO HEAD, BY MODEL
+  MODEL           RUNS  COMMIT  $/COMMIT  WAIT   RETRIED  FAILED  FABRICATED
+  kimi-k3         3     100%    $0.43     85s    20%      20%     50% of 2 answers
+  claude-opus-5   3     100%    $1.31     115s   0%       0%      0% of 6 answers
+```
+
+**Read the last three columns before the price one.** `$/COMMIT` is cost divided by runs that reached a
+business, so a model pays for its own abandonments. `RETRIED` is attempts beyond the first — an empty turn,
+a truncated draft, a refused schema — each of which was billed twice. `FABRICATED` is the §1.1 failure: the
+advisor quoting money the ledger never produced, caught by the guard in `advice.ts` and re-asked. That is
+the number that decides the comparison, because it is the one a player cannot catch themselves.
+
+Three runs a side is the minimum worth looking at, and `--sessions` says so under the table when the corpus
+is under ten.
+
+## 9. Standing risk
 
 `04-risks-and-decisions.md` already lists **adjudication sycophancy** as "model behavior, not code; can
 regress on any provider/model change", with "pinned model version" as the mitigation. This migration is the

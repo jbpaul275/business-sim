@@ -175,6 +175,35 @@ export interface SessionSummary {
   quarters: number;
   /** Why it ended, when it ended badly. */
   reason: string | undefined;
+
+  /**
+   * The quality side of the comparison, which cost alone cannot settle.
+   *
+   * A model is only cheaper if it does the job. Each of these is a failure the
+   * player either saw or was protected from, counted rather than remembered:
+   *
+   * `retriedCalls` — attempts beyond the first. On a turn that means the reply
+   * came back empty or garbled; on a draft it means the budget ran out or the
+   * model refused the schema. Either way the session paid twice.
+   *
+   * `failedCalls` — attempts that threw. Refusals, exhausted budgets, transport
+   * faults.
+   *
+   * `fabricatedFigures` — the one that matters most. Every time the mid-game
+   * advisor quoted money the ledger never produced and had to be re-asked. §1.1
+   * forbids the model computing anything that lands on a statement, and nobody
+   * can tell a fabricated figure from a real one by reading it — so a model
+   * that does this more often is worse in the way that is hardest to notice and
+   * most expensive to be wrong about.
+   *
+   * `questionsAsked` is the denominator for that rate.
+   */
+  retriedCalls: number;
+  failedCalls: number;
+  questionsAsked: number;
+  fabricatedFigures: number;
+  /** Times the player stopped a reply mid-flight — a proxy for "too slow". */
+  cancelled: number;
 }
 
 export function readSession(file: string): SessionSummary {
@@ -228,6 +257,11 @@ export function readSession(file: string): SessionSummary {
     outcome: commit?.committed ? 'committed' : abandoned ? 'abandoned' : 'unfinished',
     quarters: events.filter((e) => e.kind === 'quarter').length,
     reason: abandoned?.reason,
+    retriedCalls: calls.filter((c) => c.attempt > 1).length,
+    failedCalls: calls.filter((c) => !c.ok).length,
+    questionsAsked: events.filter((e) => e.kind === 'asked').length,
+    fabricatedFigures: events.filter((e) => e.kind === 'advice_corrected').length,
+    cancelled: events.filter((e) => e.kind === 'cancelled').length,
   };
 }
 
