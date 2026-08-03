@@ -303,70 +303,51 @@ export function paramsToRecord(
 export function draftIssues(draft: ConceptDraft): string[] {
   const issues: string[] = [];
 
-  if (draft.streams.length === 0) {
-    issues.push('No revenue stream: the model has nothing to drive revenue from.');
-  }
-  // The mapper reads streams[0] and nothing else, so a second stream is not a
-  // richer model — it is revenue that silently disappears. A veggie burger
-  // place drafted four (dine-in, drive-thru, delivery, catering); the extras
-  // were dropped, and the fourth arrived malformed and took the session with
-  // it. Until multi-stream is real, saying so is better than pretending.
-  if (draft.streams.length > 1) {
-    issues.push(
-      `${draft.streams.length} revenue streams, and only the first is modelled — the rest ` +
-        `would be dropped without appearing anywhere. Fold them into one stream with a ` +
-        `blended price and a volume that covers every channel, and put what you blended in ` +
-        `openNotes. Channel-specific economics belong in the cost lines: a delivery app's ` +
-        `commission is a VARIABLE_REVENUE line, not a separate stream.`,
-    );
-  }
-
-  for (const [i, stream] of draft.streams.entries()) {
-    const where = `streams[${i}] (${stream.label})`;
-    if (stream.seasonality.length !== 4) {
-      issues.push(`${where}: seasonality needs exactly 4 quarterly weights.`);
-    } else {
-      // The engine reads these as multipliers around 1.0; weights that average
-      // to something else silently rescale the whole year's revenue.
-      const mean = stream.seasonality.reduce((a, b) => a + b, 0) / 4;
-      if (Math.abs(mean - 1) > 0.02) {
-        issues.push(
-          `${where}: seasonality averages ${mean.toFixed(2)}, not 1.0 — that rescales annual ` +
-            `revenue rather than redistributing it across quarters.`,
-        );
-      }
-    }
-    try {
-      paramsToRecord(stream.params);
-    } catch (error) {
-      issues.push(`${where}: ${(error as Error).message}`);
-    }
-
-    // The one parameter with no sensible default. Every archetype prices under
-    // a different name and none of them are guessable from the domain — an
-    // airline's seat fare is `ratePerUnitPerQuarter` — so say which is missing
-    // rather than letting it default to zero and fail validation later.
-    const priceKey = PRICE_KEY[stream.archetype];
-    const price = stream.params.find((p) => p.name === priceKey);
-    if (!price) {
+  const stream = draft.stream;
+  const where = `the revenue stream (${stream.label})`;
+  if (stream.seasonality.length !== 4) {
+    issues.push(`${where}: seasonality needs exactly 4 quarterly weights.`);
+  } else {
+    // The engine reads these as multipliers around 1.0; weights that average
+    // to something else silently rescale the whole year's revenue.
+    const mean = stream.seasonality.reduce((a, b) => a + b, 0) / 4;
+    if (Math.abs(mean - 1) > 0.02) {
       issues.push(
-        `${where}: ${stream.archetype} needs a '${priceKey}' parameter — that is the price ` +
-          `the engine reads. Known parameters for this archetype: ` +
-          `${ARCHETYPE_PARAMS[stream.archetype].join(', ')}.`,
+        `${where}: seasonality averages ${mean.toFixed(2)}, not 1.0 — that rescales annual ` +
+          `revenue rather than redistributing it across quarters.`,
       );
-    } else if (price.value <= 0) {
-      issues.push(`${where}: '${priceKey}' is ${price.value}; a stream with no price has no revenue.`);
     }
-    for (const p of stream.params) {
-      if (p.low > p.high) issues.push(`${where}: parameter '${p.name}' has low above high.`);
-    }
+  }
+  try {
+    paramsToRecord(stream.params);
+  } catch (error) {
+    issues.push(`${where}: ${(error as Error).message}`);
+  }
+
+  // The one parameter with no sensible default. Every archetype prices under
+  // a different name and none of them are guessable from the domain — an
+  // airline's seat fare is `ratePerUnitPerQuarter` — so say which is missing
+  // rather than letting it default to zero and fail validation later.
+  const priceKey = PRICE_KEY[stream.archetype];
+  const price = stream.params.find((p) => p.name === priceKey);
+  if (!price) {
+    issues.push(
+      `${where}: ${stream.archetype} needs a '${priceKey}' parameter — that is the price ` +
+        `the engine reads. Known parameters for this archetype: ` +
+        `${ARCHETYPE_PARAMS[stream.archetype].join(', ')}.`,
+    );
+  } else if (price.value <= 0) {
+    issues.push(`${where}: '${priceKey}' is ${price.value}; a stream with no price has no revenue.`);
+  }
+  for (const p of stream.params) {
+    if (p.low > p.high) issues.push(`${where}: parameter '${p.name}' has low above high.`);
   }
 
   // §3.8: a UTILIZATION stream's capacity comes from staffed blocks, so it
   // needs a STEP_FIXED labour line or it has no ceiling at all. Caught here
   // rather than at the commit gate, where UTILIZATION_WITHOUT_STAFFING arrives
   // after the whole draft has been built and shown.
-  const needsStaffing = draft.streams.some((s) => s.archetype === 'UTILIZATION');
+  const needsStaffing = stream.archetype === 'UTILIZATION';
   const hasStaffedBlocks = draft.costLines.some(
     (c) => c.class === 'STEP_FIXED' && c.isLabor && (c.capacityPerBlock ?? 0) > 0,
   );

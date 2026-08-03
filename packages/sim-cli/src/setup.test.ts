@@ -28,8 +28,7 @@ const draft: ConceptDraft = {
   summary: 'A shopfront renting telescopes by the hour on a dark-sky ridge.',
   legalForm: 'LLC_PASSTHROUGH',
   seedTemplateId: null,
-  streams: [
-    {
+  stream: {
       label: 'Hourly rentals',
       archetype: 'TRAFFIC',
       archetypeRationale:
@@ -51,7 +50,6 @@ const draft: ConceptDraft = {
       marketingSpendPerQuarter: 4_000,
       expectedAnnualRevenue: 480_000,
     },
-  ],
   costLines: [
     {
       label: 'Consumables & breakage',
@@ -241,8 +239,7 @@ describe('the concept path reaches the same gate as the picker', () => {
     const firm: ConceptDraft = {
       ...draft,
       businessName: 'Permanent placement search firm',
-      streams: [
-        {
+      stream: {
           label: 'Perm search fees',
           archetype: 'UTILIZATION',
           archetypeRationale: 'Output is capped by the searches nine recruiters can work at once.',
@@ -255,7 +252,6 @@ describe('the concept path reaches the same gate as the picker', () => {
           marketingSpendPerQuarter: 18_000,
           expectedAnnualRevenue: 2_600_000,
         },
-      ],
       costLines: [
         {
           label: 'Recruiter desks',
@@ -392,7 +388,7 @@ describe('the concept path reaches the same gate as the picker', () => {
     // ended a session that had taken four turns to get there. Everything else
     // that goes wrong with a draft already goes back to the model; this was
     // the one that did not, for no reason but that it failed a different check.
-    const broken = { ...draft, streams: [{ label: 'Only a label' }] };
+    const broken = { ...draft, stream: { label: 'Only a label' } };
     let asked = 0;
     const transport = {
       turn: async () => ({

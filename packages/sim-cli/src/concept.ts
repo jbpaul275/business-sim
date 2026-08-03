@@ -392,8 +392,8 @@ export function renderConceptNotes(draft: ConceptDraft): void {
   console.log(`\n${BOLD}${draft.businessName}${RESET}`);
   console.log(wrap(draft.summary));
 
-  const stream = draft.streams[0];
-  if (stream) {
+  const stream = draft.stream;
+  {
     // First sentence only: "why this archetype", not "and here is why not the
     // other five", which is reasoning the player did not ask for.
     const reason = stream.archetypeRationale.split(/(?<=\.)\s+/)[0] ?? '';

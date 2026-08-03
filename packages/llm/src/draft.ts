@@ -183,7 +183,23 @@ export const zConceptDraft = z.object({
    * Null is a legitimate and common answer — see D-5.
    */
   seedTemplateId: z.string().nullable(),
-  streams: z.array(zDraftStream),
+  /**
+   * One stream, not an array of them.
+   *
+   * It was `z.array(zDraftStream)` and the mapper read `[0]`, which made the
+   * schema a standing invitation to write revenue that would be silently
+   * dropped. The prompt asked for one; `draftIssues` rejected more than one;
+   * and a live TCG concept still came back with two streams three rounds
+   * running — the model apologising each time — because a JSON array is a
+   * stronger instruction than a paragraph. Structured outputs compile a
+   * grammar from this shape, so a single object is not a rule the model can
+   * fail to follow. It is one it cannot express.
+   *
+   * Multi-stream is real work in the engine (`buildModelFromTemplate` builds
+   * exactly one `RevenueStreamSpec`). When it exists, this goes back to an
+   * array — and the array will mean something.
+   */
+  stream: zDraftStream,
   costLines: z.array(zDraftCostLine),
   capex: z.array(zDraftCapex),
   workingCapital: z.object({

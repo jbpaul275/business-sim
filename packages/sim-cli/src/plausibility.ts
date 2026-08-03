@@ -61,8 +61,8 @@ export interface RevenueProjection {
  * pre-empt with a guess.
  */
 export function projectMatureRevenue(draft: ConceptDraft): RevenueProjection | undefined {
-  const stream = draft.streams[0];
-  if (!stream || stream.expectedAnnualRevenue <= 0) return undefined;
+  const stream = draft.stream;
+  if (stream.expectedAnnualRevenue <= 0) return undefined;
 
   try {
     const mapped = draftToTemplate(draft);

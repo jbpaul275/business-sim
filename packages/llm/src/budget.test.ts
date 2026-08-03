@@ -146,8 +146,7 @@ const MINIMAL_DRAFT = {
   summary: 'DTC and wholesale.',
   legalForm: 'LLC_PASSTHROUGH',
   seedTemplateId: null,
-  streams: [
-    {
+  stream: {
       label: 'Direct sales',
       archetype: 'UNITS_CAC',
       archetypeRationale: 'Units sold, each acquired at a cost.',
@@ -158,7 +157,6 @@ const MINIMAL_DRAFT = {
       marketingSpendPerQuarter: 40_000,
       expectedAnnualRevenue: 2_000_000,
     },
-  ],
   costLines: [
     {
       label: 'Product cost',

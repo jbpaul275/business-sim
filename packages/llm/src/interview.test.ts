@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EMPTY_USAGE, ScriptedTransport, type ConceptTransport } from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { zConceptDraft, zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
 
 /**
@@ -16,8 +17,7 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
   summary: 'A counter-service ice cream shop carrying 256 flavours.',
   legalForm: 'LLC_PASSTHROUGH',
   seedTemplateId: null,
-  streams: [
-    {
+  stream: {
       label: 'Counter sales',
       archetype: 'TRAFFIC',
       archetypeRationale:
@@ -37,7 +37,6 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
       marketingSpendPerQuarter: 6_000,
       expectedAnnualRevenue: 900_000,
     },
-  ],
   costLines: [
     {
       label: 'Dairy, mix-ins & packaging',
@@ -332,7 +331,7 @@ describe('a question gets an answer before it gets a financial model', () => {
 
 describe('paramsToRecord', () => {
   it('folds the wire array into the record the engine expects', () => {
-    const record = paramsToRecord(draft().streams[0]!.params);
+    const record = paramsToRecord(draft().stream.params);
     expect(record['avgTicket']).toEqual({
       value: 9,
       range: { low: 7, high: 12 },
@@ -342,7 +341,7 @@ describe('paramsToRecord', () => {
   });
 
   it('refuses to silently pick a winner among duplicates', () => {
-    const p = draft().streams[0]!.params[0]!;
+    const p = draft().stream.params[0]!;
     expect(() => paramsToRecord([p, { ...p, value: 40 }])).toThrow(/Duplicate parameter/);
   });
 });
@@ -360,9 +359,8 @@ describe('draftIssues', () => {
   it('has no opinion about a business being strange, expensive, or unwise', () => {
     const strange = draft({
       businessName: 'Telescope rental, $4,000 an hour',
-      streams: [
-        {
-          ...draft().streams[0]!,
+      stream: {
+          ...draft().stream,
           params: [
             {
               name: 'avgTicket',
@@ -382,7 +380,6 @@ describe('draftIssues', () => {
             },
           ],
         },
-      ],
     });
     // Wildly out of band on both price and capture, entirely unsourced — and
     // still a valid model. Arguing with it is the challenge loop's job, and
@@ -401,7 +398,7 @@ describe('draftIssues', () => {
 
   it('catches seasonality that rescales the year instead of redistributing it', () => {
     const broken = draft({
-      streams: [{ ...draft().streams[0]!, seasonality: [1.5, 1.5, 1.5, 1.5] }],
+      stream: { ...draft().stream, seasonality: [1.5, 1.5, 1.5, 1.5] },
     });
     expect(draftIssues(broken)[0]).toContain('rescales annual');
   });
@@ -427,9 +424,8 @@ describe('draftIssues', () => {
     // became zero. It surfaced four screens later as MISSING_REFERENCE_PRICE
     // with nothing pointing at the cause.
     const airline = draft({
-      streams: [
-        {
-          ...draft().streams[0]!,
+      stream: {
+          ...draft().stream,
           archetype: 'OCCUPANCY',
           params: [
             {
@@ -442,7 +438,6 @@ describe('draftIssues', () => {
             },
           ],
         },
-      ],
     });
     const issues = draftIssues(airline);
     expect(issues).toHaveLength(1);
@@ -453,12 +448,10 @@ describe('draftIssues', () => {
 
   it('rejects a price of zero rather than modelling a business with no revenue', () => {
     const free = draft({
-      streams: [
-        {
-          ...draft().streams[0]!,
-          params: [{ ...draft().streams[0]!.params[0]!, value: 0 }],
+      stream: {
+          ...draft().stream,
+          params: [{ ...draft().stream.params[0]!, value: 0 }],
         },
-      ],
     });
     expect(draftIssues(free)[0]).toContain('no price has no revenue');
   });
@@ -469,9 +462,8 @@ describe('draftIssues', () => {
     // model can sell. It surfaced at the commit gate as
     // UTILIZATION_WITHOUT_STAFFING, after the whole draft had been built.
     const firm = draft({
-      streams: [
-        {
-          ...draft().streams[0]!,
+      stream: {
+          ...draft().stream,
           archetype: 'UTILIZATION',
           params: [
             {
@@ -484,14 +476,10 @@ describe('draftIssues', () => {
             },
           ],
         },
-      ],
     });
     expect(draftIssues(firm).some((i) => i.includes('staffed capacity'))).toBe(true);
   });
 
-  it('catches a model with nothing driving revenue', () => {
-    expect(draftIssues(draft({ streams: [] }))[0]).toContain('No revenue stream');
-  });
 });
 
 describe('a malformed draft is a sentence, not a validator dump', () => {
@@ -500,7 +488,7 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
     // terminal verbatim — `path: ["streams", 3, "archetype"]` and five more —
     // under the heading "The interview could not continue". That is a stack
     // trace wearing a hat.
-    const broken = { ...draft(), streams: [{ label: 'Only a label' }] };
+    const broken = { ...draft(), stream: { label: 'Only a label' } };
     const transport: ConceptTransport = {
       turn: async () => ({ turn: ready('Building it.') }),
       draft: async () => broken as never,
@@ -523,15 +511,13 @@ describe('a forgotten provenance tag', () => {
     // failure this subsystem exists to prevent is the opposite one.
     const parsed = zConceptDraft.parse({
       ...draft(),
-      streams: [
-        {
-          ...draft().streams[0]!,
+      stream: {
+          ...draft().stream,
           params: [{ name: 'avgTicket', value: 12, low: 9, high: 15 }],
         },
-      ],
     });
-    expect(parsed.streams[0]!.params[0]!.provenance).toBe('LLM_ESTIMATE');
-    expect(parsed.streams[0]!.params[0]!.sourceNote).toBe('');
+    expect(parsed.stream.params[0]!.provenance).toBe('LLM_ESTIMATE');
+    expect(parsed.stream.params[0]!.sourceNote).toBe('');
   });
 
   it('never defaults upward into a claim of support', () => {
@@ -562,7 +548,7 @@ describe('a forgotten provenance tag', () => {
     expect(() =>
       zConceptDraft.parse({
         ...draft(),
-        streams: [{ ...draft().streams[0]!, params: [{ name: 'avgTicket', low: 9, high: 15 }] }],
+        stream: { ...draft().stream, params: [{ name: 'avgTicket', low: 9, high: 15 }] },
       }),
     ).toThrow();
   });
@@ -698,36 +684,40 @@ describe('permission that is not waited for', () => {
   });
 });
 
-describe('the streams the mapper cannot see', () => {
-  it('rejects a draft with more than one stream, because the rest vanish', () => {
-    // A veggie burger place in Toledo drafted four streams — dine-in,
-    // drive-thru, delivery apps, catering. `draftToTemplate` reads streams[0]
-    // and nothing else, so three of them were revenue that would never appear
-    // anywhere; then the fourth came back malformed and took the session.
-    // Multi-stream is not built, and pretending otherwise is what broke this.
-    const multi = draft({
-      streams: [
-        draft().streams[0]!,
-        { ...draft().streams[0]!, label: 'Drive-thru' },
-      ],
-    });
-    const issues = draftIssues(multi);
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toContain('2 revenue streams');
-    // It says what to do instead, because "not supported" is not actionable.
-    expect(issues[0]).toContain('blended price');
-    expect(issues[0]).toContain('VARIABLE_REVENUE');
+describe('the stream the mapper cannot see twice', () => {
+  it('cannot express a second stream at all', () => {
+    // A veggie burger place drafted four streams; a TCG concept drafted two,
+    // three rounds running, the model apologising each time. `draftToTemplate`
+    // reads one, so the rest were revenue that would never appear anywhere.
+    //
+    // The prompt asked for one. `draftIssues` rejected more than one. Neither
+    // worked, because a JSON array is a stronger instruction than a paragraph:
+    // a schema offering `streams: []` is a schema saying "as many as you
+    // like". So the wire shape is a single object now, and structured outputs
+    // compile the grammar from it — this is not a rule the model can fail to
+    // follow, it is one it cannot express.
+    // The guarantee is structural, so it is checked where it actually lives:
+    // the JSON Schema handed to the API, from which the decoding grammar is
+    // compiled. `stream` is an object there. There is no array to fill.
+    const schema = zodToJsonSchema(zConceptDraft, { $refStrategy: 'none' }) as {
+      properties: Record<string, { type: string }>;
+      required: string[];
+    };
+    expect(schema.properties['stream']?.type).toBe('object');
+    expect(schema.properties['streams']).toBeUndefined();
+    expect(schema.required).toContain('stream');
+
+    // And a draft with no stream is rejected outright rather than defaulted.
+    const { stream: _dropped, ...withoutStream } = draft();
+    expect(zConceptDraft.safeParse(withoutStream).success).toBe(false);
   });
 
   it('leaves a single-stream draft alone', () => {
     expect(draftIssues(draft())).toEqual([]);
   });
 
-  it('tells the model that a second stream is silently dropped', () => {
-    // The prompt invited exactly what the mapper could not handle: "if a
-    // business genuinely has two engines, that is two streams."
-    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Emit exactly one stream');
-    expect(CONCEPT_INTERVIEW_SYSTEM).not.toContain('that is two streams');
+  it('tells the model that a second stream is not modelled', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('one revenue stream');
   });
 });
 

@@ -197,8 +197,7 @@ const monthlyFromQuarterly = (seasonality: readonly number[]): number[] =>
   seasonality.flatMap((q) => [q, q, q]);
 
 export function draftToTemplate(draft: ConceptDraft): MappedConcept {
-  const stream = draft.streams[0];
-  if (!stream) throw new Error('Draft has no revenue stream to build from.');
+  const stream = draft.stream;
 
   const priceKey = PRICE_KEY[stream.archetype];
   const streamParamDefaults: Record<string, number> = {};

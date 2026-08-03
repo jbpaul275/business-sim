@@ -21,8 +21,7 @@ const mcdonalds = (expectedAnnualRevenue: number): ConceptDraft => ({
   summary: 'One existing freestanding McDonald’s with a drive-thru in an Iowa metro.',
   legalForm: 'LLC_PASSTHROUGH',
   seedTemplateId: null,
-  streams: [
-    {
+  stream: {
       label: 'Restaurant sales',
       archetype: 'TRAFFIC',
       archetypeRationale: 'Passers-by convert and the kitchen caps throughput.',
@@ -42,7 +41,6 @@ const mcdonalds = (expectedAnnualRevenue: number): ConceptDraft => ({
       marketingSpendPerQuarter: 9_000,
       expectedAnnualRevenue,
     },
-  ],
   costLines: [
     {
       label: 'Food & paper',
@@ -161,7 +159,7 @@ describe('the validator runs while there is still someone to tell', () => {
     // answered five financing questions and put in a million dollars, at which
     // point the run ended and took the conversation with it.
     const overcrowded = mcdonalds(3_600_000);
-    const params = overcrowded.streams[0]!.params;
+    const params = overcrowded.stream.params;
     params.find((p) => p.name === 'seats')!.value = 700;
     params.find((p) => p.name === 'floorAreaSqFt')!.value = 2_000;
 
@@ -177,7 +175,7 @@ describe('the validator runs while there is still someone to tell', () => {
   });
 
   it('reports a draft that cannot be assembled at all rather than throwing', () => {
-    const noStream = { ...mcdonalds(3_600_000), streams: [] };
+    const noStream = { ...mcdonalds(3_600_000), stream: undefined } as unknown as ConceptDraft;
     const issues = buildabilityIssues(noStream);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toContain('could not be assembled');

@@ -164,7 +164,11 @@ Pick the one whose *constraint* matches what actually limits this business:
 
 Say why in \`archetypeRationale\`, in **one sentence**. It is shown to the player, not to a reviewer, so name the archetype and the reason — not the alternatives you considered and rejected.
 
-**Emit exactly one stream.** Multiple streams are not yet modelled, and a second one is silently dropped — so a burger place doing dine-in, drive-thru and delivery apps is *one* TRAFFIC stream with a blended ticket and a capture rate that accounts for all three channels, not three streams. Where the channels differ in economics, put that in the cost lines (delivery commission as a variable line against revenue) and say what you blended in \`openNotes\`. It is the honest answer anyway: they share one kitchen and one queue, which is what actually caps them.
+The draft has **one revenue stream**, and the schema has no room for a second — multiple streams are not modelled yet, so the shape you emit does not offer them.
+
+That is not a limitation to work around; it is a modelling decision you have to make. A burger place doing dine-in, drive-thru and delivery apps is *one* TRAFFIC stream with a blended ticket and a volume covering all three channels. A card game selling direct and through distributors is *one* UNITS_CAC stream at a blended net price per box. Where channels differ in economics, that difference belongs in the cost lines — a distributor discount or a delivery commission is a \`VARIABLE_REVENUE\` line, not a stream — and what you blended goes in \`openNotes\` so the player can argue with the blend.
+
+It is the honest answer anyway: the channels share one kitchen, one print run, one queue, and that shared thing is what actually caps the business.
 
 ### Parameter names are fixed
 

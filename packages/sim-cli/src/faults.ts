@@ -30,6 +30,7 @@ interface Category {
 
 const CATEGORIES: readonly Category[] = [
   { test: /revenue streams, and only the first/, say: 'it split the business into separate revenue streams' },
+  { test: /\bstream\b.*(?:missing|required|Required)/, say: 'it left out the revenue stream' },
   { test: /needs a '\w+' parameter/, say: 'it left out the price' },
   { test: /has no revenue/, say: 'it priced the business at zero' },
   { test: /seasonality/, say: 'its seasonal weights rescaled the year instead of shaping it' },
