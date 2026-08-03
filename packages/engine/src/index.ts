@@ -23,6 +23,13 @@ export {
 } from './opening.js';
 export { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
 export { irr } from './metrics.js';
+export {
+  cloneBusiness,
+  cloneOutlay,
+  saleValue,
+  CLONE_RAMP_BONUS,
+  CLONE_RAMP_CEILING,
+} from './clone.js';
 export { priceAt, portfolioValue, quarterlyDividend, totalReturnValue } from './market.js';
 
 // Exposed for the CLI, tests, seed calibration and the export's formula

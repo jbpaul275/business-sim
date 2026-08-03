@@ -12,6 +12,7 @@ import {
 } from '@bizsim/schemas';
 import { getSecurity } from '@bizsim/seeds';
 import { setStreamPrice } from './archetypes.js';
+import { cloneBusiness, cloneOutlay, saleValue } from './clone.js';
 import { priceAt } from './market.js';
 import { netBookValue } from './depreciation.js';
 import { DEBT_PRODUCTS, underwrite } from './debt.js';
@@ -42,6 +43,17 @@ const findBusinessByDebt = (state: WorldState, debtId: string): Business | undef
 const findBusinessByAsset = (state: WorldState, assetId: string): Business | undefined =>
   state.businesses.find((b) => b.assets.some((a) => a.id === assetId));
 
+/**
+ * What a business changes hands for when the player names no number.
+ *
+ * Four times trailing EBITDA is the low end of what small operating businesses
+ * actually trade at, and low is the right default: a player who has not thought
+ * about the multiple should not be handed the optimistic one.
+ */
+const DEFAULT_SALE_MULTIPLE = 4;
+
+const money = (amount: Money): string => `$${(Number(amount) / 100).toLocaleString()}`;
+
 const reject = (period: PeriodIndex, action: Action, reason: string): EngineEvent => ({
   period,
   kind: 'ACTION_REJECTED',
@@ -49,8 +61,15 @@ const reject = (period: PeriodIndex, action: Action, reason: string): EngineEven
   detail: { action: action.kind, reason },
 });
 
-/** Actions whose full implementation lands in M7 (multi-business, §9.5–9.6). */
-const DEFERRED_TO_M7 = new Set<Action['kind']>(['START_BUSINESS', 'SELL_BUSINESS']);
+/**
+ * A full second interview is the setup flow's job, not the tick's.
+ *
+ * CLONE lands here because it needs no conversation — §9.5's whole claim is
+ * that a second site takes two minutes. FULL_INTERVIEW re-enters Phase 1 and
+ * cannot happen inside a pure function, so it is refused with a sentence that
+ * says where it does happen rather than a milestone number.
+ */
+const NEEDS_AN_INTERVIEW = 'A brand-new concept needs the full interview, which runs outside a quarter.';
 
 /**
  * Money that runs backwards.
@@ -133,10 +152,6 @@ export function applyAction(
   const { state } = ctx;
   const period = state.currentPeriod;
   const events: EngineEvent[] = [];
-
-  if (DEFERRED_TO_M7.has(action.kind)) {
-    return [reject(period, action, 'Not implemented until M7 (multi-business).')];
-  }
 
   const sign = signIssue(action);
   if (sign) return [reject(period, action, sign)];
@@ -479,6 +494,115 @@ export function applyAction(
         params.referencePrice = mulRate(params.referencePrice, 1 + action.spec.qualityUpliftPct);
       }
       return events;
+    }
+
+    /**
+     * The second one — §9.5.
+     *
+     * Month-zero outlays at commit, revenue two quarters later, per §9.3.1's
+     * table: the building is paid for now and earns nothing until it opens,
+     * which is the asymmetry that makes expansion a decision rather than a
+     * button.
+     */
+    case 'START_BUSINESS': {
+      if (action.mode !== 'CLONE') return [reject(period, action, NEEDS_AN_INTERVIEW)];
+      const spec = action.clone;
+      const parent = state.businesses.find((b) => b.id === action.cloneFromId);
+      if (!spec) return [reject(period, action, 'A clone needs a name and the money to open it.')];
+      if (!parent) return [reject(period, action, `No business ${action.cloneFromId} to clone.`)];
+      if (parent.status === 'CLOSED' || parent.status === 'SOLD') {
+        return [reject(period, action, `${parent.name} is closed; there is nothing to copy.`)];
+      }
+
+      if (phase === 'IMMEDIATE') {
+        // The cheque clears now. It is the household's money and it leaves the
+        // household, so a player who cannot fund it finds out here rather than
+        // two quarters later with a half-built building.
+        const needed = cloneOutlay(parent, spec.scale);
+        if (spec.equity < needed) {
+          return [
+            reject(
+              period,
+              action,
+              `Opening that costs ${money(needed)} in buildout alone and you committed ${money(spec.equity)}.`,
+            ),
+          ];
+        }
+        if (state.household.cash < spec.equity) {
+          return [
+            reject(
+              period,
+              action,
+              `The household has ${money(state.household.cash)}, not ${money(spec.equity)}. ` +
+                `\`distribute\` moves money out of a business first.`,
+            ),
+          ];
+        }
+        state.household.cash -= spec.equity;
+        state.household.cumulativeInjections += spec.equity;
+        return events;
+      }
+
+      const { business } = cloneBusiness(parent, spec, period, ctx.nextId);
+      state.businesses.push(business);
+      state.household.stakes.push({
+        businessId: business.id,
+        ownershipPct: 1,
+        costBasis: spec.equity,
+      });
+      return [
+        {
+          period,
+          businessId: business.id,
+          kind: 'MILESTONE_REACHED',
+          severity: 'INFO',
+          detail: { opened: business.name, clonedFrom: parent.name },
+        },
+      ];
+    }
+
+    /**
+     * Selling one — §9.3, two quarters to close.
+     *
+     * The proceeds are the household's, and so is the tax on the gain. A sale
+     * is the only way a run converts a decade of operating into money that is
+     * actually spendable, and it is the one the benchmark comparison is
+     * measured against.
+     */
+    case 'SELL_BUSINESS': {
+      const business = state.businesses.find((b) => b.id === action.businessId);
+      if (!business) return [reject(period, action, `Unknown business ${action.businessId}`)];
+      if (business.status === 'CLOSED' || business.status === 'SOLD') {
+        return [reject(period, action, `${business.name} is already gone.`)];
+      }
+      if (phase === 'IMMEDIATE') return events;
+
+      const multiple = action.multipleOfEbitda ?? DEFAULT_SALE_MULTIPLE;
+      const proceeds = saleValue(business, multiple);
+      const basis =
+        state.household.stakes.find((s) => s.businessId === business.id)?.costBasis ?? 0n;
+
+      business.status = 'SOLD';
+      business.cash = 0n;
+      state.household.cash += proceeds;
+      ctx.realizedGains.push(proceeds - basis);
+      state.household.stakes = state.household.stakes.filter(
+        (s) => s.businessId !== business.id,
+      );
+
+      return [
+        {
+          period,
+          businessId: business.id,
+          kind: 'MILESTONE_REACHED',
+          severity: 'INFO',
+          detail: {
+            sold: business.name,
+            proceeds: Number(proceeds) / 100,
+            multiple,
+          },
+        },
+      ];
     }
 
     case 'DELEGATE': {

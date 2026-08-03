@@ -14,6 +14,7 @@ import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
 import { postmortem, runPoint, type RunPoint } from './postmortem.js';
 import { askAdvisor, type AdviceTransport } from '@bizsim/llm';
+import { cloneOutlay, saleValue } from '@bizsim/engine';
 import { buildBriefing } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
@@ -109,6 +110,12 @@ function describeAction(a: Action): string {
         : 'more capacity';
       return `${what} for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
     }
+    case 'START_BUSINESS':
+      return a.clone
+        ? `open ${a.clone.name} for ${toDisplay(a.clone.equity, { showCents: false })}`
+        : 'start a business';
+    case 'SELL_BUSINESS':
+      return `sell the business at ${a.multipleOfEbitda ?? DEFAULT_MULTIPLE}× EBITDA`;
     case 'SET_CRISIS_POLICY':
       return `crisis order → ${a.policy.join(', ')}`;
     default:
@@ -123,7 +130,7 @@ const severityColour = (s: EngineEvent['severity']): string =>
 // Rendering
 // ---------------------------------------------------------------------------
 
-function renderTurn(result: TickResult, business: Business): void {
+function renderTurn(result: TickResult, business: Business, world?: WorldState): void {
   const period = result.statements.period;
   const entry = result.statements.byBusiness[business.id];
   const year = Math.floor(period / 4) + 1;
@@ -244,6 +251,24 @@ function renderTurn(result: TickResult, business: Business): void {
     );
   }
 
+  /**
+   * The rest of the portfolio, one line, only once there is one.
+   *
+   * A player running four businesses needs to know the other three exist
+   * without leaving the screen for the one they are working on.
+   */
+  const others = (world?.businesses ?? []).filter(
+    (b) => b.id !== business.id && b.status !== 'SOLD' && b.status !== 'CLOSED',
+  );
+  if (others.length > 0) {
+    const consolidated = result.statements.consolidated.incomeStatement;
+    console.log(
+      `\n  ${DIM}${pad('Also running', 22)}${RESET}` +
+        `${others.map((b) => b.name).join(', ')}` +
+        `  ${DIM}· group revenue ${toCompact(consolidated.revenue)}, EBITDA ${toCompact(consolidated.ebitda)}${RESET}`,
+    );
+  }
+
   const notable = result.events.filter((e) => e.severity !== 'INFO');
   if (notable.length > 0) console.log('');
   for (const e of notable) {
@@ -279,12 +304,19 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}sell${RESET} IDX all         sell a position, or a dollar amount of one
   ${BOLD}quotes${RESET} · ${BOLD}portfolio${RESET}     the catalog, and what you hold
 
+  ${BOLD}clone${RESET} 900k <name>     open a second one ${DIM}— \`3x\` for a bigger site, +2 quarters${RESET}
+  ${BOLD}divest${RESET} <n> [multiple]  sell a business ${DIM}— trailing EBITDA × 4 by default${RESET}
+  ${BOLD}businesses${RESET} · ${BOLD}switch${RESET} <n>   the portfolio, and which one you are running
+
   ${BOLD}skip${RESET} <n>              run n quarters with no actions
   ${BOLD}postmortem${RESET}            what would have had to be true ${DIM}— any time, not just at the end${RESET}
   ${BOLD}costs${RESET}                 where the money goes, biggest line first
   ${BOLD}lines${RESET}                 list step-fixed cost line ids
   ${BOLD}help${RESET} · ${BOLD}quit${RESET}
 `;
+
+/** Matches the engine's own default, so the quote and the sale agree. */
+const DEFAULT_MULTIPLE = 4;
 
 const REMEDY_ALIASES: Record<string, CrisisRemedy> = {
   revolver: 'REVOLVER',
@@ -306,6 +338,8 @@ interface ParseResult {
   skip?: number;
   quit?: boolean;
   message?: string;
+  /** Set by `switch`: which business the next commands are about. */
+  activate?: string;
 }
 
 /**
@@ -1066,6 +1100,7 @@ const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing', 'postmortem',
   'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
   'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
+  'businesses', 'switch', 'clone', 'divest',
 ]);
 
 /**
@@ -1798,6 +1833,129 @@ async function parseCommand(
       return none;
     }
 
+    /**
+     * A portfolio, and which of it you are looking at.
+     *
+     * Every operating command means "this business", so with more than one on
+     * the books there has to be a way to say which. `businesses` lists them
+     * with the numbers that decide where attention goes.
+     */
+    case 'businesses': {
+      const live = world.businesses.filter((b) => b.status !== 'SOLD');
+      console.log(`\n  ${BOLD}${pad('BUSINESS', 30)}${rpad('REVENUE', 10)}${rpad('EBITDA', 10)}${rpad('CASH', 10)}${RESET}`);
+      live.forEach((b, i) => {
+        const entry = result.statements.byBusiness[b.id];
+        const marker = b.id === business.id ? '›' : ' ';
+        console.log(
+          `${marker} ${pad(`${i + 1}. ${b.name}`, 30)}` +
+            `${rpad(entry ? toCompact(entry.incomeStatement.revenue) : '—', 10)}` +
+            `${rpad(entry ? toCompact(entry.incomeStatement.ebitda) : '—', 10)}` +
+            `${rpad(toCompact(b.cash), 10)}  ${DIM}${b.status}${RESET}`,
+        );
+      });
+      console.log(
+        `  ${DIM}\`switch <n>\` changes which one your commands are about · ` +
+          `\`clone <money> <name>\` opens another · \`divest <n>\` sells one.${RESET}`,
+      );
+      return none;
+    }
+
+    case 'switch': {
+      const live = world.businesses.filter((b) => b.status !== 'SOLD' && b.status !== 'CLOSED');
+      const token = (rest[0] ?? '').toLowerCase();
+      const byIndex = Number(token);
+      const target =
+        Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= live.length
+          ? live[byIndex - 1]
+          : live.find((b) => b.name.toLowerCase().startsWith(token) && token !== '');
+      if (!target) {
+        return fail(
+          `Which one? ${live.map((b, i) => `${i + 1}. ${b.name}`).join(' · ')}`,
+        );
+      }
+      console.log(`  ${DIM}Now looking at ${target.name}.${RESET}`);
+      return { actions: [], activate: target.id };
+    }
+
+    /**
+     * "I want to use the cash flow from this one to buy a 256 room property in
+     * Des Moines" — §9.5.
+     *
+     * Two numbers and a name, because §9.5's whole claim is that a second site
+     * takes two minutes. Everything else about the concept carries over, and
+     * the clone opens with a ramp floor ten points better than its parent's
+     * because you have done this before.
+     */
+    case 'clone': {
+      const equity = parseMoney(rest[0] ?? '');
+      if (equity === undefined) {
+        return fail('clone needs the money and a name: `clone 900k Des Moines` — optionally `2x` for a bigger site.');
+      }
+      const sign = positive(equity, 'clone', 'a second location costs money to open.');
+      if (sign) return fail(sign);
+
+      // `2x` anywhere in the rest is the size multiplier; the remainder is the
+      // name, so `clone 4m Des Moines 4x` and `clone 4m 4x Des Moines` both work.
+      const scaleToken = rest.find((t) => /^\d+(\.\d+)?x$/i.test(t));
+      const scale = scaleToken ? Number(scaleToken.slice(0, -1)) : 1;
+      const name = rest.slice(1).filter((t) => t !== scaleToken).join(' ').trim();
+      if (name === '') return fail('A second location needs a name: `clone 900k Des Moines`.');
+      if (!(scale > 0)) return fail('The size multiplier has to be more than zero.');
+
+      const needed = cloneOutlay(business, scale);
+      console.log(
+        `  ${DIM}${scale === 1 ? 'The same business' : `${scale}× the size`} in a new place. ` +
+          `Buildout alone is ${toCompact(needed)}; the rest of your ${toCompact(equity)} opens as its cash. ` +
+          `Revenue starts two quarters out.${RESET}`,
+      );
+      if (equity < needed) {
+        return fail(
+          `${toCompact(equity)} does not cover the ${toCompact(needed)} of buildout. Commit more, or use a smaller multiplier.`,
+        );
+      }
+      if (world.household.cash < equity) {
+        return fail(
+          `The household has ${toCompact(world.household.cash)}. \`distribute <amount>\` moves money ` +
+            `out of a business first — and it is taxed on the way.`,
+        );
+      }
+      return {
+        actions: [
+          {
+            kind: 'START_BUSINESS',
+            mode: 'CLONE',
+            cloneFromId: business.id,
+            clone: { name, equity, scale },
+          },
+        ],
+      };
+    }
+
+    /** Selling one. `sell` belongs to securities, so this is its own verb. */
+    case 'divest': {
+      const live = world.businesses.filter((b) => b.status !== 'SOLD' && b.status !== 'CLOSED');
+      const token = (rest[0] ?? '').toLowerCase();
+      const byIndex = Number(token);
+      const target =
+        token === ''
+          ? business
+          : Number.isInteger(byIndex) && byIndex >= 1 && byIndex <= live.length
+            ? live[byIndex - 1]
+            : live.find((b) => b.name.toLowerCase().startsWith(token));
+      if (!target) return fail(`Which one? ${live.map((b, i) => `${i + 1}. ${b.name}`).join(' · ')}`);
+
+      const multiple = Number(rest[1] ?? DEFAULT_MULTIPLE);
+      if (!(multiple > 0)) return fail('The multiple has to be more than zero.');
+      const proceeds = saleValue(target, multiple);
+      console.log(
+        `  ${DIM}${target.name} at ${multiple}× trailing EBITDA is ${toCompact(proceeds)} to the ` +
+          `household after its debt, taxed as a gain. It closes in two quarters.${RESET}`,
+      );
+      return {
+        actions: [{ kind: 'SELL_BUSINESS', businessId: target.id, multipleOfEbitda: multiple }],
+      };
+    }
+
     case 'policy': {
       const tokens = (rest[0] ?? '').split(',').filter(Boolean);
       const policy: CrisisRemedy[] = [];
@@ -1867,11 +2025,20 @@ export async function play(
   } else {
     state = source;
   }
-  const businessId = state.businesses[0]?.id;
-  if (!businessId) {
+  /**
+   * Which business the turn's commands are about.
+   *
+   * Mutable, because a portfolio has more than one and every operating command
+   * — price, hire, fire, expand — has to mean "this one". `switch` moves it and
+   * a clone lands as the new active business, which is what a player who just
+   * opened one wants to be looking at.
+   */
+  const opening = state.businesses[0];
+  if (!opening) {
     console.error('Scenario has no business.');
     process.exit(1);
   }
+  let businessId: string = opening.id;
 
   console.log(
     `\n${DIM}Opening cash ${toDisplay(state.businesses[0]!.cash)} · ` +
@@ -1904,16 +2071,28 @@ export async function play(
    * exist while the run is happening — a summary written at the end cannot say
    * which period the business was actually lost in.
    */
-  const history: RunPoint[] = [];
+  /**
+   * Per business, because the post-mortem is about one of them.
+   *
+   * "What would have had to be true" for a portfolio is not a question with an
+   * answer; for the cafe in Rochester it is.
+   */
+  const histories = new Map<string, RunPoint[]>();
+  const historyOf = (id: string): RunPoint[] => {
+    const existing = histories.get(id);
+    if (existing) return existing;
+    const fresh: RunPoint[] = [];
+    histories.set(id, fresh);
+    return fresh;
+  };
 
   const record = (result: TickResult): void => {
+    for (const business of state.businesses) {
+      const point = runPoint(result, business);
+      if (point) historyOf(business.id).push(point);
+    }
     const entry = result.statements.byBusiness[businessId];
     if (!entry) return;
-    const business = state.businesses.find((b) => b.id === businessId);
-    if (business) {
-      const point = runPoint(result, business);
-      if (point) history.push(point);
-    }
     options.journal?.write({
       kind: 'quarter',
       period: result.statements.period,
@@ -1933,17 +2112,37 @@ export async function play(
       : `${DIM}Ask anything in plain English. No ANTHROPIC_API_KEY, so answers are the engine's arithmetic alone.${RESET}`,
   );
 
+  // The scoreboard fires once. After that the run belongs to the player.
+  let pastMilestone = false;
+
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
   record(last);
-  renderTurn(last, state.businesses.find((b) => b.id === businessId)!);
+  renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
 
   try {
     while (true) {
+      // A clone that has matured is the one the player wants to be looking at,
+      // and a business that has been sold or closed cannot be the active one.
+      const active = state.businesses.find((b) => b.id === businessId);
+      if (!active || active.status === 'SOLD') {
+        const next = state.businesses.find((b) => b.status !== 'SOLD' && b.status !== 'CLOSED');
+        if (next) {
+          businessId = next.id;
+          console.log(`\n${DIM}Now running ${next.name}.${RESET}`);
+        }
+      }
       const business = state.businesses.find((b) => b.id === businessId)!;
 
-      if (business.status === 'CLOSED') {
-        console.log(`\n${RED}${BOLD}${business.name} is insolvent and closed.${RESET}`);
+      const survivors = state.businesses.filter(
+        (b) => b.status !== 'CLOSED' && b.status !== 'SOLD',
+      );
+      if (survivors.length === 0) {
+        console.log(
+          `\n${RED}${BOLD}${
+            state.businesses.length > 1 ? 'Every business is gone.' : `${business.name} is insolvent and closed.`
+          }${RESET}`,
+        );
         console.log(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need was ${toDisplay(business.peakCashNeed)}`,
@@ -1951,7 +2150,7 @@ export async function play(
         // §9.4: mandatory on insolvency. A run that ends with a liquidation
         // figure tells the player they lost without telling them what would
         // have had to be different, and the gap between those is the product.
-        printPostmortem(history, business);
+        printPostmortem(historyOf(business.id), business);
         console.log('');
         for (const line of benchmarkLines(
           state,
@@ -1962,13 +2161,13 @@ export async function play(
         }
         break;
       }
-      if (state.currentPeriod >= milestonePeriod) {
+      if (state.currentPeriod >= milestonePeriod && !pastMilestone) {
         console.log(`\n${BOLD}${GREEN}Ten-year milestone reached.${RESET}`);
         console.log(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need ${toDisplay(business.peakCashNeed)} at period ${business.peakCashNeedPeriod}`,
         );
-        printPostmortem(history, business);
+        printPostmortem(historyOf(business.id), business);
         // The number the run was missing: what the same money would have done
         // sitting in an index fund for the same ten years.
         console.log('');
@@ -1979,7 +2178,25 @@ export async function play(
         )) {
           console.log(`  ${line}`);
         }
-        break;
+
+        /**
+         * Continue-play — M7's last item.
+         *
+         * Ten years is where the spec stops scoring, not where a business
+         * stops. Ending the run there throws away the most interesting part of
+         * a portfolio that took a decade to assemble, so the milestone is a
+         * scoreboard and the player decides whether it was also a finish line.
+         *
+         * Blank or end-of-input stops, which is what a piped transcript that
+         * has run out means and what a player pressing enter means.
+         */
+        const answer = await input.next(`\n${DIM}Keep going? (enter to stop)${RESET} > `);
+        if (answer === undefined || answer.trim() === '' || answer.trim().toLowerCase() === 'quit') {
+          break;
+        }
+        pastMilestone = true;
+        console.log(`${DIM}Playing on. \`quit\` ends it whenever you like.${RESET}`);
+        continue;
       }
 
       const queued: Action[] = [];
@@ -2003,12 +2220,13 @@ export async function play(
           business,
           last,
           state,
-          history,
+          historyOf(businessId),
           options.journal,
           memory,
           options.advisor,
         );
         if (parsed.message) console.log(parsed.message);
+        if (parsed.activate) businessId = parsed.activate;
         if (parsed.quit) {
           quit = true;
           break;
@@ -2071,7 +2289,7 @@ export async function play(
         record(last);
       }
 
-      renderTurn(last, state.businesses.find((b) => b.id === businessId)!);
+      renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
     }
   } finally {
     if (!options.input) input.close();

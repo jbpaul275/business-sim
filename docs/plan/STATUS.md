@@ -11,7 +11,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M4 — Challenge loop** | ⬜ Not started | Same |
 | **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` not started; `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
-| **M7 — Multi-business** | 🟡 Partial | Consolidation and household roll-up work; `DELEGATE`/`RECLAIM` implemented; clone not started |
+| **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
 
 ## M1 exit criteria
@@ -164,7 +164,11 @@ which the reference model omitted — the same reason its year three sat above b
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.
 - **The UI.** The three-pane shell in [01-architecture.md §7](./01-architecture.md) is unstarted.
-- **`START_BUSINESS` and `SELL_BUSINESS`** reject with an `ACTION_REJECTED` event rather than half-working.
+- **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which
+  cannot run inside a pure tick. CLONE covers the case §9.5 says should take two minutes; a genuinely
+  different second business is a new run today.
+- **A clone re-prompting for each parameter that differs.** §9.5 lists location, rent, traffic, wage rate,
+  buildout and unit count; this build takes one size multiplier covering all of them.
 - **`TurnNarration` (§11.5).** The quarterly screen is still engine output with no prose over it. A model
   now answers questions mid-game (§11.4), but it does not narrate the result of a quarter.
 

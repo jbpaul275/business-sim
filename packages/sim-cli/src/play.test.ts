@@ -20,10 +20,17 @@ function scriptedInput(lines: readonly string[]): LineSource {
   return { next: async () => lines[i++], close: () => {} };
 }
 
-async function transcript(lines: readonly string[], scenario = 'restaurant'): Promise<string> {
+async function transcript(
+  lines: readonly string[],
+  scenario = 'restaurant',
+  // Four quarters is enough for most of these and keeps them fast. Anything
+  // with a lead time in it — a clone, a buildout — needs the run to outlive the
+  // scoreboard, or the milestone ends it before the decision lands.
+  milestonePeriod = 4,
+): Promise<string> {
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   try {
-    await play(scenario, { input: scriptedInput(lines), milestonePeriod: 4 });
+    await play(scenario, { input: scriptedInput(lines), milestonePeriod });
     return log.mock.calls.map((c) => String(c[0])).join('\n');
   } finally {
     log.mockRestore();
@@ -544,6 +551,86 @@ describe('asking what to do', () => {
     const printed = await transcript(['marketing 50k', 'quit'], 'storage');
     expect(printed).toMatch(/does not move demand for this archetype/);
     expect(printed).toContain('queued: marketing');
+  });
+
+  it('opens a second one, and shows both', async () => {
+    // "I want to use the cash flow from this one to buy a 256 room property in
+    // Des Moines" was answered with "you are at 57.6% of capacity" for most of
+    // this project's life.
+    const printed = await transcript(
+      ['distribute 900k', '', 'clone 900k Rochester', '', '', '', 'businesses', 'quit'],
+      'restaurant',
+      12,
+    );
+    expect(printed).toMatch(/queued: open Rochester for \$900,000/);
+    expect(printed).toMatch(/Rochester/);
+    // Both on the books, with the active one marked.
+    expect(printed).toMatch(/1\. Reference Restaurant/);
+    expect(printed).toMatch(/2\. Rochester/);
+    // And the turn screen says the other one exists without leaving this one.
+    expect(printed).toMatch(/Also running/);
+    expect(printed).toMatch(/group revenue/);
+  });
+
+  it('quotes the buildout before the money moves', async () => {
+    const printed = await transcript(
+      ['distribute 2m', '', 'clone 2m Rochester 3x', 'quit'],
+      'restaurant',
+    );
+    expect(printed).toMatch(/3× the size/);
+    expect(printed).toMatch(/Buildout alone is/);
+    expect(printed).toMatch(/Revenue starts two quarters out/);
+  });
+
+  it('will not open one the household cannot pay for', async () => {
+    const printed = await transcript(['clone 50m Rochester', 'quit'], 'restaurant');
+    expect(printed).toMatch(/The household has/);
+    expect(printed).toMatch(/`distribute <amount>`/);
+    expect(printed).not.toContain('queued: open');
+  });
+
+  it('needs a name, because a portfolio of unnamed copies is unusable', async () => {
+    const printed = await transcript(['clone 900k', 'quit'], 'restaurant');
+    expect(printed).toMatch(/needs a name|needs the money and a name/);
+    expect(printed).not.toContain('queued: open');
+  });
+
+  it('switches which business the commands are about', async () => {
+    const printed = await transcript(
+      ['distribute 900k', '', 'clone 900k Rochester', '', '', '', 'switch 2', 'price 50', 'quit'],
+      'restaurant',
+      12,
+    );
+    expect(printed).toMatch(/Now looking at Rochester/);
+    expect(printed).toMatch(/queued: price/);
+  });
+
+  it('sells one, on its own verb', async () => {
+    // `sell` belongs to securities. A portfolio needs its own word or the two
+    // collide on the one command a player is most likely to get wrong.
+    const printed = await transcript(
+      ['distribute 900k', '', 'clone 900k Rochester', '', '', '', 'divest 2', 'quit'],
+      'restaurant',
+      12,
+    );
+    expect(printed).toMatch(/trailing EBITDA/);
+    expect(printed).toMatch(/It closes in two quarters/);
+    expect(printed).toMatch(/queued: sell the business/);
+  });
+
+  it('keeps playing past the milestone when asked', async () => {
+    // Ten years is where the spec stops scoring, not where a business stops.
+    const printed = await transcript(['skip 40', 'yes', 'quit'], 'restaurant');
+    expect(printed).toMatch(/Ten-year milestone reached/);
+    // The question itself is a prompt rather than a printed line, so what is
+    // observable is the answer to it.
+    expect(printed).toMatch(/Playing on/);
+  });
+
+  it('stops at the milestone on a blank line', async () => {
+    const printed = await transcript(['skip 40', '', 'quit'], 'restaurant');
+    expect(printed).toMatch(/Ten-year milestone reached/);
+    expect(printed).not.toMatch(/Playing on/);
   });
 
   it('still rejects a mistyped command as a mistyped command', async () => {

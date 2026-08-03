@@ -80,6 +80,25 @@ export const zCapacitySpec = z.object({
 });
 export type CapacitySpec = z.infer<typeof zCapacitySpec>;
 
+/**
+ * What differs about the second one — spec §9.5.
+ *
+ * The spec lists location, rent, addressable traffic, wage rate, buildout cost
+ * and unit count. This is one multiplier covering all of them, because the
+ * alternative is a second interview and the entire point of a clone is that
+ * there is not one. A player who wants a materially different business runs
+ * the full interview; a player who wants the same business somewhere else
+ * wants two numbers and a name.
+ */
+export const zCloneSpec = z.object({
+  name: z.string(),
+  /** Household cash committed to opening it. */
+  equity: zMoney,
+  /** Site size against the parent. 1 is the same shop in a different town. */
+  scale: zPositive.default(1),
+});
+export type CloneSpec = z.infer<typeof zCloneSpec>;
+
 export const zAction = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('SET_PRICE'), streamId: z.string(), newPrice: zMoney }),
   z.object({
@@ -116,6 +135,8 @@ export const zAction = z.discriminatedUnion('kind', [
     kind: z.literal('START_BUSINESS'),
     mode: z.enum(['FULL_INTERVIEW', 'CLONE']),
     cloneFromId: z.string().optional(),
+    /** Required for CLONE. FULL_INTERVIEW re-enters setup and carries none. */
+    clone: zCloneSpec.optional(),
   }),
   z.object({
     kind: z.literal('DELEGATE'),
