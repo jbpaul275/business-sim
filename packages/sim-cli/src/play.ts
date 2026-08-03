@@ -1,9 +1,8 @@
-import { createInterface } from 'node:readline/promises';
-import { stdin, stdout } from 'node:process';
-import { fromDisplay, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
+import { fromDisplay, ratio, toCompact, toDisplay } from '@bizsim/money';
 import { tick, type TickResult } from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
+import { openInput, parseMoney, type LineSource } from './input.js';
 
 /**
  * The interactive turn loop — spec §9.1 Phase 5, without the LLM.
@@ -30,17 +29,6 @@ const RESET = '\x1b[0m';
 const pad = (s: string, n: number): string => s.padEnd(n);
 const rpad = (s: string, n: number): string => s.padStart(n);
 const pct = (v: number): string => `${(v * 100).toFixed(1)}%`;
-
-/** Accepts `45`, `12000`, `12k`, `1.5m`, `$40,000`. */
-function parseMoney(raw: string): Money | undefined {
-  const cleaned = raw.trim().replace(/[$,]/g, '').toLowerCase();
-  const match = /^(-?\d*\.?\d+)([km])?$/.exec(cleaned);
-  if (!match) return undefined;
-  const base = Number(match[1]);
-  if (!Number.isFinite(base)) return undefined;
-  const scale = match[2] === 'k' ? 1_000 : match[2] === 'm' ? 1_000_000 : 1;
-  return fromDisplay(base * scale);
-}
 
 const severityColour = (s: EngineEvent['severity']): string =>
   s === 'CRITICAL' ? RED : s === 'WARNING' ? YELLOW : DIM;
@@ -338,81 +326,37 @@ function parseCommand(line: string, business: Business): ParseResult {
 // Input
 // ---------------------------------------------------------------------------
 
-/**
- * A terminal and a pipe need different readers.
- *
- * `readline` pauses its stream between questions, so on a pipe it consumes one
- * line and then the stream ends underneath it — the pending question never
- * settles, the event loop drains, and the process exits mid-turn with status 0
- * as though nothing were wrong. That makes a scripted session impossible and,
- * worse, makes a truncated one look successful. So a non-TTY reads its input up
- * front and replays it line by line, which also makes the loop scriptable.
- */
-interface LineSource {
-  next(prompt: string): Promise<string | undefined>;
-  close(): void;
-}
+export async function play(
+  source: string | WorldState,
+  options: { input?: LineSource; milestonePeriod?: number } = {},
+): Promise<void> {
+  const milestonePeriod = options.milestonePeriod ?? 39;
 
-function ttySource(): LineSource {
-  const rl = createInterface({ input: stdin, output: stdout });
-  let closed = false;
-  rl.on('close', () => {
-    closed = true;
-  });
-  return {
-    async next(prompt) {
-      if (closed) return undefined;
-      try {
-        return await rl.question(prompt);
-      } catch {
-        return undefined;
-      }
-    },
-    close: () => rl.close(),
-  };
-}
-
-async function pipedSource(): Promise<LineSource> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stdin) chunks.push(Buffer.from(chunk));
-  const lines = Buffer.concat(chunks).toString('utf8').split('\n');
-  if (lines[lines.length - 1] === '') lines.pop();
-  let i = 0;
-  return {
-    async next(prompt) {
-      if (i >= lines.length) return undefined;
-      const line = lines[i++] ?? '';
-      // Echo, so a scripted transcript reads the same as a live one.
-      console.log(`${prompt}${line}`);
-      return line;
-    },
-    close: () => {},
-  };
-}
-
-export async function play(scenarioName: string, milestonePeriod = 39): Promise<void> {
-  const build = SCENARIOS[scenarioName];
-  if (!build) {
-    console.error(`Unknown scenario "${scenarioName}". Available: ${Object.keys(SCENARIOS).join(', ')}`);
-    process.exit(1);
+  let state: WorldState;
+  if (typeof source === 'string') {
+    const build = SCENARIOS[source];
+    if (!build) {
+      console.error(`Unknown scenario "${source}". Available: ${Object.keys(SCENARIOS).join(', ')}`);
+      process.exit(1);
+    }
+    state = build();
+  } else {
+    state = source;
   }
-
-  let state: WorldState = build();
   const businessId = state.businesses[0]?.id;
   if (!businessId) {
     console.error('Scenario has no business.');
     process.exit(1);
   }
 
-  console.log(`${BOLD}Business Simulator${RESET} — ${scenarioName}`);
   console.log(
-    `${DIM}Opening cash ${toDisplay(state.businesses[0]!.cash)} · ` +
+    `\n${DIM}Opening cash ${toDisplay(state.businesses[0]!.cash)} · ` +
       `month-zero outlay ${toDisplay(state.businesses[0]!.peakCashNeed)} · ` +
       `household ${toDisplay(state.household.cash)}${RESET}`,
   );
   console.log(`${DIM}\`help\` for commands. Blank line runs the quarter.${RESET}`);
 
-  const input = stdin.isTTY ? ttySource() : await pipedSource();
+  const input = options.input ?? (await openInput());
 
   const advance = (actions: Action[]): TickResult => {
     const result = tick(state, actions, { throwOnAssertionFailure: false });
@@ -501,6 +445,6 @@ export async function play(scenarioName: string, milestonePeriod = 39): Promise<
       renderTurn(last, state.businesses.find((b) => b.id === businessId)!);
     }
   } finally {
-    input.close();
+    if (!options.input) input.close();
   }
 }

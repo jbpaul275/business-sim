@@ -4,6 +4,8 @@ import { tick, type TickResult } from '@bizsim/engine';
 import type { WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
 import { play } from './play.js';
+import { runSetup } from './setup.js';
+import { openInput } from './input.js';
 
 /**
  * The headless runner. This is the calibration harness for seed templates and
@@ -17,10 +19,12 @@ interface Args {
   print: 'statements' | 'summary' | 'events' | 'bands';
   /** Interactive turn loop (§9.1 Phase 5) rather than a batch run. */
   interactive: boolean;
+  /** Full setup — §9.1 Phases 0-4 — then play what you designed. */
+  newGame: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { scenario: 'restaurant', periods: 40, print: 'summary', interactive: false };
+  const args: Args = { scenario: 'restaurant', periods: 40, print: 'summary', interactive: false, newGame: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = argv[i + 1];
@@ -35,6 +39,8 @@ function parseArgs(argv: string[]): Args {
       i++;
     } else if (arg === '--play' || arg === '--interactive') {
       args.interactive = true;
+    } else if (arg === '--new') {
+      args.newGame = true;
     }
   }
   return args;
@@ -175,6 +181,17 @@ function printBands(results: TickResult[]): void {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.newGame) {
+    const input = await openInput();
+    try {
+      const setup = await runSetup(input);
+      if (setup?.committed) await play(setup.world, { input });
+    } finally {
+      input.close();
+    }
+    return;
+  }
 
   if (args.interactive) {
     await play(args.scenario);

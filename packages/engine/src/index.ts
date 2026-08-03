@@ -42,4 +42,8 @@ export { maintenanceReservePerQuarter, resolveCapacity } from './costs.js';
 export { deltaNetWorkingCapital, cashConversionCycle } from './workingCapital.js';
 export type { ComputationTrace } from './context.js';
 export type { CapacityResolution } from './costs.js';
-export { buildModelFromTemplate, type BuildModelOptions } from './buildModel.js';
+export {
+  buildModelFromTemplate,
+  type BuildModelOptions,
+  type ScaleInput,
+} from './buildModel.js';

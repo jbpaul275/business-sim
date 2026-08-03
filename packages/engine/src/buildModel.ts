@@ -477,8 +477,23 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
   });
 
   // Every cost line, injected or not, needs a registered assumption (§10.2).
-  const bandFor = (lineId: string): { low: number; high: number; source: string } | undefined =>
-    t.costDefaults.find((c) => c.lineId === lineId)?.benchmarkBand;
+  /**
+   * A band is only meaningful against a value in the same units. Template
+   * bands are authored per cost line, but a line's assumption may be a rate
+   * (pctOfRevenue) or an amount (amountPerQuarter) — and comparing a 6-10%
+   * band against $33,000 of rent flags every lease ever written as out of
+   * band, which is worse than having no band at all: it trains the player to
+   * ignore the flag that §11.3.1 depends on.
+   */
+  const bandFor = (
+    lineId: string,
+    expects: 'rate' | 'money',
+  ): { low: number; high: number; source: string } | undefined => {
+    const band = t.costDefaults.find((c) => c.lineId === lineId)?.benchmarkBand;
+    if (!band) return undefined;
+    const looksLikeRate = Math.abs(band.high) <= 1;
+    return looksLikeRate === (expects === 'rate') ? band : undefined;
+  };
 
   for (const cost of withGuard.variableWithRevenue) {
     assume(sink, `costs.${cost.id}.pctOfRevenue`, cost.label, cost.pctOfRevenue, {
@@ -487,7 +502,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       sourceNote:
         t.costDefaults.find((c) => c.lineId === cost.id)?.sourceNote ??
         `Injected by the omission guard for ${t.label}.`,
-      ...(bandFor(cost.id) ? { benchmarkBand: bandFor(cost.id)! } : {}),
+      ...(bandFor(cost.id, 'rate') ? { benchmarkBand: bandFor(cost.id, 'rate')! } : {}),
     });
   }
   for (const cost of withGuard.variableWithActivity) {
@@ -503,7 +518,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       category: 'COST',
       unit: 'USD',
       sourceNote: note,
-      ...(bandFor(cost.id) ? { benchmarkBand: bandFor(cost.id)! } : {}),
+      ...(bandFor(cost.id, 'money') ? { benchmarkBand: bandFor(cost.id, 'money')! } : {}),
     });
     assume(sink, `costs.${cost.id}.capacityPerBlock`, `${cost.label} — capacity per block`, cost.capacity.capacityPerBlock, {
       category: 'COST',
@@ -518,7 +533,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       sourceNote:
         t.costDefaults.find((c) => c.lineId === cost.id)?.sourceNote ??
         `Injected by the omission guard for ${t.label}.`,
-      ...(bandFor(cost.id) ? { benchmarkBand: bandFor(cost.id)! } : {}),
+      ...(bandFor(cost.id, 'money') ? { benchmarkBand: bandFor(cost.id, 'money')! } : {}),
     });
     assume(sink, `costs.${cost.id}.annualEscalatorPct`, `${cost.label} — annual escalator`, cost.annualEscalatorPct, {
       category: 'COST',

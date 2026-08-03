@@ -9,7 +9,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | ⬜ Not started | `buildModelFromTemplate` is the engine-side seam the LLM replaces |
 | **M4 — Challenge loop** | ⬜ Not started | |
-| **M5 — Turn loop + actions** | 🟡 Partial | Full action catalog with lead times; crisis ladder and insolvency done. `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
+| **M5 — Turn loop + actions** | 🟡 Partial | §9.1 Phases 0-5 playable via `pnpm sim --new`: capital choice, business design, assumption review, commit gate, quarterly operate. `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | 🟡 Partial | Consolidation and household roll-up work; `DELEGATE`/`RECLAIM` implemented; clone not started |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
@@ -69,6 +69,24 @@ Calibration is driven from the CLI, one scenario per archetype:
 ```
 pnpm sim --scenario contractor --periods 40 --print bands
 ```
+
+## Playing it
+
+```
+pnpm sim --new                                  # Phases 0-4, then play what you designed
+pnpm sim --play --scenario contractor           # skip setup, play a seeded scenario
+pnpm sim --scenario restaurant --print bands    # batch run, for calibration
+```
+
+`--new` covers §9.1 Phases 0 through 4: choose starting capital (LOW / MID / FREEPLAY),
+choose what you are building, set the archetype's scale parameters against their benchmark
+bands, arrange financing, then review every registered assumption with its provenance and
+model confidence score before committing. Phase 4 is a real gate — a business that cannot
+fund its own month zero is refused rather than opened with negative cash.
+
+M3 replaces the *input method* for Phases 1-2, not the phases: the LLM turns "a taco place
+in Austin" into the same archetype choice and parameters this asks for directly. Phases 0,
+3 and 4 never needed a model at all.
 
 ## The reference run
 

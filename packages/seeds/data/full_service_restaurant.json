@@ -66,9 +66,9 @@
       "isMoney": true,
       "accruable": true,
       "benchmarkBand": {
-        "low": 0.06,
-        "high": 0.1,
-        "source": "IBISWorld 72251"
+        "low": 15000,
+        "high": 60000,
+        "source": "IBISWorld 72251 \u2014 quarterly rent for 2,000-3,000 sq ft at NNN rates"
       },
       "sourceNote": "2,400 sq ft at $55/sq ft/yr NNN in a secondary metro corridor.",
       "annualEscalatorPct": 0.03
