@@ -1,7 +1,9 @@
 import { fromDisplay, mulRate, toDisplay, type Money } from '@bizsim/money';
 import {
   DEBT_PRODUCTS,
+  MIN_OWNER_INJECTION_PCT,
   buildModelFromTemplate,
+  collateralValue,
   underwrite,
   computeMonthZeroOutlays,
   createWorld,
@@ -310,7 +312,9 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
   }
   const cashColour = business.cash <= 0n ? RED : business.cash < fromDisplay(50_000) ? YELLOW : GREEN;
   console.log(`  Opening cash        ${cashColour}${toDisplay(business.cash)}${RESET}`);
-  console.log(`  Household keeps     ${toDisplay(world.household.cash)}`);
+  // Still shown, because money you did not put in is money you still have and
+  // can `inject` later. It just no longer drains on its own.
+  console.log(`  Kept back           ${toDisplay(world.household.cash)}`);
 
   // Zero is fundable and still precarious, and the two are different messages.
   // Warning "you cannot afford to open" and then opening anyway is the kind of
@@ -420,12 +424,24 @@ export async function runSetup(
   let model: BusinessModel | undefined;
   let world: WorldState | undefined;
 
-  // Never suggest emptying the household. §2.3 draws living expenses from
-  // household cash every quarter and a founder who put every dollar into the
-  // buildout is personally insolvent by the second one.
-  const livingReserve = fromDisplay(60_000);
-  const investable =
-    config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
+  /**
+   * All of it is investable. There is no living reserve.
+   *
+   * There used to be $60,000 held back, on the reasoning that §2.3 draws
+   * living expenses from household cash and a founder who put in every dollar
+   * is personally insolvent by the second quarter. That reasoning is sound and
+   * the feature was still wrong: it took 60% of a $100,000 start off the table
+   * before the player had made a single decision, and then the game explained
+   * why their ice cream shop was unfundable. Personal solvency is a different
+   * game from the one this is, and modelling both made the interesting one
+   * harder to reach.
+   *
+   * The household draw is off with it — see `createWorld` below. Half a
+   * decision would be worse than either whole one: a reserve of zero against a
+   * household that still bleeds is precisely the bankruptcy the reserve
+   * existed to prevent.
+   */
+  const investable = config.startCapital;
 
   for (let attempt = 1; ; attempt++) {
     // What opening costs, before anyone has been asked for a number. Everything
@@ -439,6 +455,15 @@ export async function runSetup(
       marketingSpendPerQuarter: marketing,
       equityInjection: 0n,
       ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+    });
+    // Opened, so the assets exist to lend against. Nothing is committed by
+    // this: it is the same throwaway probe the outlay figure comes from.
+    const bareWorld = createWorld({
+      id: 'probe',
+      playerId: 'probe',
+      config,
+      annualLivingExpenses: 0n,
+      models: [bare],
     });
     const monthZero = computeMonthZeroOutlays(bare).total;
     // Month zero alone is a knife edge: the first quarter's fixed costs land
@@ -458,8 +483,32 @@ export async function runSetup(
     // lands 3% short. This is what left an earlier run one origination fee
     // outside a gate the setup had just recommended.
     const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
-    const proposedLoan = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
-    const proposedRevolver = fromDisplay(100_000);
+    const wanted = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
+
+    /**
+     * Propose only what a lender will actually write.
+     *
+     * The screen offered "$40,000 of your own plus a $113,925 SBA 7(a)" and
+     * the lender declined it on the very next screen — $113,925 against
+     * $61,800 of collateral. Recommending a plan and then refusing it is the
+     * same self-contradiction as the commit gate rejecting a build the setup
+     * had just suggested, and it teaches the player that the numbers on offer
+     * are not real.
+     *
+     * Two ceilings, both the underwriter's own: lending value of the assets,
+     * and ten times the owner's injection. The collateral is *shared* — the
+     * engine underwrites each facility against the full amount independently,
+     * so proposing both at the ceiling would slip two loans through a test
+     * meant to allow one. The term loan takes priority and the revolver gets
+     * what is left, because the term loan is what actually funds opening.
+     */
+    const lendable = collateralValue(bareWorld.businesses[0]!);
+    const onEquity = mulRate(proposedEquity, 1 / MIN_OWNER_INJECTION_PCT);
+    const ceiling = lendable < onEquity ? lendable : onEquity;
+    const proposedLoan = wanted < ceiling ? wanted : ceiling;
+    const headroom = ceiling > proposedLoan ? ceiling - proposedLoan : 0n;
+    const revolverTarget = fromDisplay(100_000);
+    const proposedRevolver = headroom < revolverTarget ? headroom : revolverTarget;
 
     let loan: Money;
     let revolver: Money;
@@ -489,9 +538,8 @@ export async function runSetup(
     );
     console.log(
       note(
-        `You have ${toDisplay(config.startCapital, { showCents: false })}, of which` +
-          ` ${toDisplay(investable, { showCents: false })} is investable after leaving` +
-          ` ${toDisplay(livingReserve, { showCents: false })} to live on.`,
+        `You have ${toDisplay(config.startCapital, { showCents: false })}, all of it` +
+          ` available to put into this.`,
       ) + '\n',
     );
     const plan =
@@ -499,7 +547,11 @@ export async function runSetup(
         ? `${toDisplay(proposedEquity, { showCents: false })} of your own plus a ` +
           `${toDisplay(proposedLoan, { showCents: false })} SBA 7(a)`
         : `${toDisplay(proposedEquity, { showCents: false })} of your own, no debt needed`;
-    console.log(`  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`);
+    console.log(
+      proposedRevolver > 0n
+        ? `  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`
+        : `  1  ${plan}`,
+    );
     console.log(`  2  ${DIM}Set the loan, revolver and equity myself${RESET}`);
 
     const choice = await ask(input, '> ', 1, (raw) => {
@@ -539,21 +591,6 @@ export async function runSetup(
         : []),
     ];
 
-    // Putting the whole household in is allowed and sometimes correct, but it
-    // has to be a decision rather than a side effect of typing a round number.
-    // §2.3 draws living expenses from household cash every quarter, so a
-    // founder who kept nothing is personally insolvent long before the business
-    // has had time to work — and the setup screen said nothing about it.
-    const householdLeft = config.startCapital > equity ? config.startCapital - equity : 0n;
-    if (householdLeft < livingReserve) {
-      console.log(
-        `\n${YELLOW}⚠ That leaves your household ${toDisplay(householdLeft)}.${RESET}` +
-          `${DIM} Living expenses come out of it every quarter whether or not the` +
-          ` business pays you. Going in this deep is a real strategy; going in this` +
-          ` deep by accident is how a solvent business ends up with a bankrupt owner.${RESET}`,
-      );
-    }
-
     const candidate = buildModelFromTemplate({
       businessName,
       template,
@@ -583,6 +620,14 @@ export async function runSetup(
       id: 'player-run',
       playerId: 'player',
       config,
+    /**
+     * No living expenses. §2.3 draws them from household cash every quarter,
+     * and they are a second game — personal solvency — running underneath the
+     * one being played. Turning off the reserve without turning off the draw
+     * would be the worst of both: nothing held back, against a household that
+     * still bleeds.
+     */
+    annualLivingExpenses: 0n,
       models: [candidate],
     });
 
@@ -679,9 +724,20 @@ export async function runSetup(
       return undefined;
     }
 
+    // Only suggest a bigger loan when a bigger loan is available. The lending
+    // ceiling is what it is, and "an SBA loan of at least $228,839 would close
+    // it" is not advice when the underwriter stops at $312,000 and the plan is
+    // already there — it is the same refuse-what-you-recommended fault one
+    // screen further on.
+    const stillLendable = ceiling > loan ? ceiling - loan : 0n;
     console.log(
-      `${DIM}The concept is intact — only the financing needs to change. An SBA loan of` +
-        ` at least ${toDisplay(shortfall, { showCents: false })} would close it.${RESET}`,
+      stillLendable >= shortfall
+        ? `${DIM}The concept is intact — only the financing needs to change. An SBA loan of` +
+            ` at least ${toDisplay(shortfall, { showCents: false })} would close it.${RESET}`
+        : `${DIM}The concept is intact, but the money is not there: a lender will write at` +
+            ` most ${toDisplay(ceiling, { showCents: false })} against this build and you have` +
+            ` ${toDisplay(investable, { showCents: false })} of your own. It needs to be a` +
+            ` smaller build — a cheaper fit-out, less equipment, a smaller space.${RESET}`,
     );
     const raw = await input.next('\nTry different financing? (Y/n) ');
     // End of input is not consent to keep looping. A scripted run that stops

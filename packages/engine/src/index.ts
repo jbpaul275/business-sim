@@ -35,7 +35,13 @@ export {
   seasonalityFactor,
   quarterOfYear,
 } from './modifiers.js';
-export { annuityPayment, underwrite, DEBT_PRODUCTS } from './debt.js';
+export {
+  annuityPayment,
+  collateralValue,
+  underwrite,
+  DEBT_PRODUCTS,
+  MIN_OWNER_INJECTION_PCT,
+} from './debt.js';
 export { computeTax, SECTION_179_CAP, SE_TAX_WAGE_BASE } from './tax.js';
 export { quarterlyDepreciation } from './depreciation.js';
 export { maintenanceReservePerQuarter, resolveCapacity } from './costs.js';

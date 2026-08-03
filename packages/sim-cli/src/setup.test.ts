@@ -428,6 +428,41 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
+  it('never proposes a loan its own lender will refuse', async () => {
+    // The screen offered "$40,000 of your own plus a $113,925 SBA 7(a)" and
+    // the lender declined it one screen later — $113,925 against $61,800 of
+    // collateral. Recommending a plan and then refusing it teaches the player
+    // that the numbers on offer are not real.
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Downtown Dayton is walkable.', cta: 'What is a typical ticket?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '1', // $100,000 — tight enough that the ceiling binds
+      'A small ice cream shop in downtown Dayton.',
+      'About $6 a head.',
+      '', // nothing to argue with
+      '', // take whatever it proposes
+      'y',
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      // Whatever it proposed, it is not something the underwriter rejects.
+      expect(printed).not.toContain('The lender declined');
+      // Either it committed, or it said honestly that the build is too big for
+      // the money — never that the plan it just recommended is unfinanceable.
+      expect(result === undefined || result.committed).toBeTruthy();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('lets the lender decline, instead of granting whatever is asked for', async () => {
     // A live run answered a $203,902 shortfall with a $4M SBA and a $4M
     // revolver against $140,000 of equity, and got all of it. `underwrite` has
@@ -509,9 +544,12 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
-  it('warns before the player empties the household into the business', async () => {
-    // A live run put $1,000,000 of a $1,000,000 household into the buildout and
-    // printed "Household keeps $0.00" as though it were a line item.
+  it('puts every dollar of starting capital on the table', async () => {
+    // There used to be a $60,000 living reserve. The reasoning was sound —
+    // §2.3 draws living expenses from household cash — and the feature was
+    // still wrong: it took 60% of a $100,000 start off the table before the
+    // player had made a decision, then explained why their ice cream shop was
+    // unfundable. Personal solvency is a different game from this one.
     const transport = new ScriptedTransport(
       [
         { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
@@ -525,19 +563,21 @@ describe('the concept path reaches the same gate as the picker', () => {
       'A telescope rental place on a ridge.',
       '24 scopes.',
       '', // nothing to argue with
-      '2', // set the funding myself
-      '0',
-      '',
-      '900000', // everything
-      'y',
+      '', // take the proposed funding
+      'y', // commit
     ]);
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      await runSetup(input, { transport });
+      const result = await runSetup(input, { transport });
       const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
-      expect(printed).toContain('leaves your household');
-      expect(printed).toContain('bankrupt owner');
+      expect(printed).toContain('all of it');
+      expect(printed).not.toContain('to live on');
+      expect(printed).not.toContain('bankrupt owner');
+      expect(result?.committed).toBe(true);
+      // And the draw is off with it: half the decision — no reserve against a
+      // household that still bleeds — is worse than either whole one.
+      expect(result?.world.household.annualLivingExpenses).toBe(0n);
     } finally {
       log.mockRestore();
     }

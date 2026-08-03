@@ -150,6 +150,29 @@ export interface UnderwritingDecision {
  * already sit above EBITDA — owner comp in G&A, the maintenance reserve as a
  * FIXED_PERIOD line — so subtracting them again double-counts (§6.3).
  */
+/**
+ * Lending value of what the business owns.
+ *
+ * Exported because the setup screen has to be able to *propose* a financing
+ * plan this function will approve. It proposed a $113,925 SBA against $61,800
+ * of collateral, the lender declined it, and the player was left to guess the
+ * ceiling — the same self-contradiction as a commit gate refusing a build the
+ * setup had just recommended, one screen earlier.
+ *
+ * Advance rates are the usual split: real property lends further than
+ * equipment because it holds value and is easier to sell.
+ */
+export function collateralValue(business: Business): Money {
+  return sum(
+    business.assets.map((a) =>
+      mulRate(a.grossCost - a.accumulatedDepreciation, a.category === 'REAL_PROPERTY' ? 0.7 : 0.6),
+    ),
+  );
+}
+
+/** SBA requires the owner to fund at least a tenth of the deal (§6.3). */
+export const MIN_OWNER_INJECTION_PCT = 0.1;
+
 export function underwrite(
   business: Business,
   spec: DebtSpec,
@@ -183,13 +206,9 @@ export function underwrite(
   if (!hasHistory) {
     // Pre-revenue: underwrite on collateral coverage and owner equity injection.
     // This correctly makes the first loan hard and later loans easier.
-    const collateral = sum(
-      business.assets.map((a) =>
-        mulRate(a.grossCost - a.accumulatedDepreciation, a.category === 'REAL_PROPERTY' ? 0.7 : 0.6),
-      ),
-    );
+    const collateral = collateralValue(business);
     const equityInjection = business.balances.contributedCapital;
-    const minimumEquity = mulRate(spec.requestedPrincipal, 0.1); // SBA requires ≥10%
+    const minimumEquity = mulRate(spec.requestedPrincipal, MIN_OWNER_INJECTION_PCT);
 
     if (spec.requestedPrincipal > collateral) {
       return {
