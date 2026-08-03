@@ -72,7 +72,8 @@ export async function runConceptInterview(
     wrap(
       'Describe it however you like — a sentence is enough to start. I will ask ' +
         'what I need and estimate the rest, and you will see every number before ' +
-        'anything is committed.',
+        'anything is committed. Answers are kept short on purpose; type `why` ' +
+        'after any of them to see the reasoning behind it.',
     ),
   );
   console.log(`${DIM}${wrap('Ctrl-C to abandon setup.', 76, '  ')}${RESET}\n`);
@@ -87,7 +88,34 @@ export async function runConceptInterview(
 
   let reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
 
+  /**
+   * `why` shows the reasoning behind the last turn.
+   *
+   * It costs nothing. Thinking is billed whether or not the summary is
+   * returned, and the default throws it away — so the honest short answer the
+   * player asked for and the full working they occasionally want are the same
+   * response, not two. No extra call, no extra turn, no extra bill.
+   */
+  const showReasoning = (): void => {
+    if (!interview.lastReasoning) {
+      console.log(`\n  ${DIM}Nothing recorded for that turn.${RESET}\n`);
+      return;
+    }
+    console.log(`\n  ${DIM}── how it got there ${'─'.repeat(52)}${RESET}`);
+    console.log(`${DIM}${wrap(interview.lastReasoning, 74)}${RESET}`);
+    console.log(
+      `  ${DIM}${'─'.repeat(72)}${RESET}\n` +
+        `  ${DIM}A summary of the model's own reasoning, not a rewritten answer.${RESET}\n`,
+    );
+  };
+
   for (;;) {
+    if (/^(why|explain)\b/i.test(reply)) {
+      showReasoning();
+      reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+      continue;
+    }
+
     let state;
     try {
       state = await interview.send(reply);
@@ -111,7 +139,11 @@ export async function runConceptInterview(
     }
 
     console.log(`\n${wrap(state.message)}`);
-    console.log(`\n${BOLD}${wrap(state.cta, 74)}${RESET}\n`);
+    console.log(`\n${BOLD}${wrap(state.cta, 74)}${RESET}`);
+    if (interview.lastReasoning) {
+      console.log(`  ${DIM}(\`why\` to see how it got there)${RESET}`);
+    }
+    console.log('');
 
     if (state.status === 'ASKING') {
       reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);

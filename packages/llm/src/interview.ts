@@ -56,6 +56,14 @@ export class ConceptInterview {
   private turnsTaken = 0;
   /** Turns that blew the length budget. Read by the CLI, not enforced here. */
   verboseTurns = 0;
+  /**
+   * The model's summarised reasoning for the latest turn, if it returned any.
+   *
+   * Kept because it is already paid for: thinking is billed whatever `display`
+   * is set to, so discarding the summary buys nothing. `why` in the CLI shows
+   * this — no second call, no second turn, no second bill.
+   */
+  lastReasoning: string | undefined;
   readonly transcript: InterviewMessage[] = [];
 
   constructor(options: InterviewOptions) {
@@ -81,7 +89,8 @@ export class ConceptInterview {
       };
     }
 
-    const turn = await this.transport.turn(this.system, this.transcript);
+    const { turn, reasoning } = await this.transport.turn(this.system, this.transcript);
+    this.lastReasoning = reasoning;
     this.turnsTaken += 1;
     this.transcript.push({ role: 'assistant', content: `${turn.message}\n\n${turn.cta}` });
 

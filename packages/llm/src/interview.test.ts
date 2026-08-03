@@ -180,6 +180,28 @@ describe('ConceptInterview', () => {
     expect(drafted.cta).toBe('Press enter.');
   });
 
+  it('keeps the reasoning it already paid for', async () => {
+    // Thinking is billed whether or not the summary comes back, and the default
+    // discards it. Keeping it means "why did you say that?" costs nothing — the
+    // short answer and the full working are one response, not two.
+    const transport = new ScriptedTransport(
+      [asks('Jefferson County is the better trade.', 'Which submarket?')],
+      [],
+      ['Compared land cost against traffic counts; North County is cheaper but the volumes that make it cheap are what get a site rejected.'],
+    );
+    const interview = new ConceptInterview({ transport });
+
+    await interview.send('Where should I put a QSR in St. Louis?');
+    expect(interview.lastReasoning).toContain('get a site rejected');
+  });
+
+  it('leaves reasoning undefined when the model returned none', async () => {
+    const transport = new ScriptedTransport([asks('Where is it?')]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A bistro.');
+    expect(interview.lastReasoning).toBeUndefined();
+  });
+
   it('notices when a turn stops being a turn and starts being a memo', async () => {
     const wall = Array.from({ length: 200 }, (_, i) => `word${i}`).join(' ');
     const transport = new ScriptedTransport([asks(wall), asks('short one')]);

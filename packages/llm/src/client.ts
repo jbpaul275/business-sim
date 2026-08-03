@@ -25,9 +25,32 @@ export interface InterviewMessage {
   content: string;
 }
 
+/** What a call cost, so the CLI can show the split rather than guess at it. */
+export interface TurnUsage {
+  thinkingTokens: number;
+  outputTokens: number;
+}
+
+export interface TurnResult {
+  turn: InterviewTurn;
+  /**
+   * The model's reasoning, summarised.
+   *
+   * Thinking happens and is billed whatever `display` is set to, and the default
+   * throws it away. Asking for the summary costs nothing extra and it arrives in
+   * the response we are already making — so "why did you say that?" needs no
+   * second call, no second turn and no second bill.
+   *
+   * It is a summary. The raw chain of thought is never returned on any model,
+   * so this is the most that can honestly be shown.
+   */
+  reasoning?: string;
+  usage?: TurnUsage;
+}
+
 export interface ConceptTransport {
   /** One conversational turn: a question, or a signal that it can now draft. */
-  turn(system: string, messages: readonly InterviewMessage[]): Promise<InterviewTurn>;
+  turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
 }
@@ -100,11 +123,15 @@ export class AnthropicConceptTransport implements ConceptTransport {
     system: string,
     messages: readonly InterviewMessage[],
     schema: Record<string, unknown> | undefined,
-  ): Promise<string> {
+  ): Promise<{ text: string; reasoning?: string; usage: TurnUsage }> {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: this.maxTokens,
       system,
+      // Thinking is on by default on this model and billed either way; the
+      // default `display` of "omitted" just discards the summary. Asking for it
+      // is free and it is what makes `why` possible without a second call.
+      thinking: { type: 'adaptive', display: 'summarized' },
       output_config: {
         ...(schema ? { format: { type: 'json_schema' as const, schema } } : {}),
         effort: this.effort,
@@ -127,21 +154,39 @@ export class AnthropicConceptTransport implements ConceptTransport {
     if (!text) {
       throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
     }
-    return text;
+    const reasoning = response.content
+      .filter((block) => block.type === 'thinking')
+      .map((block) => block.thinking)
+      .filter((t) => t.trim().length > 0)
+      .join('\n\n');
+
+    return {
+      text,
+      ...(reasoning ? { reasoning } : {}),
+      usage: {
+        thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
+        outputTokens: response.usage.output_tokens,
+      },
+    };
   }
 
-  async turn(system: string, messages: readonly InterviewMessage[]): Promise<InterviewTurn> {
+  async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
+    const { text, reasoning, usage } = await this.complete(system, messages, TURN_SCHEMA);
     // Structured outputs constrain generation against the schema, so this
     // should always hold — but "should" is doing load-bearing work in a
     // sentence about generated JSON.
-    return zInterviewTurn.parse(JSON.parse(await this.complete(system, messages, TURN_SCHEMA)));
+    return {
+      turn: zInterviewTurn.parse(JSON.parse(text)),
+      ...(reasoning ? { reasoning } : {}),
+      usage,
+    };
   }
 
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
     try {
-      text = await this.complete(system, asked, DRAFT_SCHEMA);
+      text = (await this.complete(system, asked, DRAFT_SCHEMA)).text;
     } catch (error) {
       if (!isGrammarTooLarge(error)) throw error;
       // The draft schema is close to whatever the grammar ceiling is, and where
@@ -149,11 +194,13 @@ export class AnthropicConceptTransport implements ConceptTransport {
       // unconstrained call keeps the feature working: the schema is still in
       // the prompt and the result is still parsed with Zod, so the guarantee
       // weakens from "cannot be malformed" to "cannot pass unnoticed".
-      text = await this.complete(
-        `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
-        asked,
-        undefined,
-      );
+      text = (
+        await this.complete(
+          `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
+          asked,
+          undefined,
+        )
+      ).text;
     }
     return zConceptDraft.parse(JSON.parse(stripFence(text)));
   }
@@ -195,9 +242,10 @@ export class ScriptedTransport implements ConceptTransport {
   constructor(
     private readonly turns: readonly InterviewTurn[],
     private readonly drafts: readonly ConceptDraft[] = [],
+    private readonly reasoning: readonly string[] = [],
   ) {}
 
-  async turn(system: string, messages: readonly InterviewMessage[]): Promise<InterviewTurn> {
+  async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
     this.seen.push({ system, messages: [...messages] });
     const next = this.turns[this.index];
     if (!next) {
@@ -205,8 +253,9 @@ export class ScriptedTransport implements ConceptTransport {
         `ScriptedTransport exhausted after ${this.turns.length} turns — the loop asked for more than the script provides.`,
       );
     }
+    const why = this.reasoning[this.index];
     this.index += 1;
-    return next;
+    return { turn: next, ...(why ? { reasoning: why } : {}) };
   }
 
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
