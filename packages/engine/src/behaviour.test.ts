@@ -361,3 +361,81 @@ describe('benchmark plausibility (§13.3)', () => {
     expect(marginIn(9)).toBeLessThan(marginIn(3));
   });
 });
+
+describe('growing the market rather than the building', () => {
+  it('raises addressable demand two quarters out, and revenue follows', () => {
+    // A plumbing shop at 82% utilisation with no bench had no way to grow:
+    // every capacity lever adds room inside a demand pool fixed at concept
+    // lock. A second territory is genuinely both — you buy the yard and the
+    // market grows — so it rides the same action and the same lead time.
+    const model = buildModelFromTemplate({
+      businessName: 'Plumber',
+      template: getSeedTemplate('professional_services_firm'),
+      archetype: 'UTILIZATION',
+      scale: { demandHoursPerQuarter: 1_200, price: fromDisplay(300) },
+      equityInjection: fromDisplay(2_000_000),
+    });
+    let state: WorldState = createWorld({
+      id: 'plumber',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model],
+    });
+    const id = state.businesses[0]!.id;
+    const demand = (): number => {
+      const p = state.businesses[0]!.streams[0]!.params;
+      return p.kind === 'UTILIZATION' ? p.demandHoursPerQuarter : 0;
+    };
+    const before = demand();
+
+    state = tick(state, [
+      {
+        kind: 'EXPAND_CAPACITY',
+        businessId: id,
+        spec: { streamId: 's1', buildoutCost: fromDisplay(150_000), deltaDemandHoursPerQuarter: 480 },
+      },
+    ], { throwOnAssertionFailure: false }).state;
+
+    // The cost lands now; the market does not.
+    expect(demand(), 'market must not open the quarter it is paid for').toBe(before);
+
+    state = tick(state, [], { throwOnAssertionFailure: false }).state;
+    state = tick(state, [], { throwOnAssertionFailure: false }).state;
+    expect(demand()).toBeGreaterThan(before);
+    expect(demand()).toBe(before + 480);
+  });
+
+  it('leaves an archetype with no territory untouched', () => {
+    // The action is shared; the effect is not. A storage business grows by
+    // building units, and a demand delta aimed at it must do nothing rather
+    // than something surprising.
+    const model = buildModelFromTemplate({
+      businessName: 'Storage',
+      template: getSeedTemplate('self_storage'),
+      archetype: 'OCCUPANCY',
+      scale: { units: 400, price: fromDisplay(330) },
+      equityInjection: fromDisplay(3_000_000),
+    });
+    let state: WorldState = createWorld({
+      id: 'storage',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model],
+    });
+    const units = (): number => {
+      const p = state.businesses[0]!.streams[0]!.params;
+      return p.kind === 'OCCUPANCY' ? p.units : 0;
+    };
+    const before = units();
+    for (let i = 0; i < 3; i++) {
+      state = tick(state, i === 0 ? [
+        {
+          kind: 'EXPAND_CAPACITY',
+          businessId: state.businesses[0]!.id,
+          spec: { streamId: 's1', buildoutCost: fromDisplay(100_000), deltaDemandHoursPerQuarter: 500 },
+        },
+      ] : [], { throwOnAssertionFailure: false }).state;
+    }
+    expect(units()).toBe(before);
+  });
+});

@@ -38,6 +38,22 @@ export const zCapacitySpec = z.object({
   deltaFloorAreaSqFt: zNonNegative.optional(),
   deltaUnits: zNonNegative.optional(),
   deltaExecutionCapacity: zMoney.optional(),
+  /**
+   * More market, as opposed to more capacity inside the market you have.
+   *
+   * A plumbing shop reached 82% utilisation with no bench hours left, $395k of
+   * cash, and no way to grow: marketing had saturated, price trades volume for
+   * margin, and every capacity lever adds seats or units inside a demand pool
+   * that was fixed at concept lock and could never move. "Let's add another
+   * truck so we can expand into a new city" had no expression in the game.
+   *
+   * A second territory is genuinely both things at once — you buy the yard and
+   * the truck, and the addressable market grows — so it rides the same action,
+   * with the same buildout cost, capitalisation and two-quarter lead time
+   * rather than a parallel path that would have to re-earn all of it.
+   */
+  deltaDemandHoursPerQuarter: zNonNegative.optional(),
+  deltaAddressableTrafficPerQuarter: zNonNegative.optional(),
   buildoutCost: zMoney,
 });
 export type CapacitySpec = z.infer<typeof zCapacitySpec>;

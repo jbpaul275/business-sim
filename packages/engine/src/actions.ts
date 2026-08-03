@@ -344,6 +344,16 @@ export function applyAction(
       } else if (params.kind === 'PROJECT_BACKLOG' && action.spec.deltaExecutionCapacity) {
         params.executionCapacityPerQuarter += action.spec.deltaExecutionCapacity;
       }
+
+      // More market, on the same action and the same lead time. Independent of
+      // the capacity branches above because a second territory can be either,
+      // both, or — for a shop with idle staff and a tapped city — only this.
+      if (params.kind === 'UTILIZATION' && action.spec.deltaDemandHoursPerQuarter) {
+        params.demandHoursPerQuarter += action.spec.deltaDemandHoursPerQuarter;
+      }
+      if (params.kind === 'TRAFFIC' && action.spec.deltaAddressableTrafficPerQuarter) {
+        params.addressableTrafficPerQuarter += action.spec.deltaAddressableTrafficPerQuarter;
+      }
       return events;
     }
 

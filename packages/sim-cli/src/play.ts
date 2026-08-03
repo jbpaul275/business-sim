@@ -2,7 +2,7 @@ import { fromDisplay, mulRate, ratio, toCompact, toDisplay, type Money } from '@
 import { tick, type TickResult } from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
-import { openInput, parseMoney, type LineSource } from './input.js';
+import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
 import type { Journal } from './journal.js';
 import { describeEvent } from './events.js';
@@ -76,8 +76,14 @@ function describeAction(a: Action): string {
       return `put in ${toDisplay(a.amount, { showCents: false })} of your own`;
     case 'DISTRIBUTE':
       return `take out ${toDisplay(a.amount, { showCents: false })}`;
-    case 'EXPAND_CAPACITY':
-      return `expand for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
+    case 'EXPAND_CAPACITY': {
+      // More room and more market ride the same action; they are not the same
+      // decision and must not read identically in the confirmation.
+      const market =
+        a.spec.deltaDemandHoursPerQuarter !== undefined ||
+        a.spec.deltaAddressableTrafficPerQuarter !== undefined;
+      return `${market ? 'new territory' : 'more capacity'} for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
+    }
     case 'SET_CRISIS_POLICY':
       return `crisis order → ${a.policy.join(', ')}`;
     default:
@@ -228,6 +234,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}inject${RESET} 50k            household → business
   ${BOLD}distribute${RESET} 20k        business → household
   ${BOLD}expand${RESET} 20 150k        add capacity (seats/units) for a buildout cost ${DIM}— +2 quarters${RESET}
+  ${BOLD}market${RESET} 40% 150k       open a new territory: more demand, not more room ${DIM}— +2 quarters${RESET}
   ${BOLD}policy${RESET} revolver,inject,defer,emergency,insolvency
                         reorder the cash-crisis ladder (§9.4)
 
@@ -337,16 +344,31 @@ function advise(business: Business, result: TickResult, question = ''): string[]
 
   if (topic === 'capacity' && used !== undefined && stream) {
     const idle = Math.round(stream.capacityVolume! - stream.realizedVolume);
+    // Bench hours are the truth for a UTILIZATION shop, not gross capacity. A
+    // plumbing business at 82% of *gross* hours with zero bench was told it
+    // had "186 idle — 17.9% sat empty", which is what target utilisation looks
+    // like when nobody is idle at all. Nobody bills 100% of paid hours.
+    const genuinelyIdle = stream.benchStress === undefined || stream.benchStress > 1;
     if (stream.lostDemand > 0.5) {
       out.push(
         `Worth doing: you turned away ${Math.round(stream.lostDemand).toLocaleString()} this quarter. ` +
           `\`expand <units> <cost>\` adds capacity, and it lands two quarters out, not now.`,
       );
-    } else {
+    } else if (genuinelyIdle && used < 0.8) {
       out.push(
         `You already have ${idle.toLocaleString()} idle — ${pct(1 - used)} of what you built ` +
           `sat empty this quarter. More capacity costs money now and earns nothing until demand ` +
           `catches up; \`marketing\` and \`price\` are what move demand.`,
+      );
+    } else {
+      // Full, or as near as this archetype ever gets. More capacity inside the
+      // same market only helps if there is unmet demand for it to meet, and
+      // there is not — so the honest answer is the other kind of growth.
+      out.push(
+        `You are effectively full — ${pct(used)} of capacity with` +
+          `${stream.benchStress !== undefined ? ` ${Math.round(stream.benchStress)}h of bench` : ' no slack'}. ` +
+          `Adding capacity inside the same market gives you more idle, not more revenue. ` +
+          `\`market <pct> <cost>\` opens a new territory — more demand to serve, two quarters out.`,
       );
     }
   }
@@ -367,9 +389,18 @@ function advise(business: Business, result: TickResult, question = ''): string[]
 
   if (topic === 'marketing') {
     const spend = business.streams[0]?.marketingSpendPerQuarter ?? 0n;
+    const half = business.streams[0]?.modifiers.halfSaturationSpend ?? 0n;
+    // Past twice the half-saturation point, more spend is close to free money
+    // thrown away — and repeating "response saturates" to someone who has
+    // already tripled their budget and seen nothing is not advice.
+    const tapped = half > 0n && spend > half * 2n;
     out.push(
-      `\`marketing <amount>\` — you are at ${toCompact(spend)} a quarter. Response saturates: ` +
-        `each extra dollar buys less than the last, and it moves demand rather than capacity.`,
+      tapped
+        ? `You are at ${toCompact(spend)} a quarter against a half-saturation point of ` +
+            `${toCompact(half)} — this lever is spent, which is why the last raise did nothing. ` +
+            `Growth from here is a bigger market (\`market <pct> <cost>\`) or a higher price, not more spend.`
+        : `\`marketing <amount>\` — you are at ${toCompact(spend)} a quarter. Response saturates: ` +
+            `each extra dollar buys less than the last, and it moves demand rather than capacity.`,
     );
   }
 
@@ -477,7 +508,7 @@ function advise(business: Business, result: TickResult, question = ''): string[]
  */
 const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
-  'hire', 'fire', 'debt', 'draw', 'inject', 'distribute', 'expand', 'policy',
+  'hire', 'fire', 'debt', 'draw', 'inject', 'distribute', 'expand', 'market', 'policy',
 ]);
 
 /**
@@ -686,6 +717,65 @@ function parseCommand(
       };
     }
 
+    /**
+     * A second territory: more market, not more room inside the one you have.
+     *
+     * "let's add another truck so we can expand into a new city" and "I want
+     * to buy two more trucks and add service all over central OH" had no
+     * expression in the game. Every capacity lever adds seats or units inside
+     * a demand pool fixed at concept lock, and marketing saturates — so a
+     * profitable shop at 82% utilisation with $395k in the bank was simply
+     * finished, and the advisor kept recommending the lever that had run out.
+     */
+    case 'market': {
+      const pct = parseNumber((rest[0] ?? '').replace('%', ''));
+      const cost = parseMoney(rest[1] ?? '');
+      if (pct === undefined || pct <= 0 || cost === undefined) {
+        return fail('market needs a size and a cost: `market 40% 150k` — 40% more market, $150k to open it.');
+      }
+      const p = business.streams[0]?.params;
+      if (!p) return fail('No stream to expand.');
+      if (p.kind === 'UTILIZATION') {
+        return {
+          actions: [
+            {
+              kind: 'EXPAND_CAPACITY',
+              businessId: business.id,
+              spec: {
+                streamId,
+                buildoutCost: cost,
+                deltaDemandHoursPerQuarter: p.demandHoursPerQuarter * (pct / 100),
+              },
+            },
+          ],
+        };
+      }
+      if (p.kind === 'TRAFFIC') {
+        return {
+          actions: [
+            {
+              kind: 'EXPAND_CAPACITY',
+              businessId: business.id,
+              spec: {
+                streamId,
+                buildoutCost: cost,
+                deltaAddressableTrafficPerQuarter:
+                  p.addressableTrafficPerQuarter * (pct / 100),
+              },
+            },
+          ],
+        };
+      }
+      // Saying which lever does move this archetype beats a flat refusal.
+      return fail(
+        p.kind === 'OCCUPANCY'
+          ? 'An occupancy business grows by building units — `expand <units> <cost>`.'
+          : p.kind === 'PROJECT_BACKLOG'
+            ? 'A contractor grows by bidding more and delivering more — `expand` raises execution capacity.'
+            : 'This archetype grows through acquisition spend rather than territory — `marketing <amount>`.',
+      );
+    }
+
     case 'policy': {
       const tokens = (rest[0] ?? '').split(',').filter(Boolean);
       const policy: CrisisRemedy[] = [];
@@ -840,7 +930,13 @@ export async function play(
               console.log(`  ${YELLOW}origination fee this quarter; proceeds arrive next quarter${RESET}`);
             }
             if (a.kind === 'EXPAND_CAPACITY') {
-              console.log(`  ${YELLOW}buildout spread over two quarters; capacity arrives in two${RESET}`);
+              const market =
+                a.spec.deltaDemandHoursPerQuarter !== undefined ||
+                a.spec.deltaAddressableTrafficPerQuarter !== undefined;
+              console.log(
+                `  ${YELLOW}buildout spread over two quarters; ` +
+                  `${market ? 'the new market opens' : 'capacity arrives'} in two${RESET}`,
+              );
             }
           }
           continue;

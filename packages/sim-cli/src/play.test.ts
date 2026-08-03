@@ -132,6 +132,31 @@ describe('asking what to do', () => {
     expect(steady).not.toMatch(/seasonal, not a trend/);
   });
 
+  it('offers a way to grow when the market, not the building, is the ceiling', async () => {
+    // A plumbing shop reached 82% utilisation with no bench, $395k of cash,
+    // and nothing left to do: marketing had saturated, price trades volume for
+    // margin, and every capacity lever adds room inside a demand pool fixed at
+    // concept lock. "let's add another truck so we can expand into a new city"
+    // had no expression in the game, and the advisor kept recommending the
+    // lever that had already run out.
+    const printed = await transcript(['market 40% 150k', 'quit'], 'services');
+    expect(printed).not.toContain('Unknown command');
+    expect(printed).toContain('new territory');
+    // And it reads as a different decision from adding room.
+    expect(printed).toMatch(/the new market opens in two/);
+  });
+
+  it('says what does move an archetype that has no territory to open', async () => {
+    // A flat refusal teaches nothing. Storage grows by building units.
+    const printed = await transcript(['market 40% 150k', 'quit'], 'storage');
+    expect(printed).toMatch(/expand <units> <cost>/);
+  });
+
+  it('will not take a market expansion without a size and a cost', async () => {
+    const printed = await transcript(['market', 'quit'], 'services');
+    expect(printed).toMatch(/needs a size and a cost/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);
