@@ -75,6 +75,15 @@ describe('the briefing', () => {
     expect(unverifiedFigures(reply, briefing, '')).toEqual([]);
   });
 
+  it('renders the commands as a closed list, not a bag of verbs', () => {
+    // Handed only names, the model guessed at semantics — and told a vending
+    // operator that `quotes` would list new business sites with machine counts.
+    const { briefing } = briefed();
+    expect(briefing.text).toContain('ONLY levers in this build');
+    expect(briefing.text).toContain('- price');
+    expect(briefing.text).toContain('not modelled');
+  });
+
   it('does not contain the engine’s state, only its output', () => {
     // Nothing structural: no ids the player never sees, no raw cents, no object
     // dumps. A model that can see the state can compute against it.
@@ -143,6 +152,52 @@ describe('a model in the turn loop', () => {
     const printed = await transcript(['what now?', 'quit'], advisor);
     expect(printed).toContain('`price 400`');
     expect(printed).not.toContain('teleport');
+  });
+
+  it('remembers the conversation across questions and quarter boundaries', async () => {
+    // The vending session: the player explained that some machines sold
+    // higher-margin products — new information — and the very next question
+    // was answered by an amnesiac, because history was always passed as [].
+    // The account a player gives of their own business is not a quarterly
+    // figure; it must survive the quarter running.
+    const calls: string[][] = [];
+    const advisor: AdviceTransport = {
+      async advise(_system, messages) {
+        calls.push(messages.map((m) => m.content));
+        return { advice: advice('Noted — the split is the lever to look at.') };
+      },
+    };
+    await transcript(
+      [
+        'our landlord split should be on margin, not revenue',
+        '',
+        'so what do we change first?',
+        'quit',
+      ],
+      advisor,
+    );
+    expect(calls).toHaveLength(2);
+    const second = calls[1]!.join('\n');
+    expect(second).toContain('landlord split should be on margin');
+    expect(second).toContain('the split is the lever');
+  });
+
+  it('tells the model what each command actually does', async () => {
+    // The advisor once told a player `quotes` would list new business sites
+    // with machine counts and costs — a screen that has never existed. A model
+    // that knows only a command's name describes the command the player
+    // wishes existed.
+    let briefingText = '';
+    const advisor: AdviceTransport = {
+      async advise(_system, messages) {
+        briefingText = messages.at(-1)?.content ?? '';
+        return { advice: advice('Noted.') };
+      },
+    };
+    await transcript(['can I renegotiate my landlord deal?', 'quit'], advisor);
+    expect(briefingText).toContain('renegotiated deal terms are recorded');
+    expect(briefingText).toContain('Nothing here lists business sites');
+    expect(briefingText).toContain('ONLY levers in this build');
   });
 
   it('says nothing extra when the model invents a figure twice', async () => {

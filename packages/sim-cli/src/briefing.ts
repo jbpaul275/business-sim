@@ -185,7 +185,15 @@ export function buildBriefing(
           .join('\n')}`
       : 'The deterministic advisor found nothing specific to say this quarter.',
     '',
-    `Commands that exist: ${commands.join(', ')}.`,
+    // A list with meanings, not a bag of verbs. Handed only names, the model
+    // guessed at semantics and told a player `quotes` listed business sites.
+    // The closing sentence is load-bearing: the honest answer to an
+    // unmodelled move is "not in this build", never a description of a
+    // mechanic that does not exist.
+    'The commands below are the ONLY levers in this build. A move that maps to none of ' +
+      'them is not modelled — say so plainly rather than describing a screen or mechanic ' +
+      'that does not exist.',
+    ...commands.map((c) => `- ${c}`),
   ].join('\n');
 
   return {

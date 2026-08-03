@@ -520,9 +520,25 @@ function topicOf(question: string): Topic {
  */
 export interface AdvisorMemory {
   said: Set<string>;
+  /**
+   * The running Q&A with the model advisor, session-long.
+   *
+   * Without it, every question was answered by an amnesiac: a vending operator
+   * explained that some machines sold higher-margin products — new information
+   * the model should have folded into everything after — and the very next
+   * question was answered as if the exchange had never happened. `said` resets
+   * each quarter because the deterministic findings recompute; the
+   * conversation does not reset, because the player's account of their own
+   * business is not a quarterly figure.
+   */
+  exchanges: { role: 'user' | 'assistant'; content: string }[];
 }
 
-export const newAdvisorMemory = (): AdvisorMemory => ({ said: new Set() });
+export const newAdvisorMemory = (): AdvisorMemory => ({ said: new Set(), exchanges: [] });
+
+/** Passed to the model each call: enough to hold a thread, capped so a long
+ * session cannot grow the prompt without bound. */
+const ADVISOR_HISTORY_MESSAGES = 12;
 
 /**
  * Why the optimum stops where it does.
@@ -1091,8 +1107,9 @@ function advise(
 
   if (out.length === 0) {
     out.push(
-      `Nothing is obviously binding this quarter. \`price\`, \`marketing\`, \`hire\` and ` +
-        `\`expand\` are the levers; \`skip 4\` runs a year if you want to see the trend first.`,
+      `Nothing is obviously binding this quarter. \`price\`, \`marketing\`, \`hire\`, ` +
+        `\`expand\` and \`assume\` (the model's own cost rates) are the levers; ` +
+        `\`skip 4\` runs a year if you want to see the trend first.`,
     );
   }
 
@@ -1141,6 +1158,32 @@ const VERBS = new Set([
   'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
   'businesses', 'switch', 'clone', 'divest', 'assume', 'assumptions',
 ]);
+
+/**
+ * The commands as the model advisor sees them — with semantics, not just names.
+ *
+ * A bare verb list invited the model to guess what each verb does, and it
+ * guessed confidently: told a vending operator that `quotes` would "list new
+ * sites with their machine counts and costs" — a screen that has never
+ * existed; `quotes` prices securities. A model that knows only a command's
+ * name will describe the command the player wishes existed. One line of
+ * meaning per lever is what stops advice from inventing the game.
+ */
+const COMMAND_GUIDE: readonly string[] = [
+  'price <amount> — set the price per unit; demand responds through the elasticity',
+  'marketing <amount> — set marketing spend per quarter; diminishing returns',
+  'assume <id> <value> [why] — revise a model assumption by id: a COGS rate, a landlord or platform revenue share, a cost per unit. This is how supplier switches, product-mix changes and renegotiated deal terms are recorded',
+  'assumptions — list every model assumption with its id, value, range and provenance',
+  'hire <line> [n] / fire <line> [n] — add or remove staffed blocks; cost lands now, capacity next quarter',
+  'expand <units> <cost> — more capacity at the current site; two-quarter buildout',
+  'market <pct> <cost> — open a new territory: more addressable demand, not more capacity; two quarters',
+  'upgrade <pct> <cost> — a better product: raises what customers will pay; two quarters',
+  'debt <amount> [quarters] — raise a term loan (fee now, proceeds next quarter); draw <amount> — draw the revolver; repay <amount> — pay principal down',
+  'inject <amount> — move household cash into the business; distribute <amount> — take cash out to the household',
+  'buy <ticker> <amount> / sell — household money into listed SECURITIES (index funds and the like); quotes — that securities catalog. Nothing here lists business sites or locations',
+  'clone <equity> <name> — open a second location of this same business; divest <n> — sell a business',
+  'costs — the cost breakdown; lines — staffing line ids; skip <n> — run quarters unattended; policy — reorder the cash-crisis ladder',
+];
 
 /**
  * Anything that is not a command, and is more than one word, is a question.
@@ -1306,10 +1349,12 @@ async function speakToPlayer(
   findings: readonly string[],
   question: string,
   journal?: Journal,
+  memory?: AdvisorMemory,
 ): Promise<{ reply: string } | undefined> {
   try {
-    const briefing = buildBriefing(world, business, result, findings, [...VERBS].filter(Boolean));
-    const outcome = await askAdvisor(advisor, briefing, question, [], () => Date.now());
+    const briefing = buildBriefing(world, business, result, findings, COMMAND_GUIDE);
+    const history = memory?.exchanges.slice(-ADVISOR_HISTORY_MESSAGES) ?? [];
+    const outcome = await askAdvisor(advisor, briefing, question, history, () => Date.now());
     if (!outcome) {
       // Twice in a row it could not answer without inventing a figure. The
       // arithmetic is already on screen and is still correct; adding "the model
@@ -1337,6 +1382,12 @@ async function speakToPlayer(
     if (outcome.retriedOn && outcome.retriedOn.length > 0) {
       journal?.write({ kind: 'advice_corrected', question, figures: outcome.retriedOn });
     }
+    // Only what was actually said enters the record — a refused or failed
+    // answer must not become history the next answer builds on.
+    memory?.exchanges.push(
+      { role: 'user', content: question },
+      { role: 'assistant', content: outcome.reply },
+    );
     return { reply: outcome.reply };
   } catch {
     // Transport failures are not the player's problem and not their fault.
@@ -1373,7 +1424,7 @@ async function narrateTurn(
     const events = result.events
       .filter((e) => e.severity !== 'INFO')
       .map((e) => describeEvent(e));
-    const briefing = buildBriefing(world, business, result, [], [...VERBS].filter(Boolean), {
+    const briefing = buildBriefing(world, business, result, [], COMMAND_GUIDE, {
       ...(prior ? { prior: { revenue: prior.revenue, ebitda: prior.ebitda, cash: prior.cash } } : {}),
       events,
     });
@@ -2244,7 +2295,7 @@ async function parseCommand(
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
 
         const spoken = advisor
-          ? await speakToPlayer(advisor, world, business, result, answered, line, journal)
+          ? await speakToPlayer(advisor, world, business, result, answered, line, journal, memory)
           : undefined;
 
         journal?.write({
@@ -2376,6 +2427,12 @@ export async function play(
   // The scoreboard fires once. After that the run belongs to the player.
   let pastMilestone = false;
 
+  // Session-long, because the conversation is: the player's account of their
+  // own business must survive the quarter boundary. `said` is cleared each
+  // quarter below — the deterministic findings recompute and may honestly
+  // repeat once the numbers have changed.
+  const memory = newAdvisorMemory();
+
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
   record(last);
@@ -2471,10 +2528,10 @@ export async function play(
       const queued: Action[] = [];
       let quit = false;
       let skip = 0;
-      // Per quarter, not per session: repeating yourself inside one decision is
-      // not listening, and repeating yourself after a quarter has run is the
-      // same answer holding because the same numbers do.
-      const memory = newAdvisorMemory();
+      // The dedup is per quarter — repeating a finding inside one decision is
+      // not listening; repeating it after the numbers changed is a fresh
+      // finding. The conversation on the same object is session-long.
+      memory.said.clear();
 
       while (true) {
         const prompt = queued.length > 0 ? `${DIM}[${queued.length} queued]${RESET} > ` : '> ';
