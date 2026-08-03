@@ -51,6 +51,20 @@ export interface BuildModelOptions {
   debt?: { kind: 'SBA_7A' | 'AMORTIZING' | 'REVOLVER'; principal: Money; termQuarters: number }[];
   /** Lines the player explicitly acknowledged and zeroed (§4.6). */
   acknowledgedZeroes?: ReadonlySet<string>;
+  /**
+   * Where a given assumption's value actually came from, by model path.
+   *
+   * Without this every registered assumption defaults to `BENCHMARK`, which is
+   * true for a seed template and a lie for anything else. A concept the model
+   * invented from nothing registered 49 assumptions as BENCHMARK and zero as
+   * LLM_ESTIMATE — the register claiming published support for numbers that
+   * had none, which is the one thing §10 exists to prevent.
+   *
+   * Returning undefined leaves the default alone. Explicitly-set provenance at
+   * the call site still wins: a statutory rate is CATALOG no matter who
+   * assembled the template around it.
+   */
+  provenanceFor?: (path: string) => Assumption['provenance'] | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +74,7 @@ export interface BuildModelOptions {
 interface AssumptionSink {
   next: number;
   out: Assumption[];
+  provenanceFor?: ((path: string) => Assumption['provenance'] | undefined) | undefined;
 }
 
 function assume(
@@ -91,7 +106,7 @@ function assume(
     unit: opts.unit,
     isMoney: typeof value === 'bigint',
     range,
-    provenance: opts.provenance ?? 'BENCHMARK',
+    provenance: opts.provenance ?? sink.provenanceFor?.(path) ?? 'BENCHMARK',
     sourceNote: opts.sourceNote,
     outsideBenchmark: opts.benchmarkBand
       ? numeric < opts.benchmarkBand.low || numeric > opts.benchmarkBand.high
@@ -386,7 +401,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
   const t = options.template;
   const archetype = options.archetype ?? t.defaultArchetypes[0] ?? 'TRAFFIC';
   const scale = options.scale ?? {};
-  const sink: AssumptionSink = { next: 0, out: [] };
+  const sink: AssumptionSink = { next: 0, out: [], provenanceFor: options.provenanceFor };
 
   const streamId = 's1';
   const params = streamParams(archetype, t, scale);

@@ -3,6 +3,7 @@ import {
   payrollLoadPct,
   zSeedTemplate,
   type CostDefault,
+  type Provenance,
   type ScaleInput,
   type SeedTemplate,
   type SeedTemplateInput,
@@ -39,6 +40,17 @@ export interface MappedConcept {
   archetype: DraftStream['archetype'];
   legalForm: ConceptDraft['legalForm'];
   businessName: string;
+  /**
+   * Where each registered assumption's value came from, by model path.
+   *
+   * Without this the engine defaults everything to BENCHMARK, which is right
+   * for a seed template and wrong for a synthetic one. A Detroit ice rink
+   * invented in five turns registered 49 BENCHMARK assumptions and zero
+   * LLM_ESTIMATE — the register asserting published support for numbers the
+   * model had made up. The draft carries honest per-value provenance; this is
+   * what stops the mapper discarding it.
+   */
+  provenanceFor: (path: string) => Provenance | undefined;
 }
 
 /** Scale knobs the archetypes read, keyed as `ScaleInput` spells them. */
@@ -268,9 +280,46 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     cardMixPct: o.cardMixPct,
   };
 
+  // Per-value provenance, keyed the way the engine's assumption paths end.
+  const byName = new Map<string, Provenance>();
+  for (const param of stream.params) byName.set(param.name, param.provenance);
+  for (const [i, line] of draft.costLines.entries()) {
+    byName.set(costDefaultFrom(line, i, stream.archetype).lineId, line.provenance);
+  }
+  // The seasonal shape is the model's, and carries no provenance of its own.
+  byName.set('seasonality', 'LLM_ESTIMATE');
+
+  const provenanceFor = (path: string): Provenance | undefined => {
+    // A cost line the mapper minted carries the draft's own claim. An id it
+    // does not recognise is an omission-guard line — but on a synthetic
+    // template the guard reads `ownerCompPerYear`, `utilitiesPerQuarter` and
+    // the rest straight off this draft's overheads, so those are the model's
+    // figures too, arriving by a different door. Only the maintenance reserve
+    // mixes in an engine rate, and understating its support is the safe error.
+    const costLine = /^costs\.([^.]+)\./.exec(path)?.[1];
+    if (costLine) return byName.get(costLine) ?? 'LLM_ESTIMATE';
+
+    // §3.7 response curves: spec constants this file writes on every template
+    // alike. The model never sees them and never guessed them.
+    if (path.startsWith('streams.') && path.includes('.modifiers.')) return 'CATALOG';
+
+    const named = byName.get(path.split('.').pop() ?? '');
+    if (named) return named;
+
+    // Working capital and capex came out of the same draft, but their paths
+    // carry a field or an asset label rather than a parameter name.
+    if (/^(workingCapital|capex)\./.test(path)) return 'LLM_ESTIMATE';
+
+    // A stream parameter the draft never named is the engine's own archetype
+    // default. Calling that an LLM estimate would be the same lie inverted.
+    if (path.startsWith('streams.')) return 'CATALOG';
+    return undefined;
+  };
+
   return {
     template: zSeedTemplate.parse(input),
     scale: scale as ScaleInput,
+    provenanceFor,
     marketingSpendPerQuarter: stream.marketingSpendPerQuarter,
     archetype: stream.archetype,
     legalForm: draft.legalForm,
