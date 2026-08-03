@@ -65,14 +65,15 @@ export class ConceptInterview {
     this.turnsTaken += 1;
     this.transcript.push({ role: 'assistant', content: turn.message });
 
-    if (!turn.draft) {
+    if (!turn.readyToDraft) {
       return { status: 'ASKING', message: turn.message, transcript: this.transcript };
     }
 
-    // Structured output constrains the shape, not the semantics — and the SDK
-    // strips bounds it cannot express before generation. Re-parse so the
-    // constraints the schema *does* state are actually enforced somewhere.
-    const draft = zConceptDraft.parse(turn.draft);
+    // A second call, with the draft schema this time. Splitting the two is what
+    // keeps each request's decoding grammar inside the API's size limit, and it
+    // also stops the model juggling seventeen overhead fields while asking
+    // where the shop is.
+    const draft = zConceptDraft.parse(await this.transport.draft(this.system, this.transcript));
     return { status: 'DRAFTED', message: turn.message, draft, transcript: this.transcript };
   }
 }

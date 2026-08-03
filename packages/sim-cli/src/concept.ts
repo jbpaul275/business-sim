@@ -97,7 +97,12 @@ export async function runConceptInterview(
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);
         return undefined;
       }
-      throw error;
+      // Anything else — a bad key, a rate limit, a malformed draft — should
+      // end setup with a sentence, not a stack trace. Losing the conversation
+      // to an unhandled 400 is a worse failure than whatever caused it.
+      console.log(`\n  ${RED}The interview could not continue: ${(error as Error).message}${RESET}`);
+      console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
+      return undefined;
     }
 
     if (state.status === 'EXHAUSTED') {

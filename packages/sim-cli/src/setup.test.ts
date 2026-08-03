@@ -173,10 +173,13 @@ describe('the concept path reaches the same gate as the picker', () => {
   });
 
   it('runs the whole of setup from a sentence, through to the commit gate', async () => {
-    const transport = new ScriptedTransport([
-      { message: 'How many scopes, and how big is the unit?', draft: null },
-      { message: "Here's the model.", draft },
-    ]);
+    const transport = new ScriptedTransport(
+      [
+        { message: 'How many scopes, and how big is the unit?', readyToDraft: false },
+        { message: "Here's the model.", readyToDraft: true },
+      ],
+      [draft],
+    );
     const input = scriptedInput([
       '3', // custom starting capital
       '900000',
@@ -214,9 +217,7 @@ describe('the concept path reaches the same gate as the picker', () => {
   });
 
   it('never offers a list of industries when a model is available', async () => {
-    const transport = new ScriptedTransport([
-      { message: 'Where is it?', draft: null },
-    ]);
+    const transport = new ScriptedTransport([{ message: 'Where is it?', readyToDraft: false }]);
     const input = scriptedInput(['2', 'A telescope rental place.', '']);
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});

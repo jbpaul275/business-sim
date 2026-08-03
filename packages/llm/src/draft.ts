@@ -179,14 +179,29 @@ export const zConceptDraft = z.object({
 export type ConceptDraft = z.infer<typeof zConceptDraft>;
 
 /**
- * One conversational turn. Either a question for the player or a finished
- * draft — never both, because a model that asks and answers in the same breath
- * has stopped interviewing and started assuming.
+ * One conversational turn: a message, and whether the model now has enough to
+ * synthesise.
+ *
+ * The draft is deliberately NOT nested here. Structured outputs constrain
+ * generation with a compiled grammar, and nesting `zConceptDraft` inside the
+ * turn meant every call — including "whereabouts is it?" — compiled the whole
+ * draft grammar. The API rejects that outright:
+ *
+ *   400 invalid_request_error: The compiled grammar is too large, which would
+ *   cause performance issues.
+ *
+ * Splitting it is also the better design regardless of the limit. A model
+ * asking its first question has no business juggling seventeen overhead fields,
+ * and the draft is requested in its own call once the interview is done.
  */
 export const zInterviewTurn = z.object({
   /** Free text shown to the player: the question, or the framing for a draft. */
   message: z.string(),
-  /** Present only when the model has enough to synthesise. */
-  draft: zConceptDraft.nullable(),
+  /**
+   * True when the next call should ask for the draft. Kept as a flag rather
+   * than inferred from the message, because inferring intent from prose is how
+   * an interview silently never finishes.
+   */
+  readyToDraft: z.boolean(),
 });
 export type InterviewTurn = z.infer<typeof zInterviewTurn>;

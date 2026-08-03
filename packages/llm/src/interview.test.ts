@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ScriptedTransport } from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
-import { zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
+import { zConceptDraft, zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
 
 /**
  * The interview is the input method for §9.1 Phases 1-2 — the thing that
@@ -92,19 +92,16 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
   ...over,
 });
 
-const asks = (message: string): InterviewTurn => ({ message, draft: null });
-const drafts = (message: string, d: ConceptDraft = draft()): InterviewTurn => ({
-  message,
-  draft: d,
-});
+const asks = (message: string): InterviewTurn => ({ message, readyToDraft: false });
+const ready = (message: string): InterviewTurn => ({ message, readyToDraft: true });
 
 describe('ConceptInterview', () => {
   it('asks one question at a time and carries the transcript forward', async () => {
     const transport = new ScriptedTransport([
       asks('Where is it, and roughly how big is the space?'),
       asks('How many people can you serve at the counter at once?'),
-      drafts("Here's the model."),
-    ]);
+      ready("Here's the model."),
+    ], [draft()]);
     const interview = new ConceptInterview({ transport });
 
     const first = await interview.send('I want to open an ice cream shop with 256 flavours.');
@@ -119,10 +116,13 @@ describe('ConceptInterview', () => {
     if (third.status !== 'DRAFTED') throw new Error('unreachable');
     expect(third.draft.businessName).toBe('256-flavour scoop shop');
 
-    // Every turn sees the whole conversation, not just the latest message.
-    const lastCall = transport.seen.at(-1)!;
-    expect(lastCall.messages).toHaveLength(5);
-    expect(lastCall.messages[0]?.content).toContain('256 flavours');
+    // Every call sees the whole conversation, not just the latest message —
+    // including the draft call, which is the last one and which also sees the
+    // model's own closing message.
+    const draftCall = transport.seen.at(-1)!;
+    expect(draftCall.messages).toHaveLength(6);
+    expect(draftCall.messages[0]?.content).toContain('256 flavours');
+    expect(draftCall.messages.at(-1)?.content).toBe("Here's the model.");
   });
 
   it('does not offer a list of business types to choose from', async () => {
@@ -290,17 +290,17 @@ describe('the prompt carries D-5', () => {
 
 describe('the wire schema', () => {
   it('accepts a draft with no seed template — the novel-concept case', () => {
-    const turn = zInterviewTurn.parse({ message: 'ok', draft: draft() });
-    expect(turn.draft?.seedTemplateId).toBeNull();
+    expect(zConceptDraft.parse(draft()).seedTemplateId).toBeNull();
   });
 
-  it('accepts a question with no draft', () => {
-    expect(zInterviewTurn.parse({ message: 'Where is it?', draft: null }).draft).toBeNull();
+  it('keeps the turn schema small, which is why the draft is a separate call', () => {
+    // Nesting the draft here compiled its whole grammar on every question and
+    // the API rejected it outright: "the compiled grammar is too large".
+    const turn = zInterviewTurn.parse({ message: 'Where is it?', readyToDraft: false });
+    expect(Object.keys(turn)).toEqual(['message', 'readyToDraft']);
   });
 
-  it('rejects a turn missing the draft field entirely', () => {
-    // Nullable, not optional: "I have no draft yet" must be stated rather than
-    // inferred from an absent key.
+  it('requires readiness to be stated, not inferred from the prose', () => {
     expect(() => zInterviewTurn.parse({ message: 'Where is it?' })).toThrow();
   });
 });
