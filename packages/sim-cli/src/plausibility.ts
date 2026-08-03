@@ -417,8 +417,8 @@ export function capacityCeilingIssues(draft: ConceptDraft): string[] {
 
   return [
     `This business cannot break even at full capacity. It needs ` +
-      `${toDisplay(breakEven, { showCents: false })} a quarter to cover its costs and can physically ` +
-      `produce ${toDisplay(ceiling, { showCents: false })} — ${Math.round(capacityVolume).toLocaleString()} ` +
+      `${toDisplay(breakEven, { showCents: false })} a quarter to cover its costs and can deliver at ` +
+      `most ${toDisplay(ceiling, { showCents: false })} — ${Math.round(capacityVolume).toLocaleString()} ` +
       `${unit} at the price you set, with every one of them sold. No decision the player makes ` +
       `later closes a gap like that: not price, not marketing, not staffing. Either the cost lines ` +
       `are too heavy for this scale, the capacity is understated, or the price is too low.`,

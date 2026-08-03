@@ -314,7 +314,7 @@ describe('a ceiling below the floor', () => {
     const issues = capacityCeilingIssues(overweight(900_000));
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/cannot break even at full capacity/);
-    expect(issues[0]).toMatch(/can physically produce/);
+    expect(issues[0]).toMatch(/can deliver at most/);
     // The volume is quoted in the word the draft chose, not in "covers".
     expect(issues[0]).toMatch(/covers at the price you set/);
   });

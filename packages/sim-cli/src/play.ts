@@ -307,7 +307,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}draw${RESET} 50k              draw on the revolver
   ${BOLD}inject${RESET} 50k            household → business
   ${BOLD}distribute${RESET} 20k        business → household
-  ${BOLD}expand${RESET} 20 150k        add capacity (seats/units) for a buildout cost ${DIM}— +2 quarters${RESET}
+  ${BOLD}expand${RESET} 20 150k        add capacity for what it costs to build ${DIM}— +2 quarters${RESET}
   ${BOLD}market${RESET} 40% 150k       open a new territory: more demand, not more room ${DIM}— +2 quarters${RESET}
   ${BOLD}upgrade${RESET} 15% 800k      build something better: +15% to what a customer will pay ${DIM}— +2 quarters${RESET}
   ${BOLD}policy${RESET} revolver,inject,defer,emergency,insolvency
@@ -620,7 +620,7 @@ function advise(
         `Worth knowing that this is the generous case: the model has no view on whether a second ` +
           `${occupancyParams.units} units in the same town would fill at the same ${pct(rate)}, and ` +
           `in a small market they would not. \`upgrade <pct> <cost>\` is the other half — a better ` +
-          `property rather than a bigger one.`,
+          `site rather than a bigger one.`,
       );
     } else if (stream.lostDemand > 0.5) {
       out.push(

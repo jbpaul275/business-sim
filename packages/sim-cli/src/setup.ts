@@ -168,7 +168,7 @@ function scaleFields(template: SeedTemplate, archetype: Archetype): ScaleField[]
         { key: 'addressableTrafficPerQuarter', label: 'Trade-area traffic per quarter', fallback: num('addressableTrafficPerQuarter', 150_000) },
         { key: 'captureRate', label: 'Capture rate (as a %)', fallback: num('captureRate', 0.04) * 100, band: '2–8%' },
         { key: 'price', label: 'Average ticket', money: true, fallback: num('avgTicket', 30) },
-        { key: 'skuCount', label: 'Menu items', fallback: num('skuCount', 40), band: 'more slows service' },
+        { key: 'skuCount', label: 'Distinct items offered', fallback: num('skuCount', 40), band: 'more slows service' },
       ];
     case 'UTILIZATION':
       return [
