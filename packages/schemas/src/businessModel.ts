@@ -7,6 +7,7 @@ import {
   zPositive,
   zRange,
   zProvenance,
+  type Money,
 } from './primitives.js';
 import {
   zCostStructure,
@@ -43,6 +44,31 @@ export const zFinancingPlan = z.object({
   debtRequests: z.array(zDebtSpec),
 });
 export type FinancingPlan = z.infer<typeof zFinancingPlan>;
+
+/**
+ * Scale knobs for model synthesis — the handful of numbers that decide how big
+ * the business is, separate from the cost structure that decides what it costs.
+ *
+ * Lives here rather than in the engine because both the engine's template path
+ * and the LLM concept path produce one, and `packages/llm` cannot import the
+ * engine (spec §1.1, enforced by dependency-cruiser).
+ */
+export interface ScaleInput {
+  /** Per-archetype scale knobs. Anything omitted falls back to the template. */
+  seats?: number;
+  turnsPerDay?: number;
+  /** The box the seats sit in. Bounds `seats` — see `MIN_SQ_FT_PER_SEAT`. */
+  floorAreaSqFt?: number;
+  addressableTrafficPerQuarter?: number;
+  captureRate?: number;
+  skuCount?: number;
+  demandHoursPerQuarter?: number;
+  units?: number;
+  bidsSubmittedPerQuarter?: number;
+  executionCapacityPerQuarter?: Money;
+  /** The archetype's price field (§3.0.1). */
+  price?: Money;
+}
 
 export const zBusinessModel = z.object({
   businessName: z.string().min(1),

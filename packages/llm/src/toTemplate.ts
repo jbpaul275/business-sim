@@ -1,0 +1,205 @@
+import {
+  payrollLoadPct,
+  zSeedTemplate,
+  type CostDefault,
+  type ScaleInput,
+  type SeedTemplate,
+  type SeedTemplateInput,
+} from '@bizsim/schemas';
+import { type ConceptDraft, type DraftCostLine, type DraftStream } from './draft.js';
+
+/**
+ * Turn a drafted concept into the inputs `buildModelFromTemplate` already
+ * takes: a seed template and a set of scale knobs.
+ *
+ * The design choice worth explaining is that a novel concept becomes a
+ * **synthetic seed template** rather than getting its own synthesis path. Every
+ * guarantee the engine offers — the omission guard, assumption registration
+ * with provenance, validation, the property suite — is already wired to that
+ * one entry point. A second path would have to re-earn all of it, and would
+ * drift. So the LLM's cost lines are shaped into the same structure the JSON
+ * templates use, and the engine cannot tell the difference.
+ *
+ * What it *can* tell the difference about is sourcing: this template carries
+ * `plausibility: {}` and no `benchmarkBand` on any line. That is D-5 in the
+ * data — a concept with no comparable inherits no bands, so nothing gets
+ * flagged out-of-band against numbers that do not exist, and the confidence
+ * score reports the uncertainty instead.
+ *
+ * This file imports `@bizsim/schemas` and nothing else. It must never reach the
+ * engine: spec §1.1 says the LLM never computes a statement value, and
+ * dependency-cruiser enforces it.
+ */
+
+export interface MappedConcept {
+  template: SeedTemplate;
+  scale: ScaleInput;
+  marketingSpendPerQuarter: number;
+  archetype: DraftStream['archetype'];
+  legalForm: ConceptDraft['legalForm'];
+  businessName: string;
+}
+
+/** Scale knobs the archetypes read, keyed as `ScaleInput` spells them. */
+const SCALE_KEYS = new Set<string>([
+  'seats',
+  'turnsPerDay',
+  'floorAreaSqFt',
+  'addressableTrafficPerQuarter',
+  'captureRate',
+  'skuCount',
+  'demandHoursPerQuarter',
+  'units',
+  'bidsSubmittedPerQuarter',
+  'executionCapacityPerQuarter',
+]);
+
+/** Scale fields carried as Money rather than a plain number. */
+const MONEY_SCALE_KEYS = new Set<string>(['executionCapacityPerQuarter', 'price']);
+
+/**
+ * The parameter each archetype treats as its price (§3.0.1). The draft names it
+ * whatever the domain calls it; `ScaleInput.price` is the single slot it lands
+ * in.
+ */
+const PRICE_KEY: Record<DraftStream['archetype'], string> = {
+  TRAFFIC: 'avgTicket',
+  UTILIZATION: 'blendedHourlyRate',
+  UNITS_CAC: 'avgOrderValue',
+  SUBSCRIPTION: 'arpuPerQuarter',
+  OCCUPANCY: 'ratePerUnitPerQuarter',
+  PROJECT_BACKLOG: 'avgContractValue',
+};
+
+const toCents = (dollars: number): bigint => BigInt(Math.round(dollars * 100));
+
+const slug = (label: string): string =>
+  label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'concept';
+
+function costDefaultFrom(line: DraftCostLine, index: number): CostDefault {
+  const isMoney = line.class !== 'VARIABLE_REVENUE';
+  return {
+    lineId: `llm_${index}_${line.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 24)}`,
+    label: line.label,
+    class: line.class,
+    statementLine: line.statementLine,
+    value: line.value,
+    isMoney,
+    isLabor: line.isLabor,
+    accruable: line.accruable,
+    minimumBlocks: line.minimumBlocks ?? 0,
+    annualEscalatorPct: 0.02,
+    isPrepaidExpense: false,
+    sourceNote: line.sourceNote,
+    // Deliberately no `benchmarkBand` and no `driver`/`capacityPerBlock`
+    // unless the line actually declares one: an absent band is honest, and a
+    // borrowed one is a fabrication wearing a citation (D-5).
+    ...(line.capacityPerBlock !== null ? { capacityPerBlock: line.capacityPerBlock } : {}),
+    ...(line.class === 'STEP_FIXED' || line.class === 'VARIABLE_ACTIVITY'
+      ? { driver: 'TRANSACTIONS' as const }
+      : {}),
+  };
+}
+
+/**
+ * Monthly weights from quarterly ones. §12.2 requires each quarter's three
+ * monthly weights to average to that quarter's figure; repeating each quarterly
+ * value three times satisfies it exactly. A flat month-within-quarter shape is
+ * a weaker claim than an invented one, which is the right default when nobody
+ * has asked the model about February.
+ */
+const monthlyFromQuarterly = (seasonality: readonly number[]): number[] =>
+  seasonality.flatMap((q) => [q, q, q]);
+
+export function draftToTemplate(draft: ConceptDraft): MappedConcept {
+  const stream = draft.streams[0];
+  if (!stream) throw new Error('Draft has no revenue stream to build from.');
+
+  const priceKey = PRICE_KEY[stream.archetype];
+  const streamParamDefaults: Record<string, number> = {};
+  const scale: Record<string, number | bigint> = {};
+
+  for (const param of stream.params) {
+    streamParamDefaults[param.name] = param.value;
+    if (param.name === priceKey) {
+      scale['price'] = toCents(param.value);
+    } else if (SCALE_KEYS.has(param.name)) {
+      scale[param.name] = MONEY_SCALE_KEYS.has(param.name)
+        ? toCents(param.value)
+        : param.value;
+    }
+  }
+  // The template's own default has to agree with the scale knob, or the
+  // engine seeds one number and the register records another.
+  streamParamDefaults[priceKey] = streamParamDefaults[priceKey] ?? 0;
+
+  const o = draft.overheads;
+  const input: SeedTemplateInput = {
+    // Deterministic: the same draft must map to the same template, or replay
+    // and golden files stop meaning anything.
+    id: `llm_${slug(draft.businessName)}`,
+    label: draft.businessName,
+    defaultArchetypes: [stream.archetype],
+    costDefaults: draft.costLines.map(costDefaultFrom),
+    streamParamDefaults,
+    modifierDefaults: {
+      // Not concept-specific and not worth a model's guess: these are the
+      // §3.7 response curves, identical across every seeded template.
+      rampFloor: 0.4,
+      rampConstant: 3.0,
+      marketingMaxLift: 0.35,
+      halfSaturationSpend: 8_000,
+      priceElasticity: 1.2,
+      baseMarketingSpendPerQuarter: stream.marketingSpendPerQuarter,
+    },
+    workingCapitalDefaults: draft.workingCapital,
+    // The shared statutory formula, not a second copy of it. The engine
+    // recomputes this from workersCompPct/offersBenefits anyway; setting it
+    // consistently here keeps the template honest if anything else reads it.
+    payrollLoadPct: payrollLoadPct(o.workersCompPct, o.offersBenefits),
+    workersCompPct: o.workersCompPct,
+    offersBenefits: o.offersBenefits,
+    seasonality: [
+      stream.seasonality[0] ?? 1,
+      stream.seasonality[1] ?? 1,
+      stream.seasonality[2] ?? 1,
+      stream.seasonality[3] ?? 1,
+    ],
+    monthlySeasonalWeight: monthlyFromQuarterly(stream.seasonality),
+    typicalCapex: draft.capex.map((c) => ({
+      label: c.label,
+      category: c.category,
+      cost: c.grossCost,
+      usefulLifeYears: c.usefulLifeYears,
+      quantity: Math.max(1, Math.round(c.quantity)),
+    })),
+    // The whole point. No comparable means no bands — see D-5.
+    plausibility: {},
+    monthlyRent: o.monthlyRent,
+    preOpening: {
+      payrollAndTraining: o.preOpeningPayrollAndTraining,
+      marketing: o.preOpeningMarketing,
+      permitsAndLegal: o.preOpeningPermitsAndLegal,
+    },
+    generalLiabilityInsurancePerYear: o.generalLiabilityInsurancePerYear,
+    propertyInsurancePerYear: o.propertyInsurancePerYear,
+    accountingAndLegalPerYear: o.accountingAndLegalPerYear,
+    softwareAndPosPerYear: o.softwareAndPosPerYear,
+    permitsAndLicensesPerYear: o.permitsAndLicensesPerYear,
+    utilitiesPerQuarter: o.utilitiesPerQuarter,
+    ownerCompPerYear: o.ownerCompPerYear,
+    badDebtPctOfRevenue: o.badDebtPctOfRevenue,
+    repairsPctOfRevenue: o.repairsPctOfRevenue,
+    cardProcessingRate: o.cardProcessingRate,
+    cardMixPct: o.cardMixPct,
+  };
+
+  return {
+    template: zSeedTemplate.parse(input),
+    scale: scale as ScaleInput,
+    marketingSpendPerQuarter: stream.marketingSpendPerQuarter,
+    archetype: stream.archetype,
+    legalForm: draft.legalForm,
+    businessName: draft.businessName,
+  };
+}

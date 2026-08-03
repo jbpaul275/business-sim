@@ -11,6 +11,7 @@ import {
   type CostDefault,
   type LegalForm,
   type RevenueStreamSpec,
+  type ScaleInput,
   type SeedTemplate,
   type StatementLine,
   type VariableActivityCost,
@@ -36,22 +37,8 @@ import { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
  * bag of defaults into the right discriminated union.
  */
 
-export interface ScaleInput {
-  /** Per-archetype scale knobs. Anything omitted falls back to the template. */
-  seats?: number;
-  turnsPerDay?: number;
-  /** The box the seats sit in. Bounds `seats` — see `MIN_SQ_FT_PER_SEAT`. */
-  floorAreaSqFt?: number;
-  addressableTrafficPerQuarter?: number;
-  captureRate?: number;
-  skuCount?: number;
-  demandHoursPerQuarter?: number;
-  units?: number;
-  bidsSubmittedPerQuarter?: number;
-  executionCapacityPerQuarter?: Money;
-  /** The archetype's price field (§3.0.1). */
-  price?: Money;
-}
+/** Re-exported: the canonical shape now lives in @bizsim/schemas. */
+export type { ScaleInput };
 
 export interface BuildModelOptions {
   businessName: string;

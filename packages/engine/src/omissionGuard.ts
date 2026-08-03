@@ -1,6 +1,5 @@
 import { mulRate, sum, type Money } from '@bizsim/money';
 import {
-  PAYROLL_LOAD_COMPONENTS,
   type Archetype,
   type CostStructure,
   type FixedPeriodCost,
@@ -159,17 +158,5 @@ export function injectOmissionGuardLines(
   };
 }
 
-/**
- * Payroll load — spec §4.5. Applied by the engine, never entered by the LLM or
- * the player. Founders model $20/hr when the real number is $26/hr, and the
- * engine must not let that error through. The rate is a registered assumption
- * (visible, challengeable) but it cannot be set to zero.
- */
-export function payrollLoadPct(workersCompPct: number, offersBenefits: boolean): number {
-  return (
-    PAYROLL_LOAD_COMPONENTS.employerFica +
-    PAYROLL_LOAD_COMPONENTS.unemploymentInsurance +
-    workersCompPct +
-    (offersBenefits ? PAYROLL_LOAD_COMPONENTS.benefitsLoad : 0)
-  );
-}
+/** Re-exported: the canonical definition now sits beside its components. */
+export { payrollLoadPct } from '@bizsim/schemas';

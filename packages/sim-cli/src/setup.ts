@@ -5,7 +5,6 @@ import {
   createWorld,
   createWorldConfig,
   validateBusinessModel,
-  type ScaleInput,
 } from '@bizsim/engine';
 import {
   START_CAPITAL,
@@ -16,11 +15,19 @@ import {
   type Assumption,
   type BusinessModel,
   type Provenance,
+  type ScaleInput,
   type SeedTemplate,
   type WorldState,
 } from '@bizsim/schemas';
 import { listSeedTemplates } from '@bizsim/seeds';
+import type { ConceptTransport } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
+import {
+  conceptPathAvailable,
+  renderConceptNotes,
+  runConceptInterview,
+  type ConceptResult,
+} from './concept.js';
 
 /**
  * Game setup — spec §9.1 Phases 0 through 4.
@@ -287,7 +294,17 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
   console.log(`  Opening cash        ${cashColour}${toDisplay(business.cash)}${RESET}`);
   console.log(`  Household keeps     ${toDisplay(world.household.cash)}`);
 
-  if (business.cash <= 0n) {
+  // Zero is fundable and still precarious, and the two are different messages.
+  // Warning "you cannot afford to open" and then opening anyway is the kind of
+  // contradiction that teaches a player to ignore the screen.
+  if (business.cash === 0n) {
+    console.log(
+      `\n  ${YELLOW}Funded to the cent and no further: the first quarter's costs land` +
+        ` before its revenue does, so this opens straight onto the revolver.${RESET}`,
+    );
+  }
+
+  if (business.cash < 0n) {
     console.log(
       `\n  ${RED}You cannot afford to open. Raise more equity or debt, or build something smaller.${RESET}`,
     );
@@ -306,13 +323,46 @@ export interface SetupResult {
   committed: boolean;
 }
 
-export async function runSetup(input: LineSource): Promise<SetupResult | undefined> {
+export interface RunSetupOptions {
+  /** Injected in tests so the whole flow runs without a key or a network. */
+  transport?: ConceptTransport;
+}
+
+export async function runSetup(
+  input: LineSource,
+  options?: RunSetupOptions,
+): Promise<SetupResult | undefined> {
   console.log(`${BOLD}Business Simulator${RESET} ${DIM}— setup${RESET}`);
 
   const capital = await chooseCapital(input);
-  const template = await chooseTemplate(input);
-  const archetype = template.defaultArchetypes[0]!;
-  const scale = await askScale(input, template, archetype);
+
+  // Phases 1-2. The conversation is the intended path; the picker is what you
+  // get when there is no model to talk to, not a co-equal alternative.
+  let template: SeedTemplate;
+  let archetype: Archetype;
+  let scale: ScaleInput;
+  let businessName: string;
+  let concept: ConceptResult | undefined;
+
+  if (options?.transport || conceptPathAvailable()) {
+    concept = await runConceptInterview(input, options?.transport);
+    if (!concept) return undefined;
+    template = concept.mapped.template;
+    archetype = concept.mapped.archetype;
+    scale = concept.mapped.scale;
+    businessName = concept.mapped.businessName;
+    renderConceptNotes(concept.draft);
+  } else {
+    console.log(
+      `\n${DIM}  No ANTHROPIC_API_KEY, so the conversational path is unavailable and this${RESET}\n` +
+        `${DIM}  falls back to picking a template. Set the key to describe a business in${RESET}\n` +
+        `${DIM}  your own words instead.${RESET}`,
+    );
+    template = await chooseTemplate(input);
+    archetype = template.defaultArchetypes[0]!;
+    scale = await askScale(input, template, archetype);
+    businessName = template.label;
+  }
 
   console.log(`\n${BOLD}MARKETING & FINANCING${RESET}`);
   const marketing = await ask(
@@ -328,30 +378,11 @@ export async function runSetup(input: LineSource): Promise<SetupResult | undefin
       : { startMode: capital.mode },
   );
 
-  // Size a starting suggestion off what it actually costs to open.
-  const probe = buildModelFromTemplate({
-    businessName: template.label,
-    template,
-    archetype,
-    scale,
-    marketingSpendPerQuarter: marketing,
-    equityInjection: 0n,
-  });
-  const needed = computeMonthZeroOutlays(probe).total;
-  // Never suggest emptying the household. §2.3 draws living expenses from
-  // household cash every quarter and a founder who put every dollar into the
-  // buildout is personally insolvent by the second one.
-  const livingReserve = fromDisplay(60_000);
-  const investable =
-    config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
-  const suggestedEquity = needed < investable ? needed : investable;
-
-  const equity = await ask(
-    input,
-    `  ${pad('Your own capital into the business', 42)}[${toDisplay(suggestedEquity, { showCents: false })}]: `,
-    suggestedEquity,
-    parseMoney,
-  );
+  // Debt is arranged BEFORE equity, because the equity suggestion has to know
+  // about it. Sized off a debt-free probe, the suggestion missed the
+  // origination fees that only exist once a loan does — so accepting every
+  // default landed the player exactly one origination fee short of opening,
+  // and the gate refused a business the setup had just recommended.
   const loan = await ask(input, `  ${pad('SBA 7(a) loan', 42)}[$0]: `, 0n, parseMoney);
   const revolver = await ask(
     input,
@@ -359,18 +390,56 @@ export async function runSetup(input: LineSource): Promise<SetupResult | undefin
     fromDisplay(100_000),
     parseMoney,
   );
+  const debt = [
+    ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
+    ...(revolver > 0n ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }] : []),
+  ];
+
+  const probe = buildModelFromTemplate({
+    businessName,
+    template,
+    archetype,
+    scale,
+    marketingSpendPerQuarter: marketing,
+    equityInjection: 0n,
+    debt,
+  });
+  // A revolver is a limit, not cash at close; only term debt funds month zero.
+  const monthZero = computeMonthZeroOutlays(probe).total;
+  // Month zero alone is a knife edge: the first quarter's fixed costs land
+  // before any revenue does, so a business funded to exactly its opening
+  // outlay begins on the crisis ladder. Suggest one quarter of fixed operating
+  // cost on top — the buffer a lender would expect to see anyway.
+  const quarterOfFixed = probe.costs.fixedPeriod.reduce<Money>(
+    (a, c) => a + c.amountPerQuarter,
+    0n,
+  );
+  const needed = monthZero + quarterOfFixed;
+  const fundedByDebt = loan;
+  const equityNeeded = needed > fundedByDebt ? needed - fundedByDebt : 0n;
+  // Never suggest emptying the household. §2.3 draws living expenses from
+  // household cash every quarter and a founder who put every dollar into the
+  // buildout is personally insolvent by the second one.
+  const livingReserve = fromDisplay(60_000);
+  const investable =
+    config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
+  const suggestedEquity = equityNeeded < investable ? equityNeeded : investable;
+
+  const equity = await ask(
+    input,
+    `  ${pad('Your own capital into the business', 42)}[${toDisplay(suggestedEquity, { showCents: false })}]: `,
+    suggestedEquity,
+    parseMoney,
+  );
 
   const model = buildModelFromTemplate({
-    businessName: template.label,
+    businessName,
     template,
     archetype,
     scale,
     marketingSpendPerQuarter: marketing,
     equityInjection: equity,
-    debt: [
-      ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
-      ...(revolver > 0n ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }] : []),
-    ],
+    debt,
   });
 
   // The completeness invariant is a hard gate: a model with a hole in its
@@ -403,11 +472,30 @@ export async function runSetup(input: LineSource): Promise<SetupResult | undefin
   // crisis on turn one — teaching the player nothing except that the setup
   // screen does not mean what it says.
   if (world.businesses[0]!.cash < 0n) {
+    // A revolver is a LIMIT, not a drawdown — `openBusiness` sets its
+    // outstanding principal to zero. Counting it as money raised produced a
+    // message that contradicted itself: "you raised $317k" directly above
+    // "you cannot afford $217k". Only term debt actually funds month zero.
+    const termDebt = model.financingPlan.debtRequests
+      .filter((d) => d.kind !== 'REVOLVER')
+      .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+    const revolverLimit = model.financingPlan.debtRequests
+      .filter((d) => d.kind === 'REVOLVER')
+      .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+    const raised = model.financingPlan.equityInjection + termDebt;
+    const shortfall = -world.businesses[0]!.cash;
+
     console.log(
       `\n${RED}${BOLD}Cannot commit.${RESET} ${RED}Month zero costs ` +
-        `${toDisplay(computeMonthZeroOutlays(model).total)} and you have raised ` +
-        `${toDisplay(model.financingPlan.equityInjection + model.financingPlan.debtRequests.reduce<Money>((a, d) => a + d.requestedPrincipal, 0n))}.${RESET}`,
+        `${toDisplay(computeMonthZeroOutlays(model).total)} and you have funded ` +
+        `${toDisplay(raised)} — short by ${toDisplay(shortfall)}.${RESET}`,
     );
+    if (revolverLimit > 0n) {
+      console.log(
+        `${DIM}The ${toDisplay(revolverLimit, { showCents: false })} revolver is a limit, not cash:` +
+          ` it costs its origination fee at close and draws only when you are short later.${RESET}`,
+      );
+    }
     console.log(
       `${DIM}Raise more, or build something smaller — fewer seats, a cheaper buildout,` +
         ` a smaller location. Run \`pnpm sim --new\` again.${RESET}`,

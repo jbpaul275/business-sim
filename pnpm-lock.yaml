@@ -82,6 +82,9 @@ importers:
       '@bizsim/engine':
         specifier: workspace:*
         version: link:../engine
+      '@bizsim/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@bizsim/money':
         specifier: workspace:*
         version: link:../money

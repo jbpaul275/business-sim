@@ -103,6 +103,33 @@ export const zDraftCapex = z.object({
 });
 
 /**
+ * Operating overheads and opening costs — the §4.6 lines a founder's own
+ * spreadsheet reliably omits. All dollars; rates are fractions.
+ */
+export const zDraftOverheads = z.object({
+  ownerCompPerYear: z.number(),
+  utilitiesPerQuarter: z.number(),
+  generalLiabilityInsurancePerYear: z.number(),
+  propertyInsurancePerYear: z.number(),
+  accountingAndLegalPerYear: z.number(),
+  softwareAndPosPerYear: z.number(),
+  permitsAndLicensesPerYear: z.number(),
+  badDebtPctOfRevenue: z.number(),
+  repairsPctOfRevenue: z.number(),
+  cardProcessingRate: z.number(),
+  cardMixPct: z.number(),
+  /** Feeds the derived payroll load; not the load itself. */
+  workersCompPct: z.number(),
+  offersBenefits: z.boolean(),
+  /** Drives the lease-signing outlay in §5.4 (first + last + security). */
+  monthlyRent: z.number(),
+  preOpeningPayrollAndTraining: z.number(),
+  preOpeningMarketing: z.number(),
+  preOpeningPermitsAndLegal: z.number(),
+});
+export type DraftOverheads = z.infer<typeof zDraftOverheads>;
+
+/**
  * The whole concept, as the model sees it.
  *
  * `seedTemplateId` is nullable, and that is the point of D-5 rather than an
@@ -114,7 +141,7 @@ export const zConceptDraft = z.object({
   businessName: z.string(),
   /** One or two sentences, in the player's own framing, for confirmation. */
   summary: z.string(),
-  legalForm: z.enum(['SOLE_PROP', 'LLC', 'S_CORP', 'C_CORP']),
+  legalForm: z.enum(['SOLE_PROP', 'LLC_PASSTHROUGH', 'S_CORP', 'C_CORP']),
   /**
    * A template whose cost structure genuinely fits, or null when none does.
    * Null is a legitimate and common answer — see D-5.
@@ -131,6 +158,17 @@ export const zConceptDraft = z.object({
     securityDepositMonths: z.number(),
     customerDepositPct: z.number(),
   }),
+  /**
+   * The §4.6 omission-guard set: the lines founders leave out of their own
+   * spreadsheets. The model states them rather than inheriting them from a
+   * template, because inheriting is how a 256-flavour shop ends up carrying a
+   * restaurant's insurance premium (D-5).
+   *
+   * Statutory rates are deliberately absent — payroll load is derived from
+   * `workersCompPct` and `offersBenefits` by the engine, at `CATALOG`
+   * provenance. Asking a model to guess FICA adds error and buys nothing.
+   */
+  overheads: zDraftOverheads,
   /**
    * What the model could not pin down and had to estimate, in plain language.
    * Surfaced to the player before the commit gate; these are the lines that

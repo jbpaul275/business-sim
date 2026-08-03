@@ -7,7 +7,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M0 — Scaffold** | ✅ Done | pnpm workspace, strict TS, `@bizsim/money`, zod schemas, pre-push verification, boundary enforcement, `sim` CLI |
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
-| **M3 — LLM concept path** | ⬜ Not started | `buildModelFromTemplate` is the engine-side seam the LLM replaces. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility) |
+| **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
 | **M4 — Challenge loop** | ⬜ Not started | Same |
 | **M5 — Turn loop + actions** | 🟡 Partial | §9.1 Phases 0-5 playable via `pnpm sim --new`: capital choice, business design, assumption review, commit gate, quarterly operate. `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
@@ -118,15 +118,20 @@ pnpm sim --play --scenario contractor           # skip setup, play a seeded scen
 pnpm sim --scenario restaurant --print bands    # batch run, for calibration
 ```
 
-`--new` covers §9.1 Phases 0 through 4: choose starting capital (LOW / MID / FREEPLAY),
-choose what you are building, set the archetype's scale parameters against their benchmark
-bands, arrange financing, then review every registered assumption with its provenance and
-model confidence score before committing. Phase 4 is a real gate — a business that cannot
-fund its own month zero is refused rather than opened with negative cash.
+`--new` covers §9.1 Phases 0 through 4. **Phases 1-2 are now a conversation**: describe a
+business in a sentence and the interview asks what it needs, estimates the rest, and emits a
+draft. Phase 3 still reviews every registered assumption with its provenance and model
+confidence; Phase 4 is still a real gate — a business that cannot fund its own month zero is
+refused rather than opened with negative cash.
 
-M3 replaces the *input method* for Phases 1-2, not the phases: the LLM turns "a taco place
-in Austin" into the same archetype choice and parameters this asks for directly. Phases 0,
-3 and 4 never needed a model at all.
+With no `ANTHROPIC_API_KEY` set, setup says so and falls back to the template picker. The
+picker is what you get when there is no model to talk to, not a co-equal alternative.
+
+What the conversation replaces is the *input method*, not the phases. A drafted concept
+becomes a **synthetic seed template** and goes through `buildModelFromTemplate` like any
+other, so the omission guard, assumption registration, validation and the property suite all
+apply unchanged — and a novel concept carries `plausibility: {}` and no benchmark bands,
+which is D-5 expressed in the data rather than in a prompt.
 
 ## The reference run
 
