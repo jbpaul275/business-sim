@@ -79,6 +79,62 @@ Two things follow from taking this seriously:
   quarterly sheet. Sheets 9/10 (debt, capex) are naturally formulaic. Sheet 11 (run history) is a record and
   should be values.
 
+### D-5 · The absurdity principle — the AI pushes back on impossibility, never on implausibility
+
+Also not one of the spec's four questions, but the one that decides what the product is for.
+
+A tool that filters ideas for plausibility filters out precisely the ideas worth modelling. Enough
+enormously successful businesses looked ridiculous at the outset that "this sounds unlikely to work" is
+worthless as a gate — and a founder who wanted that verdict could get it anywhere, for free. The reason to
+build this is the opposite case: someone wants to know what a strange idea would actually cost, and what
+would have to be true for it to clear. Had a sovereign wealth fund been able to run *The Line* through
+something like this before committing capital, the useful output would not have been "no."
+
+**The rule, binding on every M3/M4 prompt:**
+
+> The AI pushes back on **physical and contractual impossibility** and on nothing else. Not commercial
+> implausibility. Not "no comparable exists." Not "the benchmark says otherwise."
+
+An ice cream shop with 256 flavours might be a bad business, but anyone with the money can open one, so the
+system's job is to model it, not to have an opinion about it. What it *is* allowed to say is that 256
+flavours means 22 dipping cabinets, a slower counter, and inventory that turns half as fast — because those
+are consequences, not judgements.
+
+What counts as impossible, and is therefore fair to refuse:
+
+- **Arithmetic and identity** — accumulated depreciation exceeding an asset's depreciable base, a period
+  ending with cash that was never received, a balance sheet that does not balance.
+- **Contract** — zero payroll load on employed staff, zero rent on a leased space, a lease with no
+  escalator asserted as a lease *with* one.
+- **Physics and law** — capacity exceeding what the stated footprint and hours permit, a licence that does
+  not exist, delivery in negative time.
+
+Everything else is a condition to be surfaced, not a door to be closed. §11.2's own framing is the standard:
+*"a business that is viable under some conditions and not others. The player should learn what those
+conditions are, not be told yes or no."*
+
+**Two consequences that change how M3 must be built:**
+
+1. **A novel concept gets NO benchmark bands, rather than borrowed ones.** The tempting shortcut is to map
+   an unfamiliar concept to the nearest seed template and inherit its bands. Do not. *The Line* has no
+   comparable; if it inherits self-storage's bands, every line flags out-of-band, and out-of-band reads as
+   "this is wrong" when the truth is "nobody knows." An absent band is honest; a borrowed band is a
+   fabrication wearing a citation. The register already ranks provenance for exactly this reason —
+   `LLM_ESTIMATE` with no band and a visibly low confidence score is the correct representation of a
+   genuinely novel cost line.
+2. **The LLM emits cost lines directly for concepts outside the twelve templates**, at `LLM_ESTIMATE`
+   provenance, rather than borrowing a template's cost structure and relabelling it. A borrowed structure is
+   wrong in ways nobody can see; an estimated one is wrong in ways the register displays.
+
+**Where this is enforced:** [`packages/engine/src/absurdity.test.ts`](../../packages/engine/src/absurdity.test.ts)
+builds the 256-flavour shop as its own template — own cost lines, own capex, `plausibility: {}` — and asserts
+the whole shape of this decision: that validation has no opinion on it, that the complexity is charged in
+throughput, freezers and inventory days, that nothing is flagged out-of-band against numbers that do not
+exist, and that the concept is *conditionally* viable. The condition it surfaces is the useful part: 256
+flavours loses money on a 30-position counter at any price, and clears 14% EBITDA on a 40-position one,
+because the novelty draws a queue the original shop cannot serve. That is the output this product owes a
+founder — not a verdict.
+
 ---
 
 ## Risk register

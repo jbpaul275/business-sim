@@ -7,8 +7,8 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M0 — Scaffold** | ✅ Done | pnpm workspace, strict TS, `@bizsim/money`, zod schemas, pre-push verification, boundary enforcement, `sim` CLI |
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
-| **M3 — LLM concept path** | ⬜ Not started | `buildModelFromTemplate` is the engine-side seam the LLM replaces |
-| **M4 — Challenge loop** | ⬜ Not started | |
+| **M3 — LLM concept path** | ⬜ Not started | `buildModelFromTemplate` is the engine-side seam the LLM replaces. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility) |
+| **M4 — Challenge loop** | ⬜ Not started | Same |
 | **M5 — Turn loop + actions** | 🟡 Partial | §9.1 Phases 0-5 playable via `pnpm sim --new`: capital choice, business design, assumption review, commit gate, quarterly operate. `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | 🟡 Partial | Consolidation and household roll-up work; `DELEGATE`/`RECLAIM` implemented; clone not started |
@@ -69,6 +69,33 @@ Calibration is driven from the CLI, one scenario per archetype:
 ```
 pnpm sim --scenario contractor --periods 40 --print bands
 ```
+
+## The absurdity principle, demonstrated
+
+[D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility)
+says the system pushes back on physical and contractual impossibility and on nothing else. §11.2's
+256-flavour ice cream shop is the test case, and `packages/engine/src/absurdity.test.ts` runs it as its own
+template — own cost lines, own capex, `plausibility: {}` — rather than bolting flavours onto the restaurant.
+
+All four configurations are the same concept. Only the conditions differ:
+
+| 256-flavour shop | Counter | Ticket | Capture | Y6 EBITDA margin |
+|---|---|---|---|---|
+| Plain shop's price and draw | 30 positions | $9 | 5.0% | −8.7% |
+| Priced and marketed for novelty | 30 positions | $13 | 8.5% | −1.8% |
+| Same, counter built for the queue | 40 positions | $13 | 8.5% | **+14.4%** |
+| *Control:* 40 flavours, same everything | 40 positions | $13 | 8.5% | +25.5% |
+
+The condition the run surfaces is the useful part: pricing for novelty is not enough on its own, because the
+shop is turning people away at the counter and no ticket price fixes that. 256 flavours needs about a third
+more counter than 40 does to serve the same queue — the throughput haircut is 21%, and it is charged in
+seconds per order, in 22 dipping cabinets instead of 4, and in inventory days that rise from 21 to 35. Give
+it enough counter that neither shop is capacity-bound and the gap closes to under 5 points, which is the
+honest answer: the complexity bites at the counter, not on the P&L.
+
+Nothing in the run flags out-of-band, because a 256-flavour shop has no published operating benchmark and
+the template claims none. The §10.3 confidence score reports 0.23 instead — roughly a fifth of the 53
+registered assumptions are sourced at `PLAYER_SOURCED` or better. Uncertainty is reported, not hidden.
 
 ## Playing it
 
