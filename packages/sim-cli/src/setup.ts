@@ -277,7 +277,10 @@ function renderRegister(model: BusinessModel): void {
   console.log(`  ${summary}`);
 
   if (outOfBand.length > 0) {
-    console.log(`\n  ${YELLOW}${outOfBand.length} outside their benchmark band:${RESET}`);
+    console.log(
+      `\n  ${YELLOW}${outOfBand.length} ` +
+        `${outOfBand.length === 1 ? 'is outside its' : 'are outside their'} benchmark band:${RESET}`,
+    );
     for (const a of outOfBand.slice(0, 8)) {
       const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
       const band = a.benchmarkBand;
@@ -312,7 +315,20 @@ function renderRegister(model: BusinessModel): void {
   // assertion by an optimistic founder is the least reliable input in the system.
   const assumed = weak.filter((a) => a.provenance === 'PLAYER_ASSUMED');
   if (assumed.length > 0) {
-    console.log(`\n  ${RED}${assumed.length} are your assertions with no evidence behind them:${RESET}`);
+    /**
+     * Singular when there is one of them.
+     *
+     * "1 are your assertions with no evidence behind them" is the sort of line
+     * that quietly tells a reader nobody looked at this screen — which is the
+     * opposite of what a register is for.
+     */
+    console.log(
+      `\n  ${RED}${assumed.length} ` +
+        (assumed.length === 1
+          ? 'is your assertion with no evidence behind it:'
+          : 'are your assertions with no evidence behind them:') +
+        `${RESET}`,
+    );
     for (const a of assumed.slice(0, 6)) {
       const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
       console.log(`    ${pad(a.label, 34)}${rpad(value, 12)}  ${DIM}${a.sourceNote}${RESET}`);

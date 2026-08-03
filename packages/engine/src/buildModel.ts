@@ -462,11 +462,26 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       sourceNote: `Seed default for ${t.label}.`,
     });
   }
+  /**
+   * Not the player's assertion, and it has not been for a while.
+   *
+   * This was hardcoded to PLAYER_ASSUMED with the note "Player-set marketing
+   * budget for this stream" back when setup asked for a marketing budget.
+   * That question was removed on purpose — asking someone for a number they
+   * have no basis for is an intake form pretending to be a decision — and the
+   * register was never told. So every run since has opened by listing the
+   * engine's own default under "your assertions with no evidence behind them",
+   * which is both false and the most damning line on the screen.
+   *
+   * The provenance now resolves the same way every other assumption's does: an
+   * LLM-drafted concept's figure is the model's estimate, a seed template's is
+   * a seed default. If a caller ever does supply a player's own number, they
+   * can say so through `provenanceFor` like everything else.
+   */
   assume(sink, `${base}.marketingSpendPerQuarter`, 'Marketing spend per quarter', marketing, {
     category: 'COST',
     unit: 'USD',
-    sourceNote: 'Player-set marketing budget for this stream.',
-    provenance: 'PLAYER_ASSUMED',
+    sourceNote: 'Opening marketing budget. `marketing <amount>` changes it in any quarter.',
   });
   assume(sink, `${base}.seasonality`, 'Seasonality profile', 1, {
     category: 'REVENUE',
