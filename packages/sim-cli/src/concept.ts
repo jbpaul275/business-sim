@@ -14,6 +14,7 @@ import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
 import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
+import { accent, rule, speech, youPrompt } from './ui.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -71,16 +72,21 @@ export async function runConceptInterview(
   input: LineSource,
   transport?: ConceptTransport,
 ): Promise<ConceptResult | undefined> {
-  console.log(`\n${BOLD}WHAT ARE YOU BUILDING?${RESET}`);
+  console.log(`\n${rule('What are you building?')}`);
   console.log(
-    wrap(
-      'Describe it however you like — a sentence is enough to start. I will ask ' +
-        'what I need and estimate the rest, and you will see every number before ' +
-        'anything is committed. Answers are kept short on purpose; type `why` ' +
-        'after any of them to see the reasoning behind it.',
+    speech(
+      wrap(
+        'Describe it however you like — a sentence is enough to start. I will ask ' +
+          'what I need and estimate the rest, and you will see every number before ' +
+          'anything is committed.',
+        70,
+        '',
+      ),
     ),
   );
-  console.log(`${DIM}${wrap('Ctrl-C to abandon setup.', 76, '  ')}${RESET}\n`);
+  console.log(
+    `${DIM}  \`why\` after any answer shows the reasoning behind it. Ctrl-C to abandon setup.${RESET}\n`,
+  );
 
   let spinner = { stop: () => {}, label: (_: string) => {} };
   const interview = new ConceptInterview({
@@ -92,7 +98,7 @@ export async function runConceptInterview(
     templates: listSeedTemplates().map((t) => ({ id: t.id, label: t.label })),
   });
 
-  let reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+  let reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
   /**
    * Consecutive blank replies before giving up.
    *
@@ -145,14 +151,14 @@ export async function runConceptInterview(
         return undefined;
       }
       console.log(`  ${DIM}Say something about the business, or Ctrl-C to abandon setup.${RESET}`);
-      reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+      reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
       continue;
     }
     blanks = 0;
 
     if (/^(why|explain)\b/i.test(reply)) {
       showReasoning();
-      reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+      reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
       continue;
     }
 
@@ -186,15 +192,18 @@ export async function runConceptInterview(
       return undefined;
     }
 
-    if (state.message.trim()) console.log(`\n${wrap(state.message)}`);
-    console.log(`\n${BOLD}${wrap(state.cta, 74)}${RESET}`);
+    // The conversation gets a left edge, so the region of the screen that is
+    // someone talking is distinguishable at a glance from the region that is
+    // the ledger. They should not look alike.
+    if (state.message.trim()) console.log(`\n${speech(wrap(state.message, 70, ''))}`);
+    console.log(`\n${speech(BOLD + wrap(state.cta, 70, '') + RESET)}`);
     if (state.message.trim() && interview.lastReasoning) {
-      console.log(`  ${DIM}(\`why\` to see how it got there)${RESET}`);
+      console.log(`${accent('▏')} ${DIM}\`why\` to see how it got there${RESET}`);
     }
     console.log('');
 
     if (state.status === 'ASKING') {
-      reply = await ask(input, `${BOLD}you${RESET} > `, '', (raw) => raw.trim() || undefined);
+      reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
       continue;
     }
 

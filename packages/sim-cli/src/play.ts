@@ -3,6 +3,7 @@ import { tick, type TickResult } from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, type LineSource } from './input.js';
+import { rule } from './ui.js';
 
 /**
  * The interactive turn loop — spec §9.1 Phase 5, without the LLM.
@@ -58,7 +59,7 @@ function renderTurn(result: TickResult, business: Business): void {
   const quarter = (period % 4) + 1;
 
   console.log(
-    `\n${BOLD}═══ Period ${period} · Year ${year} Q${quarter} · ${business.name} ═══${RESET}`,
+    `\n${rule(`Period ${period} · Year ${year} Q${quarter} · ${business.name}`)}`,
   );
 
   if (!entry) {

@@ -24,6 +24,7 @@ import { listSeedTemplates } from '@bizsim/seeds';
 import type { ConceptTransport } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
 import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
+import { masthead, note, rule } from './ui.js';
 
 /**
  * Game setup — spec §9.1 Phases 0 through 4.
@@ -80,7 +81,8 @@ const ARCHETYPE_BLURB: Record<Archetype, string> = {
 // ---------------------------------------------------------------------------
 
 async function chooseCapital(input: LineSource): Promise<{ mode: 'LOW' | 'MID' | 'FREEPLAY'; custom?: Money }> {
-  console.log(`\n${BOLD}STARTING CAPITAL${RESET}  ${DIM}— everything you have to put at risk${RESET}`);
+  console.log(`\n${rule('Starting capital')}`);
+  console.log(`${DIM}  Everything you have to put at risk.${RESET}`);
   console.log(`  1  Low       ${rpad(toDisplay(START_CAPITAL.LOW, { showCents: false }), 12)}  ${DIM}tight; most concepts will need debt${RESET}`);
   console.log(`  2  Mid       ${rpad(toDisplay(START_CAPITAL.MID, { showCents: false }), 12)}  ${DIM}room for one serious swing${RESET}`);
   console.log(`  3  Custom    ${DIM}free play, capped at $1B${RESET}`);
@@ -102,7 +104,7 @@ async function chooseCapital(input: LineSource): Promise<{ mode: 'LOW' | 'MID' |
 
 async function chooseTemplate(input: LineSource): Promise<SeedTemplate> {
   const templates = listSeedTemplates();
-  console.log(`\n${BOLD}WHAT ARE YOU BUILDING?${RESET}`);
+  console.log(`\n${rule('What are you building?')}`);
   templates.forEach((t, i) => {
     const archetype = t.defaultArchetypes[0]!;
     console.log(
@@ -171,7 +173,8 @@ async function askScale(
   template: SeedTemplate,
   archetype: Archetype,
 ): Promise<ScaleInput> {
-  console.log(`\n${BOLD}SCALE${RESET}  ${DIM}— enter to accept the seeded default${RESET}`);
+  console.log(`\n${rule('Scale')}`);
+  console.log(`${DIM}  Enter to accept the seeded default.${RESET}`);
   const scale: Record<string, unknown> = {};
 
   for (const field of scaleFields(template, archetype)) {
@@ -292,12 +295,16 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
     .filter((d) => d.kind === 'REVOLVER')
     .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
   console.log(
-    `\n  You put in ${BOLD}${toDisplay(equity)}${RESET} and borrow ${BOLD}${toDisplay(termDebt)}${RESET}.`,
+    termDebt > 0n
+      ? `\n  You put in ${BOLD}${toDisplay(equity)}${RESET} and borrow ${BOLD}${toDisplay(termDebt)}${RESET}.`
+      : `\n  You put in ${BOLD}${toDisplay(equity)}${RESET}, all of it your own.`,
   );
   if (revolverLimit > 0n) {
     console.log(
-      `  ${DIM}A ${toDisplay(revolverLimit, { showCents: false })} revolver stands behind it,` +
-        ` undrawn — it costs its fee at close and lends only when you are short.${RESET}`,
+      note(
+        `A ${toDisplay(revolverLimit, { showCents: false })} revolver stands behind it, undrawn —` +
+          ` it costs its fee at close and lends only when you are short.`,
+      ),
     );
   }
   const cashColour = business.cash <= 0n ? RED : business.cash < fromDisplay(50_000) ? YELLOW : GREEN;
@@ -342,7 +349,7 @@ export async function runSetup(
   input: LineSource,
   options?: RunSetupOptions,
 ): Promise<SetupResult | undefined> {
-  console.log(`${BOLD}Business Simulator${RESET} ${DIM}— setup${RESET}`);
+  console.log(masthead());
 
   const capital = await chooseCapital(input);
 
@@ -472,15 +479,19 @@ export async function runSetup(
      * The numbers are still fully editable. What changed is that the default
      * is a worked plan rather than a blank field.
      */
-    console.log(`\n${BOLD}FUNDING${RESET}`);
+    console.log(`\n${rule('Funding')}`);
     console.log(
-      `${DIM}  Opening costs ${toDisplay(needed, { showCents: false })} — buildout, deposits and` +
-        ` the first quarter of fixed costs before any revenue lands.${RESET}`,
+      note(
+        `Opening costs ${toDisplay(needed, { showCents: false })} — buildout, deposits and` +
+          ` the first quarter of fixed costs before any revenue lands.`,
+      ),
     );
     console.log(
-      `${DIM}  You have ${toDisplay(config.startCapital, { showCents: false })}, of which` +
-        ` ${toDisplay(investable, { showCents: false })} is investable after leaving` +
-        ` ${toDisplay(livingReserve, { showCents: false })} to live on.${RESET}\n`,
+      note(
+        `You have ${toDisplay(config.startCapital, { showCents: false })}, of which` +
+          ` ${toDisplay(investable, { showCents: false })} is investable after leaving` +
+          ` ${toDisplay(livingReserve, { showCents: false })} to live on.`,
+      ) + '\n',
     );
     const plan =
       proposedLoan > 0n
@@ -574,7 +585,7 @@ export async function runSetup(
       models: [candidate],
     });
 
-    console.log(`\n${BOLD}═══ BEFORE YOU COMMIT ═══${RESET}`);
+    console.log(`\n${rule('Before you commit')}`);
     renderOpening(candidate, candidateWorld);
 
     // Phase 4 is a gate, not a formality. A business that cannot fund its own
