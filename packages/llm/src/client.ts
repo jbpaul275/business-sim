@@ -105,6 +105,26 @@ export interface AnthropicTransportOptions {
   apiKey?: string;
   /** Defaults to Claude Opus 5 — the interview is the hardest reasoning here. */
   model?: string;
+  /**
+   * Model for a conversational turn, when it should differ from the draft.
+   *
+   * There are two dials, not one, and they are independent: `effort` governs
+   * how much thinking happens, this governs what does the thinking. Splitting
+   * them makes the obvious cost question — can a smaller model run the
+   * interview? — something to measure rather than argue about:
+   *
+   *   BIZSIM_TURN_MODEL=claude-haiku-4-5-20251001 pnpm sim --new
+   *
+   * Both default to the same model deliberately. The turn is where the domain
+   * judgement lives — that $1M at scrap parity buys a 400-700 berth ferry, that
+   * the tenders and not the berths are the real capacity — and that judgement
+   * is the product. A turn that asks the wrong question wastes far more of the
+   * player's time than it saves in latency.
+   */
+  turnModel?: string;
+  /** Model for synthesis. Splitting one draft across seventeen overhead fields
+   * and six archetypes is the hardest single call this makes. */
+  draftModel?: string;
   maxTokens?: number;
   /**
    * Effort for a conversational turn. Lower than the draft on purpose: effort
@@ -139,7 +159,8 @@ function isGrammarTooLarge(error: unknown): boolean {
 
 export class AnthropicConceptTransport implements ConceptTransport {
   private readonly client: Anthropic;
-  private readonly model: string;
+  private readonly turnModel: string;
+  private readonly draftModel: string;
   private readonly maxTokens: number;
   private readonly turnEffort: Effort;
   private readonly draftEffort: Effort;
@@ -153,7 +174,9 @@ export class AnthropicConceptTransport implements ConceptTransport {
     this.client = options.apiKey
       ? new Anthropic({ apiKey: options.apiKey })
       : new Anthropic();
-    this.model = options.model ?? 'claude-opus-5';
+    const model = options.model ?? process.env['BIZSIM_MODEL'] ?? 'claude-opus-5';
+    this.turnModel = options.turnModel ?? process.env['BIZSIM_TURN_MODEL'] ?? model;
+    this.draftModel = options.draftModel ?? process.env['BIZSIM_DRAFT_MODEL'] ?? model;
     this.maxTokens = options.maxTokens ?? 16_000;
     // Overridable without a rebuild, so the speed/quality trade can be tuned
     // by whoever is actually waiting on it.
@@ -166,9 +189,10 @@ export class AnthropicConceptTransport implements ConceptTransport {
     messages: readonly InterviewMessage[],
     schema: Record<string, unknown> | undefined,
     effort: Effort,
+    model: string,
   ): Promise<{ text: string; reasoning?: string; usage: TurnUsage }> {
     const response = await this.client.messages.create({
-      model: this.model,
+      model,
       max_tokens: this.maxTokens,
       system,
       // Thinking is on by default on this model and billed either way; the
@@ -214,7 +238,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
   }
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
-    let attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort);
+    let attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel);
     // Structured outputs constrain generation against the schema, so this
     // should always hold — but "should" is doing load-bearing work in a
     // sentence about generated JSON.
@@ -226,7 +250,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // question ready in the thinking summary and just failed to emit it.
     if (isUnusable(turn)) {
       this.unusableRetries += 1;
-      attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort);
+      attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel);
       turn = zInterviewTurn.parse(JSON.parse(attempt.text));
       if (isUnusable(turn)) {
         throw new UnusableResponseError(turn.message.trim().length === 0 ? 'empty' : 'garbled');
@@ -244,7 +268,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
     try {
-      text = (await this.complete(system, asked, DRAFT_SCHEMA, this.draftEffort)).text;
+      text = (await this.complete(system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel)).text;
     } catch (error) {
       if (!isGrammarTooLarge(error)) throw error;
       // The draft schema is close to whatever the grammar ceiling is, and where
@@ -258,6 +282,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
           asked,
           undefined,
           this.draftEffort,
+          this.draftModel,
         )
       ).text;
     }
