@@ -126,6 +126,47 @@ conditions are, not be told yes or no."*
    provenance, rather than borrowing a template's cost structure and relabelling it. A borrowed structure is
    wrong in ways nobody can see; an estimated one is wrong in ways the register displays.
 
+**Benchmarks are weak constraints, not absent ones.** An absent band means "no comparable exists," not "any
+number goes." A 256-flavour shop may well charge more than Ben & Jerry's; it cannot charge $200 a scoop. And
+because it needs a bigger store, it may take far more revenue than a Ben & Jerry's benchmark would suggest —
+but it is still bound by the same arithmetic: it can only serve so many people a day at such and such a
+price. There is no single-location ice cream shop with a billion dollars of revenue.
+
+The useful reading of that: **the constraint that binds is not the benchmark value, it is the identity that
+produced it.** Revenue is servable customers × price. Either factor can move a long way outside its band —
+that is the whole point of modelling a novel concept — but the *product* is bounded by physical facts:
+footprint, operating hours, service time per customer. That bound is arithmetic, not opinion, and the engine
+already computes it. The 256-flavour shop is capped at $302k a quarter on a 30-position counter not because a
+benchmark says so, but because 30 × 12 × 91 ÷ 1.268 is 25,836 customers and they are paying $13 each.
+
+So there are three tiers, not two:
+
+| Tier | What it covers | Response |
+|---|---|---|
+| **Impossible** | Arithmetic, contract, physics — including *derived* ceilings: claimed revenue that cannot reconcile to volume × price, or capacity that cannot fit the stated footprint | **Refuse.** Cannot be overridden. |
+| **Far outside any anchor** | A value many multiples from the nearest defensible reference — $200 a scoop, 40% capture of a metro trade area | **Challenge, and report the magnitude.** Never refuse. |
+| **In band, or modestly outside** | Everything else | **Register and move on.** |
+
+Two consequences for the build, both currently unimplemented:
+
+1. **The register needs a deviation *magnitude*, not a boolean.** `outsideBenchmark: boolean` can only say
+   "outside," which is the same word for 1.2× and 22× and is therefore useless as a weak constraint. Replace
+   it with a signed ratio so the challenge loop can say *"this is 22× the nearest anchor — what makes that
+   true?"* rather than *"this is out of band."* The first is a question a founder can answer; the second
+   reads as a verdict, which is what D-5 exists to avoid.
+2. **The capacity model needs a footprint, and validation needs to check it.** Nothing today stops a concept
+   claiming 100,000 counter positions, which is exactly how a billion-dollar single-location scoop shop gets
+   modelled. That is not a taste judgement to argue about — it is 100,000 positions in 900 square feet, and
+   it is the *mechanism* that makes "no billion-dollar ice cream shop" arithmetic rather than opinion. The
+   engine's capacity model is already the hard constraint; it is just currently unbounded on the input side.
+
+Note what neither of these does: nothing here refuses $200 a scoop. It is physically possible, so it gets
+modelled. What the engine already has is the honest consequence — price elasticity anchored at the price set
+at concept lock — so a player who raises the ticket 22× and *also* holds capture rate flat is making a second,
+separate claim: that 44,200 people will pay it. That claim is a `PLAYER_ASSUMED` assumption with no source,
+sitting many multiples outside any anchor, and interrogating it is precisely M4's job. The absurdity principle
+does not mean the system is credulous. It means it argues about assumptions rather than about concepts.
+
 **Where this is enforced:** [`packages/engine/src/absurdity.test.ts`](../../packages/engine/src/absurdity.test.ts)
 builds the 256-flavour shop as its own template — own cost lines, own capex, `plausibility: {}` — and asserts
 the whole shape of this decision: that validation has no opinion on it, that the complexity is charged in
