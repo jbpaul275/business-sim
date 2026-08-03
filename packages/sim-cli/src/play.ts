@@ -410,6 +410,32 @@ function advise(business: Business, result: TickResult, question = ''): string[]
         `fixed costs are ${toCompact(fixed)} and cannot be cut this quarter. ` +
         `\`costs\` lists every line by size, \`lines\` gives the ids \`fire\` takes.`,
     );
+
+    /**
+     * "how many people can we fire without hurting service quality?"
+     *
+     * Answerable, and answered with a restatement of the totals. The engine
+     * knows what each block carries and what volume actually turned up; the
+     * subtraction is exactly the work a player cannot do from the screen and
+     * the sim can do exactly.
+     */
+    if (stream) {
+      for (const line of business.costs.stepFixed) {
+        const per = Number(line.capacity?.capacityPerBlock ?? 0);
+        if (per <= 0) continue;
+        const needed = Math.ceil(stream.demandVolume / per);
+        const floor = Math.max(line.minimumBlocks ?? 0, needed);
+        const spare = line.currentBlocks - floor;
+        out.push(
+          spare > 0
+            ? `${line.label}: ${line.currentBlocks} blocks carrying ${Math.round(stream.demandVolume).toLocaleString()} ` +
+                `of demand at ${per.toLocaleString()} each — ${spare} could go and still cover it, ` +
+                `saving ${toCompact(line.blockCostPerQuarter * BigInt(spare))} a quarter.`
+            : `${line.label}: ${line.currentBlocks} blocks is what this quarter's volume needs. ` +
+                `Cutting here turns customers away rather than saving money.`,
+        );
+      }
+    }
   }
 
   if (topic === 'debt') {
@@ -599,10 +625,17 @@ function parseCommand(
   const none: ParseResult = { actions: [] };
   const fail = (m: string): ParseResult => ({ actions: [], message: `${RED}${m}${RESET}` });
 
+  /**
+   * An empty token used to match everything, because every string starts with
+   * "". A player typed a bare `fire`, meaning "help me decide", and the game
+   * queued a redundancy against whichever line happened to be first.
+   */
   const findLine = (token: string): string | undefined =>
-    business.costs.stepFixed.find(
-      (c) => c.id === token || c.label.toLowerCase().startsWith(token.toLowerCase()),
-    )?.id;
+    token.trim() === ''
+      ? undefined
+      : business.costs.stepFixed.find(
+          (c) => c.id === token || c.label.toLowerCase().startsWith(token.toLowerCase()),
+        )?.id;
 
   switch (verb.toLowerCase()) {
     case '':
@@ -646,15 +679,53 @@ function parseCommand(
 
     case 'hire':
     case 'fire': {
-      const costId = findLine(rest[0] ?? '');
-      if (!costId) return fail(`Unknown cost line "${rest[0] ?? ''}". Try \`lines\`.`);
-      const blocks = Number(rest[1] ?? 1);
+      const firing = verb.toLowerCase() === 'fire';
+      const lines = business.costs.stepFixed;
+      const first = rest[0] ?? '';
+
+      // `fire 2` means two blocks when there is only one line to take them
+      // from. It used to be read as a line id, fail to match, and be refused
+      // as "Unknown cost line 2" — which is true and unhelpful.
+      const countOnly = /^\d+$/.test(first.trim());
+      const costId =
+        countOnly && lines.length === 1 ? lines[0]!.id : findLine(first);
+      if (!costId) {
+        return fail(
+          lines.length === 0
+            ? 'There are no step-fixed lines to change.'
+            : `Which line? ${lines.map((c) => c.id).join(', ')} — or \`lines\` for the labels.`,
+        );
+      }
+      const blocks = Number(countOnly && lines.length === 1 ? first : (rest[1] ?? 1));
       if (!Number.isInteger(blocks) || blocks < 1) return fail('Block count must be a positive whole number.');
+
+      /**
+       * Refuse it now, not in three months.
+       *
+       * The engine rejects a cut below a line's minimum blocks — correctly —
+       * but it does so when the quarter runs. A player fired a barista, was
+       * told `[1 queued]`, ran the quarter, and only then read "already at its
+       * minimum block count". A decision that cannot happen should fail while
+       * they can still make a different one.
+       */
+      if (firing) {
+        const line = lines.find((c) => c.id === costId)!;
+        const floor = line.minimumBlocks ?? 0;
+        if (line.currentBlocks - blocks < floor) {
+          return fail(
+            line.currentBlocks <= floor
+              ? `${line.label} is already at its minimum of ${floor} blocks — this line cannot go lower.`
+              : `${line.label} has ${line.currentBlocks} blocks and a minimum of ${floor}: ` +
+                  `you can drop at most ${line.currentBlocks - floor}.`,
+          );
+        }
+      }
+
       return {
         actions: [
-          verb.toLowerCase() === 'hire'
-            ? { kind: 'ADD_STEP_BLOCK', costId, blocks }
-            : { kind: 'REMOVE_STEP_BLOCK', costId, blocks },
+          firing
+            ? { kind: 'REMOVE_STEP_BLOCK', costId, blocks }
+            : { kind: 'ADD_STEP_BLOCK', costId, blocks },
         ],
       };
     }

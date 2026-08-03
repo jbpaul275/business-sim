@@ -157,6 +157,33 @@ describe('asking what to do', () => {
     expect(printed).toMatch(/needs a size and a cost/);
   });
 
+  it('does not pick a line for you when you did not name one', async () => {
+    // A bare `fire` queued a redundancy against whichever line happened to be
+    // first, because every string starts with the empty string and `findLine`
+    // matched on prefix. The player meant "help me decide".
+    const printed = await transcript(['fire', 'quit'], 'understaffed');
+    expect(printed).toMatch(/Which line\?/);
+    expect(printed).not.toContain('queued:');
+  });
+
+  it('refuses a cut that cannot happen now, not three months from now', async () => {
+    // The engine rejects a cut below a line's minimum — correctly — but does
+    // it when the quarter runs. A player fired a barista, was told `[1
+    // queued]`, ran the quarter, and only then read "already at its minimum
+    // block count".
+    const printed = await transcript(['fire kitchen 99', 'quit'], 'understaffed');
+    expect(printed).toMatch(/minimum/);
+    expect(printed).not.toContain('queued:');
+  });
+
+  it('answers how many can go, with the arithmetic', async () => {
+    // "how many people can we fire without hurting service quality?" is
+    // answerable — the engine knows what each block carries and what volume
+    // turned up — and was answered with a restatement of the totals.
+    const printed = await transcript(['how many can we fire?', 'quit'], 'restaurant');
+    expect(printed).toMatch(/blocks carrying|is what this quarter's volume needs/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);

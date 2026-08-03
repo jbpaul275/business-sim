@@ -9,6 +9,7 @@ import {
   computeMonthZeroOutlays,
   createWorld,
   createWorldConfig,
+  tick,
   validateBusinessModel,
 } from '@bizsim/engine';
 import {
@@ -269,6 +270,43 @@ function renderRegister(model: BusinessModel): void {
   }
 }
 
+/**
+ * What the first quarter will actually take out, before any revenue lands.
+ *
+ * Ticking the candidate world once, which is free: the engine is pure and this
+ * world is a throwaway. Cheaper than a rule of thumb and exactly right, which
+ * a rule of thumb was not — see `renderOpening`.
+ */
+/**
+ * Quarters of room below which opening is thin.
+ *
+ * One and a half rather than one: a business funded to exactly its first
+ * quarter opens the second one on the revolver, and the second quarter is
+ * usually worse than the first because the ramp has not arrived yet.
+ */
+export const THIN_QUARTERS = 1.5;
+
+/**
+ * Thin measured against the burn, not against a round number.
+ *
+ * This was `cash < $50,000`. A cafe opened with $50,952 — over the line by
+ * nine hundred dollars — into a first quarter that took $148,000 out, and the
+ * screen said nothing at all. A pawn shop before it opened with $13,084 and
+ * got the warning, which made the flat threshold look like it worked.
+ *
+ * $50,000 is a year of slack for a food truck and three weeks for a cafe. The
+ * only figure that means anything is how long the cash lasts.
+ */
+export const isThin = (cash: Money, firstQuarterBurn: Money): boolean =>
+  firstQuarterBurn > 0n && Number(cash) / Number(firstQuarterBurn) < THIN_QUARTERS;
+
+function firstQuarterBurn(world: WorldState): Money {
+  const result = tick(world, [], { throwOnAssertionFailure: false });
+  const cf = result.statements.byBusiness[world.businesses[0]!.id]?.cashFlow;
+  const ops = cf?.cashFlowFromOperations ?? 0n;
+  return ops < 0n ? -ops : 0n;
+}
+
 function renderOpening(model: BusinessModel, world: WorldState): void {
   const outlays = computeMonthZeroOutlays(model);
   const business = world.businesses[0]!;
@@ -333,11 +371,37 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
     console.log(
       `\n  ${RED}You cannot afford to open. Raise more equity or debt, or build something smaller.${RESET}`,
     );
-  } else if (business.cash < fromDisplay(50_000)) {
-    console.log(
-      `\n  ${YELLOW}That is thin. Month zero is not the peak — the peak comes when you are` +
-        ` open and still losing money.${RESET}`,
-    );
+    return;
+  }
+
+  /**
+   * Thin measured against the burn, not against a round number.
+   *
+   * This was `cash < $50,000`. A café opened with $50,952 — over the line by
+   * nine hundred dollars — into a first quarter that took $148,000 out, and
+   * the screen said nothing at all. The pawn shop before it opened with
+   * $13,084 and got the warning, which made the threshold look like it worked.
+   *
+   * $50,000 is a lot of money for a food truck and three weeks for a café.
+   * The only figure that means anything here is how long the cash lasts, and
+   * the engine can simply be asked.
+   */
+  const burn = firstQuarterBurn(world);
+  if (burn > 0n) {
+    const quarters = Number(business.cash) / Number(burn);
+    if (isThin(business.cash, burn)) {
+      console.log(
+        `\n  ${YELLOW}That is thin: ${toDisplay(business.cash, { showCents: false })} of cash against` +
+          ` a first quarter that takes ${toDisplay(burn, { showCents: false })} out before revenue` +
+          ` covers anything — about ${quarters.toFixed(1)} quarters of room.${RESET}`,
+      );
+      console.log(
+        note(
+          'Month zero is not the peak. The peak comes when you are open and still losing money,' +
+            ' and that is the number to fund against.',
+        ),
+      );
+    }
   }
 }
 

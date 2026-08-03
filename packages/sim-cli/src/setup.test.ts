@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_USAGE, ScriptedTransport, draftToTemplate, type ConceptDraft } from '@bizsim/llm';
 import { buildModelFromTemplate, validateBusinessModel } from '@bizsim/engine';
-import { runSetup } from './setup.js';
+import { isThin, runSetup } from './setup.js';
+import { fromDisplay } from '@bizsim/money';
 import type { LineSource } from './input.js';
 
 /**
@@ -459,6 +460,40 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
+  it('warns when the opening cash will not carry the first quarter', async () => {
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '', // nothing to argue with
+      '2', // fund it myself
+      '0',
+      '',
+      '230000', // just enough to open, nowhere near enough to trade
+      'y',
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toMatch(/That is thin/);
+      // Both numbers, and the one that matters: how long it lasts.
+      expect(printed).toMatch(/takes \$[\d,]+ out before revenue/);
+      expect(printed).toMatch(/quarters of room/);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('lets the lender decline, instead of granting whatever is asked for', async () => {
     // A live run answered a $203,902 shortfall with a $4M SBA and a $4M
     // revolver against $140,000 of equity, and got all of it. `underwrite` has
@@ -625,5 +660,34 @@ describe('the concept path reaches the same gate as the picker', () => {
     } finally {
       log.mockRestore();
     }
+  });
+});
+
+describe('what counts as a thin opening', () => {
+  it('catches the cafe the flat threshold missed', () => {
+    // $50,952 of opening cash against a first quarter that took $148,000 out.
+    // Nine hundred dollars over a $50,000 line, so the old rule said nothing
+    // at all — while the business had about ten days of room.
+    expect(isThin(fromDisplay(50_952), fromDisplay(148_200))).toBe(true);
+    // The rule it replaced, restated, so the difference is visible.
+    expect(fromDisplay(50_952) < fromDisplay(50_000)).toBe(false);
+  });
+
+  it('leaves alone a small business that is genuinely well funded', () => {
+    // $50,000 is three weeks for a cafe and most of a year for a food truck.
+    // A flat threshold cannot tell those apart; this one does not need to.
+    expect(isThin(fromDisplay(45_000), fromDisplay(12_000))).toBe(false);
+    expect(fromDisplay(45_000) < fromDisplay(50_000)).toBe(true);
+  });
+
+  it('wants more than exactly one quarter of room', () => {
+    // Funded to exactly the first quarter opens the second on the revolver,
+    // and the second is usually worse because the ramp has not arrived.
+    expect(isThin(fromDisplay(100_000), fromDisplay(100_000))).toBe(true);
+    expect(isThin(fromDisplay(200_000), fromDisplay(100_000))).toBe(false);
+  });
+
+  it('says nothing about a business that does not burn in its first quarter', () => {
+    expect(isThin(0n, 0n)).toBe(false);
   });
 });
