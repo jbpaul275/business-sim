@@ -240,67 +240,187 @@ interface ParseResult {
  * say is binding. A player who asks what to do is owed the state of their own
  * business, not a list of verbs they have already seen.
  */
-function advise(business: Business, result: TickResult): string[] {
+/**
+ * What the player actually asked about.
+ *
+ * The advisor used to print the same four-line diagnosis whatever was typed. A
+ * campground owner asked "how much will it cost us to quadruple capacity?",
+ * then "raise marketing spend then", then explained his reasoning at length —
+ * and got the identical paragraph three times. That is worse than the
+ * `Unknown command` it replaced: it looks like an answer, so the player reads
+ * it, finds their question absent, and concludes the tool is not listening.
+ */
+type Topic = 'capacity' | 'price' | 'marketing' | 'staff' | 'debt' | 'seasonality' | 'general';
+
+function topicOf(question: string): Topic {
+  const q = question.toLowerCase();
+  if (/\b(expand|more sites|more seats|capacity|bigger|quadruple|double|scale)\b/.test(q)) return 'capacity';
+  if (/\b(price|prices|pricing|charge|rate|raise prices)\b/.test(q)) return 'price';
+  if (/\b(marketing|advertis|promote|reach|awareness)\b/.test(q)) return 'marketing';
+  if (/\b(staff|labou?r|payroll|hire|fire|crew|employee|cut costs|costs)\b/.test(q)) return 'staff';
+  if (/\b(debt|borrow|loan|revolver|financ|raise money|invest)\b/.test(q)) return 'debt';
+  if (/\b(season|swing|winter|summer|why.*(quarter|drop|fall))\b/.test(q)) return 'seasonality';
+  return 'general';
+}
+
+/**
+ * "What do I do now?"
+ *
+ * Asked three times in one live session — `what do i do now?`, `how can we cut
+ * costs?`, `hwo can we cut costs or increase revnues?` — and answered three
+ * times with `Unknown command "how". Try \`help\``. The whole premise of the
+ * product is that you talk to it, and then the half where the decisions
+ * actually happen is a strict verb parser. §11.4: "natural language is the
+ * on-ramp, not the only road" — there was no on-ramp here at all.
+ *
+ * This is not narration and it does not call a model. Every line is read off
+ * the last tick. What it says is chosen by what was asked; the full diagnosis
+ * is the answer to a general question, not the answer to every question.
+ */
+function advise(business: Business, result: TickResult, question = ''): string[] {
   const entry = result.statements.byBusiness[business.id];
   if (!entry) return ['No statements yet — run a quarter first.'];
   const is = entry.incomeStatement;
   const m = entry.derivedMetrics;
   const stream = m.streamMetrics[0];
+  const topic = topicOf(question);
   const out: string[] = [];
 
-  const runway = m.cashRunwayQuarters;
-  if (Number.isFinite(runway) && runway < 2) {
-    out.push(
-      `Cash is the binding problem: ${runway.toFixed(1)} quarters of runway. ` +
-        `\`draw\` on the revolver or \`inject\` from the household buys time; neither fixes it.`,
-    );
-  }
-
-  // Utilisation says which half of the P&L is worth attacking. A business at a
-  // third of capacity does not have a cost problem it can cut its way out of.
-  if (stream?.capacityVolume !== undefined && stream.capacityVolume > 0) {
-    const used = stream.realizedVolume / stream.capacityVolume;
-    if (stream.lostDemand > 0.5) {
-      out.push(
-        `You are turning away ${Math.round(stream.lostDemand).toLocaleString()} of demand. ` +
-          `\`expand\` or \`hire\` converts that into revenue; \`price\` up captures it without spending.`,
-      );
-    } else if (used < 0.6) {
-      out.push(
-        `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
-          `\`marketing\` and \`price\` move volume; cutting staff you have already paid for does not.`,
-      );
-    }
-  }
-
-  const contribution = is.grossProfit;
-  if (is.revenue > 0n && contribution <= 0n) {
-    out.push(
-      `Every sale loses money before a single fixed cost: variable costs exceed revenue. ` +
-        `Volume makes this worse, not better — \`price\` is the only lever that helps.`,
-    );
-  }
-
+  const used =
+    stream?.capacityVolume !== undefined && stream.capacityVolume > 0
+      ? stream.realizedVolume / stream.capacityVolume
+      : undefined;
   const fixed = business.costs.fixedPeriod.reduce<Money>((a, c) => a + c.amountPerQuarter, 0n);
   const blocks = business.costs.stepFixed.reduce<Money>(
     (a, c) => a + c.blockCostPerQuarter * BigInt(c.currentBlocks),
     0n,
   );
-  if (is.ebitda < 0n && is.revenue > 0n) {
+
+  // ── Topic answers ────────────────────────────────────────────────────────
+  // Each one answers the question that was asked, with this quarter's numbers
+  // in it. The arithmetic is the point: "more sites will not help" is an
+  // opinion, and "you have 15 empty ones" is a fact.
+
+  if (topic === 'capacity' && used !== undefined && stream) {
+    const idle = Math.round(stream.capacityVolume! - stream.realizedVolume);
+    if (stream.lostDemand > 0.5) {
+      out.push(
+        `Worth doing: you turned away ${Math.round(stream.lostDemand).toLocaleString()} this quarter. ` +
+          `\`expand <units> <cost>\` adds capacity, and it lands two quarters out, not now.`,
+      );
+    } else {
+      out.push(
+        `You already have ${idle.toLocaleString()} idle — ${pct(1 - used)} of what you built ` +
+          `sat empty this quarter. More capacity costs money now and earns nothing until demand ` +
+          `catches up; \`marketing\` and \`price\` are what move demand.`,
+      );
+    }
+  }
+
+  if (topic === 'price') {
+    const p = business.streams[0]?.params;
+    const price =
+      p && 'avgTicket' in p ? p.avgTicket
+      : p && 'ratePerUnitPerQuarter' in p ? p.ratePerUnitPerQuarter
+      : undefined;
     out.push(
-      `EBITDA is ${toCompact(is.ebitda)} on ${toCompact(is.revenue)} of revenue. ` +
-        `Fixed costs are ${toCompact(fixed)} a quarter and staffing is ${toCompact(blocks)}, ` +
-        `and only the second is reachable this quarter. \`costs\` breaks it down line by line.`,
+      price !== undefined
+        ? `\`price ${Math.round(Number(price) / 100)}\` sets it. Elasticity is modelled: a 10% rise ` +
+            `loses roughly 12% of volume, so it helps only while you have empty capacity to lose.`
+        : `\`price <amount>\` sets it. Elasticity is modelled, so a rise trades volume for margin.`,
     );
   }
 
-  // Interest alone, which is the floor on what debt costs every quarter and is
-  // the number that makes "borrow more" stop being a plan.
-  if (is.interestExpense > 0n && is.ebitda < is.interestExpense) {
+  if (topic === 'marketing') {
+    const spend = business.streams[0]?.marketingSpendPerQuarter ?? 0n;
     out.push(
-      `Interest alone is ${toCompact(is.interestExpense)} a quarter against ${toCompact(is.ebitda)} ` +
-        `of EBITDA. Borrowing more raises that number rather than solving it.`,
+      `\`marketing <amount>\` — you are at ${toCompact(spend)} a quarter. Response saturates: ` +
+        `each extra dollar buys less than the last, and it moves demand rather than capacity.`,
     );
+  }
+
+  if (topic === 'staff') {
+    out.push(
+      `Staffing is ${toCompact(blocks)} a quarter across ${business.costs.stepFixed.length} lines; ` +
+        `fixed costs are ${toCompact(fixed)} and cannot be cut this quarter. ` +
+        `\`costs\` lists every line by size, \`lines\` gives the ids \`fire\` takes.`,
+    );
+  }
+
+  if (topic === 'debt') {
+    out.push(
+      is.ebitda < 0n
+        ? `Borrowing funds losses, it does not end them: at ${toCompact(is.ebitda)} of EBITDA every ` +
+            `quarter, more debt buys time and raises the interest you pay for it. ` +
+            `\`debt <amount>\` and \`draw <amount>\` both work; neither changes the trajectory.`
+        : `\`debt <amount>\` raises a term loan, \`draw\` uses the revolver. At ` +
+            `${toCompact(is.ebitda)} of EBITDA you can service some of it.`,
+    );
+  }
+
+  // Seasonality, which explains most of what looks like chaos on the screen.
+  // A campground owner watched revenue go 5k → 18k → 23k → 13k and was never
+  // told the shape was designed rather than emergent.
+  const season = business.streams[0]?.seasonality;
+  if (season && season.length === 4) {
+    const high = Math.max(...season);
+    const low = Math.min(...season);
+    // 1.5x between best and worst quarter. The reference restaurant runs 1.17
+    // and should stay quiet; a DTC brand runs 1.61 and a campground far more,
+    // and in both of those the swing is the single most confusing thing on the
+    // screen for the first year.
+    if (high / Math.max(low, 0.01) > 1.5 && (topic === 'seasonality' || topic === 'general')) {
+      const bestQuarter = season.indexOf(high) + 1;
+      const worstQuarter = season.indexOf(low) + 1;
+      out.push(
+        `The swing is seasonal, not a trend: Q${bestQuarter} runs at ${high.toFixed(2)}x an average ` +
+          `quarter and Q${worstQuarter} at ${low.toFixed(2)}x. A year of this business is one good ` +
+          `season carrying two thin ones, so judge it on four quarters, never on one.`,
+      );
+    }
+  }
+
+  // ── The general diagnosis, when nothing specific was asked ───────────────
+  if (topic === 'general' || out.length === 0) {
+    const runway = m.cashRunwayQuarters;
+    if (Number.isFinite(runway) && runway < 2) {
+      out.push(
+        `Cash is the binding problem: ${runway.toFixed(1)} quarters of runway. ` +
+          `\`draw\` on the revolver or \`inject\` from the household buys time; neither fixes it.`,
+      );
+    }
+    if (used !== undefined && stream) {
+      if (stream.lostDemand > 0.5) {
+        out.push(
+          `You are turning away ${Math.round(stream.lostDemand).toLocaleString()} of demand. ` +
+            `\`expand\` or \`hire\` converts that into revenue; \`price\` up captures it without spending.`,
+        );
+      } else if (used < 0.6) {
+        out.push(
+          `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
+            `\`marketing\` and \`price\` move volume; cutting staff you have already paid for does not.`,
+        );
+      }
+    }
+    if (is.revenue > 0n && is.grossProfit <= 0n) {
+      out.push(
+        `Every sale loses money before a single fixed cost: variable costs exceed revenue. ` +
+          `Volume makes this worse, not better — \`price\` is the only lever that helps.`,
+      );
+    }
+    if (is.ebitda < 0n && is.revenue > 0n) {
+      out.push(
+        `EBITDA is ${toCompact(is.ebitda)} on ${toCompact(is.revenue)} of revenue. ` +
+          `Fixed costs are ${toCompact(fixed)} a quarter and staffing is ${toCompact(blocks)}, ` +
+          `and only the second is reachable this quarter. \`costs\` breaks it down line by line.`,
+      );
+    }
+    if (is.interestExpense > 0n && is.ebitda < is.interestExpense) {
+      out.push(
+        `Interest alone is ${toCompact(is.interestExpense)} a quarter against ${toCompact(is.ebitda)} ` +
+          `of EBITDA. Borrowing more raises that number rather than solving it.`,
+      );
+    }
   }
 
   if (out.length === 0) {
@@ -541,8 +661,8 @@ function parseCommand(line: string, business: Business, result: TickResult): Par
 
     default:
       if (looksLikeAQuestion(line, verb)) {
-        for (const line of advise(business, result)) {
-          console.log(`  ${DIM}${line}${RESET}`);
+        for (const said of advise(business, result, line)) {
+          console.log(`  ${DIM}${said}${RESET}`);
         }
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
         return none;

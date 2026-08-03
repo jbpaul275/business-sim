@@ -20,10 +20,10 @@ function scriptedInput(lines: readonly string[]): LineSource {
   return { next: async () => lines[i++], close: () => {} };
 }
 
-async function transcript(lines: readonly string[]): Promise<string> {
+async function transcript(lines: readonly string[], scenario = 'restaurant'): Promise<string> {
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   try {
-    await play('restaurant', { input: scriptedInput(lines), milestonePeriod: 4 });
+    await play(scenario, { input: scriptedInput(lines), milestonePeriod: 4 });
     return log.mock.calls.map((c) => String(c[0])).join('\n');
   } finally {
     log.mockRestore();
@@ -90,6 +90,46 @@ describe('asking what to do', () => {
     const printed = await transcript(['costs', 'quit']);
     const body = printed.slice(printed.indexOf('WHERE THE MONEY GOES'));
     expect(body.indexOf('Kitchen line')).toBeLessThan(body.indexOf('Permits & licenses'));
+  });
+
+  it('answers the question that was asked, not the same one every time', async () => {
+    // A campground owner asked "how much will it cost us to quadruple
+    // capacity?", then "raise marketing spend then", then explained his
+    // reasoning at length — and got the identical four-line paragraph three
+    // times. That is worse than `Unknown command`: it looks like an answer, so
+    // he read it, found his question absent, and concluded it was not
+    // listening.
+    const capacity = await transcript(['can we add more capacity?', 'quit']);
+    const marketing = await transcript(['should we raise marketing spend?', 'quit']);
+    const price = await transcript(['what about raising prices?', 'quit']);
+
+    expect(capacity).not.toBe(marketing);
+    expect(marketing).not.toBe(price);
+    // And each one is about what was asked.
+    expect(capacity).toMatch(/idle|turned away/);
+    expect(marketing).toMatch(/marketing <amount>/);
+    expect(price).toMatch(/price \d|price <amount>/);
+  });
+
+  it('does the arithmetic on the question rather than restating the levers', async () => {
+    // "more sites will not help" is an opinion. "you have 7,021 idle" is a
+    // fact, and it is the one that settles it.
+    const printed = await transcript(['we gotta add more sites', 'quit']);
+    expect(printed).toMatch(/idle/);
+    expect(printed).toMatch(/sat empty this quarter/);
+  });
+
+  it('explains the seasonal swing instead of leaving it to look like collapse', async () => {
+    // Revenue went 5k → 18k → 23k → 13k and nothing ever said the shape was
+    // designed rather than emergent.
+    // The reference restaurant swings 1.17x and should stay quiet; the DTC
+    // brand runs 1.61x, which is where it starts being the most confusing
+    // thing on the screen.
+    const swingy = await transcript(['why does revenue keep swinging?', 'quit'], 'ecommerce');
+    expect(swingy).toMatch(/seasonal, not a trend/);
+    expect(swingy).toMatch(/Q\d runs at/);
+    const steady = await transcript(['what do i do now?', 'quit']);
+    expect(steady).not.toMatch(/seasonal, not a trend/);
   });
 
   it('still rejects a mistyped command as a mistyped command', async () => {

@@ -27,6 +27,7 @@ import { listSeedTemplates } from '@bizsim/seeds';
 import type { ConceptTransport } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
 import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
+import { capitalIntensityNote } from './plausibility.js';
 import { masthead, note, rule } from './ui.js';
 
 /**
@@ -752,6 +753,19 @@ export async function runSetup(
   }
 
   renderRegister(model);
+
+  /**
+   * The one sentence the campground owner needed, at the moment he needed it.
+   *
+   * His draft's open notes said it exactly — "not an operating business that
+   * services $960k on its own" — and then scrolled away behind month zero, the
+   * funding screen and the register. He committed, bled for three years, and
+   * concluded he was bad at business. He was not; this screen was.
+   */
+  if (concept) {
+    const heavy = capitalIntensityNote(concept.draft, computeMonthZeroOutlays(model).total);
+    if (heavy) console.log(`\n${YELLOW}⚠ ${RESET}${note(heavy).trimStart()}`);
+  }
 
   console.log(
     `\n${DIM}Committing freezes the model. After this it changes only through the` +

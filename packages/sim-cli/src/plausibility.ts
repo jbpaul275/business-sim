@@ -157,6 +157,65 @@ export function buildabilityIssues(draft: ConceptDraft): string[] {
 }
 
 /**
+ * What a mature year earns against what it costs to open.
+ *
+ * A 320-acre Tennessee campground drew $960,000 of capital into the ground and
+ * reached $98,000 of mature revenue. The model said so, precisely, in its own
+ * open notes — "a lifestyle-scale cash business attached to a real-estate
+ * purchase, not an operating business that services $960k on its own" — and
+ * then three screens of month-zero detail scrolled past and the gate asked
+ * only whether opening was affordable. It was. The player committed, watched
+ * it bleed for three years, and concluded he was bad at business.
+ *
+ * He was not. The tool knew and buried it.
+ *
+ * This is not a veto and must never become one. D-5 is explicit that a bad
+ * business is the player's to build, and plenty of real ones look like this —
+ * a working farm, a marina, anything where the land is the investment and the
+ * operation is a job attached to it. What it is is the one sentence that
+ * should be on screen at the moment of the decision rather than four screens
+ * earlier.
+ */
+export function capitalIntensity(
+  draft: ConceptDraft,
+  openingCost: Money,
+): { matureAnnualRevenue: Money; yearsOfRevenue: number } | undefined {
+  const p = projectMatureRevenue(draft);
+  if (!p || p.matureAnnualRevenue <= 0n || openingCost <= 0n) return undefined;
+  return {
+    matureAnnualRevenue: p.matureAnnualRevenue,
+    yearsOfRevenue: Number(openingCost) / Number(p.matureAnnualRevenue),
+  };
+}
+
+/**
+ * Years of revenue past which it is worth saying out loud.
+ *
+ * Three is high on purpose. Restaurants and shops open for well under a year
+ * of revenue; hotels, marinas and anything land-heavy run three to five and
+ * are perfectly normal businesses. At six the capital is the investment and
+ * the operation is a job attached to it, which is a different thing from what
+ * most people think they are buying.
+ */
+const HEAVY_YEARS = 6;
+
+/** One sentence for the commit screen, or nothing. */
+export function capitalIntensityNote(
+  draft: ConceptDraft,
+  openingCost: Money,
+): string | undefined {
+  const c = capitalIntensity(draft, openingCost);
+  if (!c || c.yearsOfRevenue < HEAVY_YEARS) return undefined;
+  return (
+    `Opening costs ${toDisplay(openingCost, { showCents: false })} and a mature year earns ` +
+    `${toDisplay(c.matureAnnualRevenue, { showCents: false })} — ${c.yearsOfRevenue.toFixed(1)} years ` +
+    `of revenue to get the doors open. That can be exactly right when the asset is the investment ` +
+    `and the operation is a job attached to it. It is worth being sure that is the business you ` +
+    `mean to buy.`
+  );
+}
+
+/**
  * The projection as something to hand back to the model, or nothing at all.
  *
  * Phrased as a contradiction rather than a correction: the model is told what

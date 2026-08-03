@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ConceptDraft } from '@bizsim/llm';
-import { buildabilityIssues, projectMatureRevenue, revenueRealityIssues } from './plausibility.js';
+import {
+  buildabilityIssues,
+  capitalIntensityNote,
+  projectMatureRevenue,
+  revenueRealityIssues,
+} from './plausibility.js';
+import { fromDisplay } from '@bizsim/money';
 
 /**
  * The McDonald's run, reduced to its arithmetic.
@@ -188,5 +194,39 @@ describe('the validator runs while there is still someone to tell', () => {
     const expensive = mcdonalds(3_600_000);
     expensive.capex[0]!.grossCost = 400_000_000;
     expect(buildabilityIssues(expensive)).toEqual([]);
+  });
+});
+
+describe('capital in the ground against what it earns', () => {
+  it('says so when opening costs many years of revenue', () => {
+    // A 320-acre Tennessee campground: $960,000 into the ground, $98,000 of
+    // mature revenue. The model said exactly this in its own open notes and
+    // then it scrolled away behind month zero, the funding screen and the
+    // register. The player committed, bled for three years, and concluded he
+    // was bad at business. He was not.
+    const draft = mcdonalds(3_600_000);
+    const note = capitalIntensityNote(draft, fromDisplay(20_000_000));
+    expect(note).toBeDefined();
+    expect(note).toMatch(/years of revenue to get the doors open/);
+    expect(note).toContain('20,000,000');
+  });
+
+  it('stays quiet for a business that opens for well under its revenue', () => {
+    // Restaurants and shops open for a fraction of a year's revenue; a hotel
+    // or a marina runs three to five and is a perfectly normal business. Only
+    // the far end is worth a sentence.
+    expect(capitalIntensityNote(mcdonalds(3_600_000), fromDisplay(500_000))).toBeUndefined();
+  });
+
+  it('is a sentence, not a veto', () => {
+    // D-5: a bad business is the player's to build. This has to read as
+    // information at the moment of the decision, not as a refusal.
+    const note = capitalIntensityNote(mcdonalds(3_600_000), fromDisplay(20_000_000))!;
+    expect(note).toMatch(/can be exactly right/);
+    expect(note).not.toMatch(/cannot|refus|too (big|expensive)|will fail/i);
+  });
+
+  it('says nothing when there is no projection to measure against', () => {
+    expect(capitalIntensityNote(mcdonalds(0), fromDisplay(20_000_000))).toBeUndefined();
   });
 });
