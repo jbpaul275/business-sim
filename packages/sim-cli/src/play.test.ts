@@ -518,6 +518,34 @@ describe('asking what to do', () => {
     expect(printed).toMatch(/clear by/);
   });
 
+  it('prices a marketing rise at the moment it is made', async () => {
+    // "Raising marketing spend doesn't seem to increase sales." It did not, and
+    // the engine was right not to: past twice the half-saturation point the
+    // response curve is flat, and $30k a quarter more bought about two percent
+    // of demand. The engine was correct and the screen was silent, which is the
+    // worst combination — the player waited two quarters and concluded the
+    // lever was broken.
+    const printed = await transcript(['marketing 50k', 'quit']);
+    expect(printed).toMatch(/more buys about [\d.]+% more demand/);
+    expect(printed).toMatch(/half-saturation point of/);
+    expect(printed).toMatch(/this lever is close to spent/);
+    // Warned, not refused.
+    expect(printed).toContain('queued: marketing');
+  });
+
+  it('does not call a lever spent because the step was small', async () => {
+    // A $1k rise buying 1% is the curve behaving, not a dead lever.
+    const printed = await transcript(['marketing 9k', 'quit']);
+    expect(printed).toMatch(/more buys about/);
+    expect(printed).not.toMatch(/close to spent/);
+  });
+
+  it('says marketing does nothing at all where the archetype ignores it', async () => {
+    const printed = await transcript(['marketing 50k', 'quit'], 'storage');
+    expect(printed).toMatch(/does not move demand for this archetype/);
+    expect(printed).toContain('queued: marketing');
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);

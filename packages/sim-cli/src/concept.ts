@@ -15,7 +15,11 @@ import {
 import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
-import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
+import {
+  buildabilityIssues,
+  revenueRealityIssues,
+  staffingRealismIssues,
+} from './plausibility.js';
 import { accent, note, rule, speech, youPrompt } from './ui.js';
 import { spendLine } from './spend.js';
 import { faultLine } from './faults.js';
@@ -371,8 +375,13 @@ export async function runConceptInterview(
     // per round: the model fixes the price, and the revenue check gets a
     // meaningful number to check on the next pass.
     const structural = [...draftIssues(state.draft), ...buildabilityIssues(state.draft)];
+    // Both plausibility checks share the repair round when nothing structural
+    // is wrong: a business whose revenue is right and whose staffing never
+    // grows has one fault, not none, and the model can fix both at once.
     const issues =
-      structural.length > 0 ? structural : revenueRealityIssues(state.draft);
+      structural.length > 0
+        ? structural
+        : [...revenueRealityIssues(state.draft), ...staffingRealismIssues(state.draft)];
     if (issues.length > 0 && repairs < MAX_REPAIRS) {
       repairs += 1;
       /**
@@ -407,7 +416,10 @@ export async function runConceptInterview(
       console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
       return undefined;
     }
-    for (const issue of revenueRealityIssues(state.draft)) {
+    for (const issue of [
+      ...revenueRealityIssues(state.draft),
+      ...staffingRealismIssues(state.draft),
+    ]) {
       console.log(`\n  ${YELLOW}⚠ ${wrap(issue, 70, '    ').trimStart()}${RESET}`);
     }
 

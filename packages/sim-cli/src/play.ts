@@ -1,6 +1,7 @@
 import { fromDisplay, mulRate, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
 import {
   marketingMovesDemand,
+  marketingMultiplier,
   maturityRamp,
   priceEffect,
   streamPrice,
@@ -1303,11 +1304,52 @@ async function parseCommand(
       return { actions: [{ kind: 'SET_PRICE', streamId, newPrice: value }] };
     }
 
+    /**
+     * "Raising marketing spend doesn't seem to increase sales."
+     *
+     * It did not, and the model was right not to. A brewpub sitting past twice
+     * its half-saturation point went $20k → $50k a quarter and bought about two
+     * percent more demand for thirty thousand dollars, because the response
+     * curve is `1 + maxLift·(1 − e^(−spend/half))` and it had already flattened.
+     *
+     * The engine was correct and the screen was silent, which is the worst
+     * combination available: the player made the decision, waited two quarters,
+     * and drew the conclusion that the lever is broken. The arithmetic is
+     * cheap and it belongs at the moment of the decision, not in a help topic
+     * the player has no reason to open.
+     */
     case 'marketing': {
       const value = parseMoney(rest[0] ?? '');
       if (value === undefined) return fail('marketing needs an amount, e.g. `marketing 12k`.');
       // Zero is a real and sometimes correct choice; below zero is not a choice.
       if (value < 0n) return fail('Marketing spend cannot be negative. `marketing 0` turns it off.');
+
+      const stream = business.streams[0];
+      if (stream) {
+        if (!marketingMovesDemand(stream.params.kind)) {
+          console.log(
+            `  ${YELLOW}Marketing does not move demand for this archetype in the model — the spend ` +
+              `is expensed and demand never reads it. \`marketing 0\` is that money back.${RESET}`,
+          );
+        } else if (value > stream.marketingSpendPerQuarter) {
+          const half = stream.modifiers.halfSaturationSpend;
+          const lift = stream.modifiers.marketingMaxLift;
+          const before = marketingMultiplier(stream.marketingSpendPerQuarter, lift, half);
+          const after = marketingMultiplier(value, lift, half);
+          const gain = before > 0 ? after / before - 1 : 0;
+          const extra = value - stream.marketingSpendPerQuarter;
+          // "Spent" is a judgement about where you are on the curve, not about
+          // how big this particular step was: a $1k rise buying 1% is the
+          // curve behaving, and calling that a dead lever would be wrong.
+          const tapped = half > 0n && value > half * 2n;
+          console.log(
+            `  ${tapped ? YELLOW : DIM}${toCompact(extra)} a quarter more buys about ` +
+              `${(gain * 100).toFixed(1)}% more demand. You are at ${toCompact(stream.marketingSpendPerQuarter)} ` +
+              `against a half-saturation point of ${toCompact(half)}` +
+              `${tapped ? `, and past twice that the curve is flat — this lever is close to spent.` : `.`}${RESET}`,
+          );
+        }
+      }
       return { actions: [{ kind: 'SET_MARKETING_SPEND', streamId, amountPerQuarter: value }] };
     }
 

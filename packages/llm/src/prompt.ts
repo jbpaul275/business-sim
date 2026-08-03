@@ -230,6 +230,14 @@ Open with whatever staffing the volume needs; that comes from \`capacityPerBlock
 
 The same applies to anything else that looks fixed. A cost that genuinely cannot move belongs in \`FIXED_PERIOD\`; a cost that moves with headcount or shifts belongs in \`STEP_FIXED\` with an honest floor. Putting variable labour in the fixed bucket makes a downturn unsurvivable in a way real businesses are not.
 
+### And they have to be able to grow
+
+\`capacityPerBlock\` is how much volume **one block** supports — one crew, one shift, one van. Size it for a real shift, then check what it implies at maturity, because this is the number that decides whether the business ever has to hire.
+
+A brewpub was drafted at 30,000 transactions a quarter per front-of-house block. It reached $4.4M a year — 370 covers a day — on five blocks and an owner, and never needed a sixth. Labour came out at 8% of revenue where full-service food runs 30-35%, and the single most consequential decision an operator makes disappeared from the game entirely.
+
+The arithmetic to do before you write the number: take the volume this business does in a good quarter, divide by \`capacityPerBlock\`, and ask whether that many crews could really serve it. 30,000 transactions a quarter is 330 a day, every day, from one crew. Write the per-shift figure you actually believe and let the block count come out where it comes out — four blocks of a believable size is a better model than one block of an unbelievable one.
+
 ## Templates
 
 If a seed template's cost structure genuinely fits the business, name it and the engine will use it. If none fits, set \`seedTemplateId\` to null and emit the cost lines yourself.
