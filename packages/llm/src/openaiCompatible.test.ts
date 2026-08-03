@@ -418,6 +418,53 @@ describe('the Kimi transport', () => {
     expect(system).toContain('Response schema');
   });
 
+  it('survives a turn that comes back double-encoded, without a retry', async () => {
+    /**
+     * The first live K2.6 failure, verbatim in shape: the model returned the
+     * turn as a JSON *string containing* the JSON object, so `JSON.parse`
+     * succeeded, produced a string, and Zod killed the session with `Expected
+     * object, received string`. That is what loose schema support looks like —
+     * an encoding of the right answer, which the parser now unwraps once.
+     */
+    const t = transport();
+    stub(t, () => textChunks(JSON.stringify(TURN)));
+    const result = await t.turn('system', [{ role: 'user', content: 'A froyo shop in Buffalo.' }]);
+    expect(result.turn.cta).toBe('How many scopes?');
+    expect(t.unusableRetries).toBe(0);
+  });
+
+  it('digs the object out of surrounding prose', async () => {
+    const t = transport();
+    stub(t, () => textChunks(`Here is my response:\n${TURN}\nLet me know!`));
+    const result = await t.turn('system', [{ role: 'user', content: 'x' }]);
+    expect(result.turn.cta).toBe('How many scopes?');
+  });
+
+  it('retries a malformed turn once instead of ending the session', async () => {
+    /**
+     * Malformed is the same failure class as garbled: nothing local can fix
+     * it and asking again is cheap. Without this, one bad encoding printed
+     * "The interview could not continue" over a Zod stack trace — a session
+     * killed by a shape, two turns into a business the player was describing.
+     */
+    const t = transport();
+    const seen = stub(t, (_req, call) =>
+      call === 1 ? textChunks('Sure! Let me think about your froyo concept...') : textChunks(TURN),
+    );
+    const result = await t.turn('system', [{ role: 'user', content: 'x' }]);
+    expect(result.turn.cta).toBe('How many scopes?');
+    expect(t.unusableRetries).toBe(1);
+    expect(seen).toHaveLength(2);
+  });
+
+  it('gives up honestly when both attempts are unparseable', async () => {
+    const t = transport();
+    stub(t, () => textChunks('I would love to help with your business!'));
+    await expect(t.turn('system', [{ role: 'user', content: 'x' }])).rejects.toThrow(
+      /generation fault/,
+    );
+  });
+
   it('lets every call survive a schema refusal, and stops paying for it', async () => {
     /**
      * The fallback lived in `draft()` alone, which was survivable while K3 —

@@ -57,6 +57,37 @@ export function stripFence(text: string): string {
 }
 
 /**
+ * Model output to a JSON value, tolerating the shapes weak enforcement emits.
+ *
+ * The first live K2.6 session died two turns in on `Expected object, received
+ * string`: the model returned the turn **double-encoded** — a JSON string
+ * containing the JSON object — so `JSON.parse` succeeded and produced a
+ * string, and Zod rightly refused it. That is what "schema support" without
+ * constrained decoding looks like from the outside: mostly right, sometimes
+ * wrapped, occasionally prose around the object.
+ *
+ * Three shapes, tried in order: the text as-is; the outermost `{…}` when prose
+ * surrounds it; one unwrap when the value parses to a string. Never more than
+ * one unwrap, and never anything cleverer — every result still goes through
+ * the same Zod schema, so the guarantee stays "cannot pass unnoticed". This
+ * recovers encodings of the right answer, not wrong answers.
+ */
+export function parseModelJson(text: string): unknown {
+  const cleaned = stripFence(text);
+  let value: unknown;
+  try {
+    value = JSON.parse(cleaned);
+  } catch (error) {
+    const first = cleaned.indexOf('{');
+    const last = cleaned.lastIndexOf('}');
+    if (first === -1 || last <= first) throw error;
+    value = JSON.parse(cleaned.slice(first, last + 1));
+  }
+  if (typeof value === 'string') value = JSON.parse(value.trim());
+  return value;
+}
+
+/**
  * A turn that cannot be shown or replayed.
  *
  * Two ways this happens, both seen live. The model returns text that is

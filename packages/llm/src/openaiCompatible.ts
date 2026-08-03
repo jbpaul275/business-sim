@@ -22,6 +22,7 @@ import {
   assertDraftShape,
   zInterviewTurn,
   type ConceptDraft,
+  type InterviewTurn,
 } from './draft.js';
 import { type TurnNarration, zTurnNarration } from './narration.js';
 import {
@@ -32,7 +33,7 @@ import {
   DRAFT_SCHEMA,
   TURN_SCHEMA,
   isUnusable,
-  stripFence,
+  parseModelJson,
 } from './wire.js';
 
 /**
@@ -548,23 +549,10 @@ export class OpenAICompatibleTransport implements ConceptTransport {
   }
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
-    let attempt = await this.complete(
-      'turn',
-      1,
-      system,
-      messages,
-      TURN_SCHEMA,
-      this.turnEffort,
-      this.turnModel,
-      this.turnMaxTokens,
-    );
-    let turn = zInterviewTurn.parse(JSON.parse(stripFence(attempt.text)));
-
-    if (isUnusable(turn)) {
-      this.unusableRetries += 1;
-      attempt = await this.complete(
+    const ask = (attempt: number): ReturnType<typeof this.complete> =>
+      this.complete(
         'turn',
-        2,
+        attempt,
         system,
         messages,
         TURN_SCHEMA,
@@ -572,7 +560,33 @@ export class OpenAICompatibleTransport implements ConceptTransport {
         this.turnModel,
         this.turnMaxTokens,
       );
-      turn = zInterviewTurn.parse(JSON.parse(stripFence(attempt.text)));
+
+    let attempt = await ask(1);
+    let turn: InterviewTurn;
+    try {
+      turn = zInterviewTurn.parse(parseModelJson(attempt.text));
+    } catch {
+      /**
+       * Malformed is the same failure class as garbled: nothing here can fix
+       * it, and asking again is cheap. Without this retry, the first K2.6
+       * session died two turns in — one shape the parser had not seen, and
+       * "The interview could not continue" over a Zod stack trace. A model
+       * that misencodes once usually encodes fine the second time; one that
+       * cannot gets the same honest UnusableResponseError as a garbler.
+       */
+      this.unusableRetries += 1;
+      attempt = await ask(2);
+      try {
+        turn = zInterviewTurn.parse(parseModelJson(attempt.text));
+      } catch {
+        throw new UnusableResponseError('garbled');
+      }
+    }
+
+    if (isUnusable(turn)) {
+      this.unusableRetries += 1;
+      attempt = await ask(2);
+      turn = zInterviewTurn.parse(parseModelJson(attempt.text));
       if (isUnusable(turn)) {
         throw new UnusableResponseError(turn.message.trim().length === 0 ? 'empty' : 'garbled');
       }
@@ -597,7 +611,7 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       this.adviceMaxTokens,
     );
     return {
-      advice: zTurnAdvice.parse(JSON.parse(stripFence(attempt.text))),
+      advice: zTurnAdvice.parse(parseModelJson(attempt.text)),
       usage: attempt.usage,
     };
   }
@@ -627,7 +641,7 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       this.draftModel,
       this.turnMaxTokens,
     );
-    return zAdjudication.parse(JSON.parse(stripFence(attempt.text)));
+    return zAdjudication.parse(parseModelJson(attempt.text));
   }
 
   /** §11.5, on the advisor's dials — it fires every quarter. */
@@ -642,7 +656,7 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       this.turnModel,
       this.adviceMaxTokens,
     );
-    return zTurnNarration.parse(JSON.parse(stripFence(attempt.text)));
+    return zTurnNarration.parse(parseModelJson(attempt.text));
   }
 
   /**
@@ -697,7 +711,7 @@ export class OpenAICompatibleTransport implements ConceptTransport {
 
     let json: unknown;
     try {
-      json = JSON.parse(stripFence(text));
+      json = parseModelJson(text);
     } catch {
       throw new MalformedDraftError('it was not valid JSON');
     }
