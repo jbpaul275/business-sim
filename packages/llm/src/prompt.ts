@@ -197,6 +197,16 @@ Do the multiplication before you emit it. For TRAFFIC that is \`addressableTraff
 
 If the honest answer is that this business really does earn far less than the comparable you have in mind, say that in \`expectedAnnualRevenue\` and let the numbers stand. The check is for self-contradiction, not for ambition.
 
+### Cost lines have to be able to shrink
+
+\`minimumBlocks\` on a STEP_FIXED line is the floor below which the business **cannot operate at all** — not the headcount you are opening with. It is almost always 0 or 1: one person to open the door, one licensed operator the permit requires, one crew a safety rule will not let out alone.
+
+A cafe was drafted with four barista blocks and \`minimumBlocks: 4\`. That says three baristas is *impossible*, which is false — it was just the opening plan. Demand came in at half of capacity, the player correctly decided to cut, and was refused every quarter while emergency debt at 19.5% compounded underneath. A launch plan written into the floor is a trap with no exit, and the player has no way to see it was ever set.
+
+Open with whatever staffing the volume needs; that comes from \`capacityPerBlock\` and the engine works it out. The minimum is a different question, asked once: what is the smallest this can be and still be a business?
+
+The same applies to anything else that looks fixed. A cost that genuinely cannot move belongs in \`FIXED_PERIOD\`; a cost that moves with headcount or shifts belongs in \`STEP_FIXED\` with an honest floor. Putting variable labour in the fixed bucket makes a downturn unsurvivable in a way real businesses are not.
+
 ## Templates
 
 If a seed template's cost structure genuinely fits the business, name it and the engine will use it. If none fits, set \`seedTemplateId\` to null and emit the cost lines yourself.

@@ -384,6 +384,28 @@ export function draftIssues(draft: ConceptDraft): string[] {
     if (p.low > p.high) issues.push(`${where}: parameter '${p.name}' has low above high.`);
   }
 
+  /**
+   * A floor that is really a launch plan.
+   *
+   * A cafe drafted four barista blocks with `minimumBlocks: 4` — a claim that
+   * three baristas is physically impossible. Demand arrived at half of
+   * capacity, the player tried to cut every quarter, and was refused every
+   * quarter while 19.5% emergency debt compounded. The player could not see
+   * the floor had ever been set, so the business simply became unfixable.
+   *
+   * One is a real floor. More than one is a claim worth making explicitly.
+   */
+  for (const line of draft.costLines) {
+    if (line.class === 'STEP_FIXED' && (line.minimumBlocks ?? 0) > 1) {
+      issues.push(
+        `'${line.label}' has a minimum of ${line.minimumBlocks} blocks, which says the business ` +
+          `cannot run with fewer — not that it plans to open with that many. Unless a permit or a ` +
+          `safety rule genuinely requires it, set the minimum to 0 or 1 and let opening headcount ` +
+          `come from capacityPerBlock; otherwise the player can never cut this line in a downturn.`,
+      );
+    }
+  }
+
   // §3.8: a UTILIZATION stream's capacity comes from staffed blocks, so it
   // needs a STEP_FIXED labour line or it has no ceiling at all. Caught here
   // rather than at the commit gate, where UTILIZATION_WITHOUT_STAFFING arrives

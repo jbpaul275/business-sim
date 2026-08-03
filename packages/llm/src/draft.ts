@@ -116,6 +116,22 @@ export const zDraftCostLine = z.object({
   accruable: z.boolean(),
   /** STEP_FIXED only: volume one block supports, in driver units. */
   capacityPerBlock: z.number().nullable(),
+  /**
+   * The floor below which this line cannot go — **not** the opening headcount.
+   *
+   * A cafe was drafted with four barista blocks and `minimumBlocks: 4`, which
+   * says the business is physically incapable of running with three. It is
+   * not; four is what opening day was planned around. The player watched
+   * demand sit at 51% of capacity, correctly decided to cut, and was refused
+   * every quarter — "already at its minimum block count" — while emergency
+   * debt at 19.5% compounded underneath. A launch plan written into the floor
+   * is a doom loop with no exit.
+   *
+   * This is almost always 0 or 1: one person to open the door, one licensed
+   * operator a permit requires, one crew a safety rule will not let you send
+   * out alone. Anything above 1 is a claim that fewer is *impossible*, not
+   * that fewer would be uncomfortable.
+   */
   minimumBlocks: z.number().nullable(),
   sourceNote: z.string().default(''),
   /** Defaults downward for the same reason as `zDraftParam.provenance`. */

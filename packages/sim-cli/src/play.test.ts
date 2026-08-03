@@ -184,6 +184,18 @@ describe('asking what to do', () => {
     expect(printed).toMatch(/blocks carrying|is what this quarter's volume needs/);
   });
 
+  it('names overstaffing as the lever, instead of denying it is one', async () => {
+    // "cutting staff you have already paid for does not help" was said to a
+    // cafe carrying four barista blocks against demand needing two, where
+    // cutting was the single most useful thing available. Idle capacity does
+    // not mean the cost structure is right-sized; it usually means the
+    // opposite.
+    const printed = await transcript(['how can we raise revenues?', 'quit']);
+    expect(printed).toMatch(/blocks this quarter's volume does not need/);
+    expect(printed).toMatch(/`fire \w+ \d+`/);
+    expect(printed).not.toMatch(/cutting staff you have already paid for does not/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);
@@ -193,10 +205,12 @@ describe('asking what to do', () => {
   });
 
   it('names the binding constraint rather than listing every lever', async () => {
-    // The seeded restaurant opens well under capacity and loses money, so the
-    // honest advice is that demand binds and cutting staff will not fix it.
+    // The seeded restaurant opens well under capacity and loses money. Demand
+    // is short — and it is also carrying staff the volume does not need, which
+    // is the half the player controls this quarter.
     const printed = await transcript(['what do i do now?', 'quit']);
-    expect(printed).toMatch(/of capacity, so the constraint is demand/);
+    expect(printed).toMatch(/of capacity/);
+    expect(printed).toMatch(/staffed for the building rather than the demand/);
   });
 
   it('says nothing the ledger does not', async () => {

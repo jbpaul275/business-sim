@@ -337,6 +337,28 @@ function advise(business: Business, result: TickResult, question = ''): string[]
     0n,
   );
 
+  /**
+   * Blocks being paid for that this quarter's volume does not need.
+   *
+   * "Cutting staff you have already paid for does not help" was said to a cafe
+   * carrying four barista blocks against demand that needed two — where
+   * cutting was the single most useful thing available. Idle capacity does not
+   * mean the cost structure is right-sized; it usually means the opposite.
+   */
+  const overstaffed = business.costs.stepFixed
+    .map((line) => {
+      const per = Number(line.capacity?.capacityPerBlock ?? 0);
+      if (per <= 0 || !stream) return undefined;
+      const needed = Math.ceil(stream.demandVolume / per);
+      const floor = Math.max(line.minimumBlocks ?? 0, needed);
+      const spare = line.currentBlocks - floor;
+      return spare > 0
+        ? { line, spare, saving: line.blockCostPerQuarter * BigInt(spare) }
+        : undefined;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== undefined);
+  const sparePay = overstaffed.reduce<Money>((a, o) => a + o.saving, 0n);
+
   // ── Topic answers ────────────────────────────────────────────────────────
   // Each one answers the question that was asked, with this quarter's numbers
   // in it. The arithmetic is the point: "more sites will not help" is an
@@ -424,15 +446,22 @@ function advise(business: Business, result: TickResult, question = ''): string[]
         const per = Number(line.capacity?.capacityPerBlock ?? 0);
         if (per <= 0) continue;
         const needed = Math.ceil(stream.demandVolume / per);
-        const floor = Math.max(line.minimumBlocks ?? 0, needed);
-        const spare = line.currentBlocks - floor;
+        const spare = line.currentBlocks - Math.max(line.minimumBlocks ?? 0, needed);
+        const blockedByFloor = needed < line.currentBlocks && spare <= 0;
         out.push(
           spare > 0
             ? `${line.label}: ${line.currentBlocks} blocks carrying ${Math.round(stream.demandVolume).toLocaleString()} ` +
                 `of demand at ${per.toLocaleString()} each — ${spare} could go and still cover it, ` +
                 `saving ${toCompact(line.blockCostPerQuarter * BigInt(spare))} a quarter.`
-            : `${line.label}: ${line.currentBlocks} blocks is what this quarter's volume needs. ` +
-                `Cutting here turns customers away rather than saving money.`,
+            : blockedByFloor
+              ? // The doom loop, named. Volume needs fewer than you have, and
+                // the concept's own floor forbids the cut — which the player
+                // never chose and cannot see.
+                `${line.label}: volume needs ${needed} blocks and you have ${line.currentBlocks}, but ` +
+                  `this line was drafted with a minimum of ${line.minimumBlocks} and cannot go lower. ` +
+                  `That floor is part of the concept, not a rule of the game.`
+              : `${line.label}: ${line.currentBlocks} blocks is what this quarter's volume needs. ` +
+                  `Cutting here turns customers away rather than saving money.`,
         );
       }
     }
@@ -488,8 +517,12 @@ function advise(business: Business, result: TickResult, question = ''): string[]
         );
       } else if (used < 0.6) {
         out.push(
-          `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
-            `\`marketing\` and \`price\` move volume; cutting staff you have already paid for does not.`,
+          sparePay > 0n
+            ? `You are at ${pct(used)} of capacity: demand is short of what you built, and you are ` +
+                `staffed for the building rather than the demand. \`marketing\` and \`price\` move ` +
+                `volume; right-sizing the staffing is the half you control this quarter.`
+            : `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
+                `\`marketing\` and \`price\` move volume, and the staffing already matches the volume.`,
         );
       }
     }
@@ -504,6 +537,15 @@ function advise(business: Business, result: TickResult, question = ''): string[]
         `EBITDA is ${toCompact(is.ebitda)} on ${toCompact(is.revenue)} of revenue. ` +
           `Fixed costs are ${toCompact(fixed)} a quarter and staffing is ${toCompact(blocks)}, ` +
           `and only the second is reachable this quarter. \`costs\` breaks it down line by line.`,
+      );
+    }
+    // Named before the debt line, because it is the only lever here that
+    // changes the trajectory rather than buying time against it.
+    if (sparePay > 0n) {
+      out.push(
+        `You are paying for ${overstaffed.reduce((a, o) => a + o.spare, 0)} blocks this quarter's ` +
+          `volume does not need — ${toCompact(sparePay)} a quarter. ` +
+          `${overstaffed.map((o) => `\`fire ${o.line.id} ${o.spare}\``).join(' and ')}.`,
       );
     }
     if (is.interestExpense > 0n && is.ebitda < is.interestExpense) {

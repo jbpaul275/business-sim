@@ -632,6 +632,63 @@ describe('how hard the turn worked', () => {
   });
 });
 
+describe('a floor that is really a launch plan', () => {
+  it('rejects a minimum that would make the line uncuttable', () => {
+    // A cafe was drafted with four barista blocks and `minimumBlocks: 4` — a
+    // claim that three baristas is physically impossible. Demand arrived at
+    // half of capacity, the player tried to cut every quarter and was refused
+    // every quarter, while 19.5% emergency debt compounded underneath. The
+    // floor was never something the player chose or could see.
+    const cafe = draft({
+      costLines: [
+        {
+          label: 'Baristas and counter staff',
+          class: 'STEP_FIXED',
+          statementLine: 'LABOR',
+          value: 21_000,
+          isLabor: true,
+          accruable: false,
+          capacityPerBlock: 4_800,
+          minimumBlocks: 4,
+          sourceNote: 'Four on at open.',
+          provenance: 'LLM_ESTIMATE',
+        },
+      ],
+    });
+    const issues = draftIssues(cafe);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('cannot run with fewer');
+    // And it says what to do instead, because "too high" is not actionable.
+    expect(issues[0]).toContain('capacityPerBlock');
+  });
+
+  it('leaves a real floor alone', () => {
+    // One person to open the door is a genuine constraint.
+    const ok = draft({
+      costLines: [
+        {
+          label: 'Counter staff',
+          class: 'STEP_FIXED',
+          statementLine: 'LABOR',
+          value: 21_000,
+          isLabor: true,
+          accruable: false,
+          capacityPerBlock: 4_800,
+          minimumBlocks: 1,
+          sourceNote: 'Someone has to be there.',
+          provenance: 'LLM_ESTIMATE',
+        },
+      ],
+    });
+    expect(draftIssues(ok)).toEqual([]);
+  });
+
+  it('tells the model what the floor means before it has to be corrected', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Cost lines have to be able to shrink');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('cannot operate at all');
+  });
+});
+
 describe('permission that is not waited for', () => {
   it('holds when the model asks to be told to go', async () => {
     // Live, on a lunar tourism base: "Say go and I'll draft the full model —
