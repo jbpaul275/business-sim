@@ -25,7 +25,7 @@ import { totalMonthZero, type MonthZeroOutlays } from './workingCapital.js';
  */
 
 export interface WorldConfigInput {
-  startMode: 'LOW' | 'MID' | 'FREEPLAY';
+  startMode: 'LOW' | 'MID' | 'HIGH' | 'FREEPLAY';
   customCapital?: Money;
   personalTaxRate?: number;
   corporateTaxRate?: number;

@@ -87,23 +87,30 @@ const ARCHETYPE_BLURB: Record<Archetype, string> = {
 // Phase 0 — starting capital
 // ---------------------------------------------------------------------------
 
-async function chooseCapital(input: LineSource): Promise<{ mode: 'LOW' | 'MID' | 'FREEPLAY'; custom?: Money }> {
+async function chooseCapital(
+  input: LineSource,
+): Promise<{ mode: 'LOW' | 'MID' | 'HIGH' | 'FREEPLAY'; custom?: Money }> {
   console.log(`\n${rule('Starting capital')}`);
   console.log(`${DIM}  Everything you have to put at risk.${RESET}`);
-  console.log(`  1  Low       ${rpad(toDisplay(START_CAPITAL.LOW, { showCents: false }), 12)}  ${DIM}tight; most concepts will need debt${RESET}`);
-  console.log(`  2  Mid       ${rpad(toDisplay(START_CAPITAL.MID, { showCents: false }), 12)}  ${DIM}room for one serious swing${RESET}`);
-  console.log(`  3  Custom    ${DIM}free play, capped at $1B${RESET}`);
+  const tier = (n: number, label: string, amount: Money, blurb: string): string =>
+    `  ${n}  ${pad(label, 10)}${rpad(toDisplay(amount, { showCents: false }), 12)}  ${DIM}${blurb}${RESET}`;
+  console.log(tier(1, 'Low', START_CAPITAL.LOW, 'one location, financed carefully'));
+  console.log(tier(2, 'Mid', START_CAPITAL.MID, 'a real build, or a small portfolio'));
+  console.log(tier(3, 'High', START_CAPITAL.HIGH, 'a project that needs a capital stack'));
+  console.log(`  4  ${pad('Custom', 10)}${DIM}free play, capped at $1B${RESET}`);
 
   const choice = await ask(input, '> ', 2, (raw) => {
     const n = parseNumber(raw);
-    return n === 1 || n === 2 || n === 3 ? n : undefined;
+    return n !== undefined && n >= 1 && n <= 4 ? n : undefined;
   });
 
   if (choice === 1) return { mode: 'LOW' };
   if (choice === 2) return { mode: 'MID' };
+  if (choice === 3) return { mode: 'HIGH' };
   const custom = await ask(input, '  How much? ', START_CAPITAL.MID, parseMoney);
   return { mode: 'FREEPLAY', custom };
 }
+
 
 // ---------------------------------------------------------------------------
 // Phases 1–2 — concept and synthesis, structured

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_USAGE, ScriptedTransport, draftToTemplate, type ConceptDraft } from '@bizsim/llm';
 import { buildModelFromTemplate, validateBusinessModel } from '@bizsim/engine';
 import { isThin, runSetup } from './setup.js';
+import { START_CAPITAL, FREEPLAY_CAPITAL_CAP } from '@bizsim/schemas';
+import { clampFreeplay } from '@bizsim/engine';
 import { fromDisplay } from '@bizsim/money';
 import type { LineSource } from './input.js';
 
@@ -302,7 +304,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3', // custom starting capital
+      '4', // custom starting capital
       '900000',
       'A place that rents telescopes by the hour on a dark-sky ridge.',
       '24 scopes, about 1400 square feet.',
@@ -351,7 +353,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A place that rents telescopes by the hour on a dark-sky ridge.',
       '24 scopes, about 1400 square feet.',
@@ -402,7 +404,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       usage: EMPTY_USAGE,
     };
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A soft-serve truck in San Antonio.',
       '', // nothing to argue with
@@ -469,7 +471,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
@@ -508,7 +510,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '1', // $100,000 against a build far larger than that
+      '4', // custom
+      '60000', // against a build far larger than that
       'A telescope rental place on a ridge.',
       '24 scopes.',
       '', // nothing to argue with
@@ -539,7 +542,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '300000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
@@ -579,7 +582,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
@@ -621,7 +624,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [revised],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
@@ -661,7 +664,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
@@ -695,7 +698,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       [draft],
     );
     const input = scriptedInput([
-      '3',
+      '4', // custom
       '900000',
       'A telescope rental place on a ridge.',
       '24 scopes.',
@@ -762,5 +765,27 @@ describe('what counts as a thin opening', () => {
 
   it('says nothing about a business that does not burn in its first quarter', () => {
     expect(isThin(0n, 0n)).toBe(false);
+  });
+});
+
+describe('the starting tiers', () => {
+  it('offers four, an order of magnitude apart', () => {
+    // These were $100,000 and $1,000,000. The low tier could not fund anything
+    // a player actually described — a cafe, a pawn shop and a campground all
+    // cleared it before the doors opened — so the only outcome available there
+    // was a refusal at the gate. A starting amount that cannot start anything
+    // is not a difficulty setting.
+    expect(START_CAPITAL.LOW).toBe(fromDisplay(500_000));
+    expect(START_CAPITAL.MID).toBe(fromDisplay(5_000_000));
+    expect(START_CAPITAL.HIGH).toBe(fromDisplay(50_000_000));
+    // The spread is what makes them different games rather than different
+    // amounts.
+    expect(START_CAPITAL.MID / START_CAPITAL.LOW).toBe(10n);
+    expect(START_CAPITAL.HIGH / START_CAPITAL.MID).toBe(10n);
+  });
+
+  it('still caps free play at a billion', () => {
+    expect(clampFreeplay(fromDisplay(5_000_000_000))).toBe(FREEPLAY_CAPITAL_CAP);
+    expect(clampFreeplay(fromDisplay(250_000_000))).toBe(fromDisplay(250_000_000));
   });
 });

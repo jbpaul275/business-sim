@@ -27,7 +27,7 @@ import type { EngineEvent } from './events.js';
 
 export interface WorldConfig {
   startCapital: Money;
-  startMode: 'LOW' | 'MID' | 'FREEPLAY';
+  startMode: 'LOW' | 'MID' | 'HIGH' | 'FREEPLAY';
   milestonePeriod: number;
   personalTaxRate: number;
   corporateTaxRate: number;
@@ -190,7 +190,22 @@ export interface WorldState {
 /** Spec §16 Q4 / docs/plan/03-spec-gaps.md G-11. */
 export const FREEPLAY_CAPITAL_CAP: Money = 100_000_000_000n; // $1B
 
-export const START_CAPITAL: Record<'LOW' | 'MID', Money> = {
-  LOW: 10_000_000n, // $100,000
-  MID: 100_000_000n, // $1,000,000
+/**
+ * The three preset tiers, and what they are for.
+ *
+ * These were $100,000 and $1,000,000. The low tier could not fund anything a
+ * player actually described: a cafe, a pawn shop and a campground all cleared
+ * it before the doors opened, so the only outcome available at that tier was a
+ * refusal at the gate. A starting amount that cannot start anything is not a
+ * difficulty setting.
+ *
+ * The spread is now roughly an order of magnitude apart, which is what makes
+ * them different *games* rather than different amounts: $500k is one location
+ * financed carefully, $5M is a real build or a small portfolio, $50M is a
+ * project that needs a capital stack rather than a chequebook.
+ */
+export const START_CAPITAL: Record<'LOW' | 'MID' | 'HIGH', Money> = {
+  LOW: 50_000_000n, // $500,000
+  MID: 500_000_000n, // $5,000,000
+  HIGH: 5_000_000_000n, // $50,000,000
 };
