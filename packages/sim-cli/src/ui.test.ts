@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { box, frameWidth, masthead, rule, speech, visibleWidth, youPrompt } from './ui.js';
+import { parseMoney } from './input.js';
+import { fromDisplay } from '@bizsim/money';
 
 /**
  * The frame is decoration, and decoration that misrenders is worse than none —
@@ -86,5 +88,28 @@ describe('the frame holds its shape', () => {
     expect(escapes.test(masthead())).toBe(false);
     expect(escapes.test(rule('Funding'))).toBe(false);
     expect(escapes.test(youPrompt())).toBe(false);
+  });
+});
+
+describe('reading an amount', () => {
+  it('accepts the units the screen advertises', () => {
+    // "Custom — free play, capped at $1B", and then `$1B` was rejected as
+    // unreadable. A prompt that names a unit it cannot parse is worse than one
+    // that names none.
+    expect(parseMoney('$1B')).toBe(fromDisplay(1_000_000_000));
+    expect(parseMoney('1b')).toBe(fromDisplay(1_000_000_000));
+    expect(parseMoney('2bn')).toBe(fromDisplay(2_000_000_000));
+    expect(parseMoney('1.5m')).toBe(fromDisplay(1_500_000));
+    expect(parseMoney('12k')).toBe(fromDisplay(12_000));
+    expect(parseMoney('$1,000,000,000')).toBe(fromDisplay(1_000_000_000));
+    expect(parseMoney('$40,000')).toBe(fromDisplay(40_000));
+    expect(parseMoney('45')).toBe(fromDisplay(45));
+    expect(parseMoney('1 000 000')).toBe(fromDisplay(1_000_000));
+  });
+
+  it('still refuses what is genuinely unreadable', () => {
+    for (const raw of ['', 'lots', '$', '1x', 'a million', '1.2.3']) {
+      expect(parseMoney(raw), raw).toBeUndefined();
+    }
   });
 });

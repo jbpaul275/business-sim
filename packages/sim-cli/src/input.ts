@@ -57,15 +57,23 @@ async function pipedSource(): Promise<LineSource> {
 export const openInput = async (): Promise<LineSource> =>
   stdin.isTTY ? ttySource() : pipedSource();
 
-/** Accepts `45`, `12000`, `12k`, `1.5m`, `$40,000`. */
+/**
+ * Accepts `45`, `12000`, `12k`, `1.5m`, `$1b`, `2bn`, `$40,000`.
+ *
+ * `b` is here because the screen above it says "capped at $1B" and then
+ * refused `$1B`. A prompt that names a unit it cannot read is worse than one
+ * that names none.
+ */
+const SCALE: Record<string, number> = { k: 1_000, m: 1_000_000, b: 1_000_000_000 };
+
 export function parseMoney(raw: string): Money | undefined {
-  const cleaned = raw.trim().replace(/[$,]/g, '').toLowerCase();
-  const match = /^(-?\d*\.?\d+)([km])?$/.exec(cleaned);
+  const cleaned = raw.trim().replace(/[$,_\s]/g, '').toLowerCase();
+  const match = /^(-?\d*\.?\d+)(k|m|b|bn)?$/.exec(cleaned);
   if (!match) return undefined;
   const base = Number(match[1]);
   if (!Number.isFinite(base)) return undefined;
-  const scale = match[2] === 'k' ? 1_000 : match[2] === 'm' ? 1_000_000 : 1;
-  return fromDisplay(base * scale);
+  const suffix = match[2]?.charAt(0) ?? '';
+  return fromDisplay(base * (SCALE[suffix] ?? 1));
 }
 
 /** Ask until the answer parses. A blank line takes the default. */

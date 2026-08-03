@@ -77,6 +77,26 @@ const ASKS_FOR_INFORMATION =
 
 export const playerAskedSomething = (text: string): boolean => ASKS_FOR_INFORMATION.test(text);
 
+/**
+ * Did the model ask permission and then not wait for it?
+ *
+ * Live, on a lunar tourism base: "Say go and I'll draft the full model —
+ * berths, seat-lease costs, ground crew and consumables — for you to argue
+ * with." It then drafted, immediately, without the player saying anything.
+ *
+ * Asking for consent and acting before it arrives is worse than not asking:
+ * the player now believes the question was rhetorical, and next time they will
+ * not read the cta. Whatever the model intended, the honest reading of its own
+ * sentence is that a turn is owed.
+ *
+ * Also fixed in the prompt, which is where a model should learn not to write
+ * this. This exists so the sentence means what it says regardless.
+ */
+const ASKS_PERMISSION =
+  /\b(say go|shall i|want me to|should i|would you like me to|if that (sounds|works)|let me know|ready when you are)\b/i;
+
+export const modelAskedPermission = (cta: string): boolean => ASKS_PERMISSION.test(cta);
+
 export class ConceptInterview {
   private readonly transport: ConceptTransport;
   private readonly system: string;
@@ -153,15 +173,20 @@ export class ConceptInterview {
     // extra call: the model's own message is shown, and only the intention to
     // draft is withheld. Saying "go ahead" clears it, because the player is
     // allowed to decide they have heard enough.
-    const holdForAnswer = turn.readyToDraft && playerAskedSomething(said);
+    const holdForAnswer =
+      turn.readyToDraft && (playerAskedSomething(said) || modelAskedPermission(turn.cta));
 
     if (!turn.readyToDraft || holdForAnswer) {
       return {
         status: 'ASKING',
         message: turn.message,
-        cta: holdForAnswer
-          ? 'Anything else you need from me before I build it? Say `go ahead` when you are ready.'
-          : turn.cta,
+        // When the model asked for permission, its own sentence is the right
+        // prompt — replacing it would answer a question the player has not
+        // seen. Only a player's unanswered question needs a different ask.
+        cta:
+          holdForAnswer && !modelAskedPermission(turn.cta)
+            ? 'Anything else you need from me before I build it? Say `go ahead` when you are ready.'
+            : turn.cta,
         transcript: this.transcript,
       };
     }

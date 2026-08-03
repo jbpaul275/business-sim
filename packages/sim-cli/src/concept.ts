@@ -221,12 +221,15 @@ export async function runConceptInterview(
     // repair round and a dead end: an offshore rave ship put 700 guests into
     // 2,000 square feet, and the player found out after five financing
     // questions and a million dollars, with the conversation gone.
-    const faults = () => [
-      ...draftIssues(state.draft),
-      ...buildabilityIssues(state.draft),
-      ...revenueRealityIssues(state.draft),
-    ];
-    const issues = faults();
+    // Structural first, and *only* structural when there is any. A lunar base
+    // with no `ratePerUnitPerQuarter` prices at zero, so the revenue check
+    // dutifully reported "$0 in a mature year, off by 0.00x" — a magnitude
+    // claim about a shadow of the real fault, printed above it. One root cause
+    // per round: the model fixes the price, and the revenue check gets a
+    // meaningful number to check on the next pass.
+    const structural = [...draftIssues(state.draft), ...buildabilityIssues(state.draft)];
+    const issues =
+      structural.length > 0 ? structural : revenueRealityIssues(state.draft);
     if (issues.length > 0 && repairs < MAX_REPAIRS) {
       repairs += 1;
       console.log(`  ${YELLOW}The draft has problems I need to fix:${RESET}`);

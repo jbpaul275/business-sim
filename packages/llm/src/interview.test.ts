@@ -513,6 +513,58 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
   });
 });
 
+describe('permission that is not waited for', () => {
+  it('holds when the model asks to be told to go', async () => {
+    // Live, on a lunar tourism base: "Say go and I'll draft the full model —
+    // berths, seat-lease costs, ground crew and consumables — for you to argue
+    // with." It then drafted immediately, without the player saying anything.
+    // Asking for consent and acting before it arrives is worse than not
+    // asking: the player learns the cta is rhetorical, and the cta is the only
+    // place the next step is ever stated.
+    const transport = new ScriptedTransport(
+      [ready('Leasing transport keeps it variable.', "Say go and I'll draft the full model.")],
+      [draft()],
+    );
+    const interview = new ConceptInterview({ transport });
+
+    const state = await interview.send('We just operate the base, SpaceX flies it.');
+    expect(state.status).toBe('ASKING');
+    // The model's own sentence stays: replacing it would answer a question the
+    // player has not seen yet.
+    expect(state.cta).toBe("Say go and I'll draft the full model.");
+  });
+
+  it('drafts on the next turn, once told', async () => {
+    const transport = new ScriptedTransport(
+      [
+        ready('Leasing transport keeps it variable.', 'Shall I draft that?'),
+        ready('Building it now.', 'The figures land in a moment.'),
+      ],
+      [draft()],
+    );
+    const interview = new ConceptInterview({ transport });
+    expect((await interview.send('We just operate the base.')).status).toBe('ASKING');
+    expect((await interview.send('go')).status).toBe('DRAFTED');
+  });
+
+  it('does not hold a turn that simply states what is happening', async () => {
+    // The correct shape, and it must not cost a turn.
+    for (const cta of [
+      'Building it now — the figures land in a moment.',
+      'Here are the numbers.',
+      'Press enter to see the model.',
+    ]) {
+      const transport = new ScriptedTransport([ready('Enough to build against.', cta)], [draft()]);
+      const interview = new ConceptInterview({ transport });
+      expect((await interview.send('4 berths at $10M a day.')).status, cta).toBe('DRAFTED');
+    }
+  });
+
+  it('tells the model not to write that cta in the first place', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Do not ask permission you are not going to wait for');
+  });
+});
+
 describe('the streams the mapper cannot see', () => {
   it('rejects a draft with more than one stream, because the rest vanish', () => {
     // A veggie burger place in Toledo drafted four streams — dine-in,
