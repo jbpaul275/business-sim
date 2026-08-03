@@ -482,6 +482,18 @@ describe('the prompt carries D-5', () => {
     );
   });
 
+  it('does not treat "I do not know" as a reason to ask again', () => {
+    // Live: "I don't know, I've never owned a firm like this — you tell me."
+    // The right move is to estimate, label it, and draft. Another question
+    // costs the player half a minute and gets a worse answer than showing them
+    // a number they can correct.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('that is not a reason for another question');
+  });
+
+  it('budgets questions against what a turn actually costs', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Two or three questions, then draft');
+  });
+
   it('pushes toward drafting rather than one more useful question', () => {
     // Four turns in and still interviewing. The register and the challenge loop
     // exist so the interview does not have to be exhaustive.

@@ -24,6 +24,12 @@ export interface InterviewOptions {
    * commits is a failure mode the player cannot escape from the inside.
    */
   maxTurns?: number;
+  /**
+   * Fired when the interview stops asking and starts synthesising. The draft
+   * is a second call at higher effort and is much the slower of the two, so a
+   * caller showing progress should be able to say which is happening.
+   */
+  onDrafting?: () => void;
 }
 
 export type InterviewState =
@@ -67,8 +73,11 @@ export class ConceptInterview {
   lastReasoning: string | undefined;
   readonly transcript: InterviewMessage[] = [];
 
+  private readonly onDrafting: (() => void) | undefined;
+
   constructor(options: InterviewOptions) {
     this.transport = options.transport;
+    this.onDrafting = options.onDrafting;
     this.maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
     const templates = options.templates ?? [];
     this.system =
@@ -128,6 +137,7 @@ export class ConceptInterview {
       };
     }
 
+    this.onDrafting?.();
     // A second call, with the draft schema this time. Splitting the two is what
     // keeps each request's decoding grammar inside the API's size limit, and it
     // also stops the model juggling seventeen overhead fields while asking

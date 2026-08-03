@@ -11,6 +11,7 @@ import {
 } from '@bizsim/llm';
 import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
+import { waiting } from './waiting.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -79,8 +80,10 @@ export async function runConceptInterview(
   );
   console.log(`${DIM}${wrap('Ctrl-C to abandon setup.', 76, '  ')}${RESET}\n`);
 
+  let spinner = { stop: () => {}, label: (_: string) => {} };
   const interview = new ConceptInterview({
     transport: transport ?? new AnthropicConceptTransport(),
+    onDrafting: () => spinner.label('building the model'),
     // The templates are offered as a convenience, not a menu: the model uses
     // one only when its cost structure genuinely fits, and otherwise emits its
     // own cost lines (D-5).
@@ -141,9 +144,11 @@ export async function runConceptInterview(
     }
 
     let state;
+    spinner = waiting('thinking');
     try {
       state = await interview.send(reply);
     } catch (error) {
+      spinner.stop();
       if (error instanceof ConceptRefusedError) {
         console.log(`\n  ${RED}${error.message}${RESET}`);
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);
@@ -161,6 +166,7 @@ export async function runConceptInterview(
       console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
       return undefined;
     }
+    spinner.stop();
 
     if (state.status === 'EXHAUSTED') {
       console.log(`\n  ${YELLOW}${wrap(state.message, 74, '')}${RESET}`);
