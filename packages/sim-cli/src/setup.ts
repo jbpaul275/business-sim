@@ -34,7 +34,12 @@ import {
   type ConceptTransport,
 } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
-import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
+import {
+  conceptKeyVar,
+  conceptPathAvailable,
+  runConceptInterview,
+  type ConceptResult,
+} from './concept.js';
 import { capitalIntensityNote, projectFundingGap } from './plausibility.js';
 import { openJournal, type Journal } from './journal.js';
 import { masthead, note, rule } from './ui.js';
@@ -710,7 +715,7 @@ export async function runSetup(
     businessName = concept.mapped.businessName;
   } else {
     console.log(
-      `\n${DIM}  No ANTHROPIC_API_KEY, so the conversational path is unavailable and this${RESET}\n` +
+      `\n${DIM}  No ${conceptKeyVar()}, so the conversational path is unavailable and this${RESET}\n` +
         `${DIM}  falls back to picking a template. Set the key to describe a business in${RESET}\n` +
         `${DIM}  your own words instead.${RESET}`,
     );

@@ -1,4 +1,4 @@
-import type { UsageTotal } from '@bizsim/llm';
+import { providerName, type ProviderName, type UsageTotal } from '@bizsim/llm';
 
 /**
  * What a session actually cost.
@@ -23,9 +23,13 @@ import type { UsageTotal } from '@bizsim/llm';
  *
  * These are set from the environment rather than hardcoded, because a price
  * baked into a binary is a price that goes stale silently and then quotes a
- * confident wrong number for a year. The defaults are Opus-class list rates
- * and are the least trustworthy thing in this file — check them against
- * current pricing before quoting the output of this meter to anyone.
+ * confident wrong number for a year. It had already happened: the defaults were
+ * $15/$1.50/$75 — Opus 4.x-era list rates — which overstated an Opus 5 session
+ * by three times, under a comment warning that this was exactly the risk.
+ *
+ * The default now follows the resolved provider, so the meter is right without
+ * anyone remembering to set three variables after switching. Overrides still
+ * win, and are still the answer when a price changes between releases.
  */
 const rate = (name: string, fallback: number): number => {
   const raw = Number(process.env[name]);
@@ -38,14 +42,26 @@ export interface Rates {
   output: number;
 }
 
-export const rates = (): Rates => ({
-  input: rate('BIZSIM_PRICE_INPUT', 15),
-  // Cache reads bill at a tenth of the input rate. The system prompt is ~5,100
-  // tokens and goes out on every call, so whether it is cached is most of the
-  // difference between the input halves of two otherwise identical sessions.
-  cachedInput: rate('BIZSIM_PRICE_CACHED_INPUT', 1.5),
-  output: rate('BIZSIM_PRICE_OUTPUT', 75),
-});
+/**
+ * Per-provider list rates, checked August 2026 — Kimi K3 and Claude Opus 5.
+ *
+ * Cache reads bill around a tenth of the input rate on both, and the ~5,100-token
+ * system prompt goes out on every call, so whether it is cached is most of the
+ * difference between the input halves of two otherwise identical sessions.
+ */
+const LIST: Record<ProviderName, Rates> = {
+  kimi: { input: 3, cachedInput: 0.3, output: 15 },
+  anthropic: { input: 5, cachedInput: 0.5, output: 25 },
+};
+
+export const rates = (provider: ProviderName = providerName()): Rates => {
+  const list = LIST[provider];
+  return {
+    input: rate('BIZSIM_PRICE_INPUT', list.input),
+    cachedInput: rate('BIZSIM_PRICE_CACHED_INPUT', list.cachedInput),
+    output: rate('BIZSIM_PRICE_OUTPUT', list.output),
+  };
+};
 
 export function costOf(usage: UsageTotal, r: Rates = rates()): number {
   const fresh = Math.max(0, usage.inputTokens - usage.cachedInputTokens);

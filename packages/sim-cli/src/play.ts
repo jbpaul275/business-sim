@@ -13,7 +13,7 @@ import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
 import { postmortem, runPoint, type RunPoint } from './postmortem.js';
-import { askAdvisor, type AdviceTransport } from '@bizsim/llm';
+import { askAdvisor, providerKeyVar, type AdviceTransport } from '@bizsim/llm';
 import { cloneOutlay, saleValue } from '@bizsim/engine';
 import { buildBriefing } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
@@ -2123,7 +2123,7 @@ export async function play(
   console.log(
     options.advisor
       ? `${DIM}Ask anything in plain English — the numbers come from the engine, the judgement from a model.${RESET}`
-      : `${DIM}Ask anything in plain English. No ANTHROPIC_API_KEY, so answers are the engine's arithmetic alone.${RESET}`,
+      : `${DIM}Ask anything in plain English. No ${providerKeyVar()}, so answers are the engine's arithmetic alone.${RESET}`,
   );
 
   // The scoreboard fires once. After that the run belongs to the player.

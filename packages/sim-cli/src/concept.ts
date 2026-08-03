@@ -1,6 +1,8 @@
 import {
-  AnthropicConceptTransport,
   ConceptInterview,
+  createConceptTransport,
+  providerKeyPresent,
+  providerKeyVar,
   BudgetExhaustedError,
   ConceptRefusedError,
   TransientError,
@@ -75,9 +77,15 @@ function wrap(text: string, width = 76, indent = '  '): string {
  * True when a live model is reachable. Checked rather than assumed so the CLI
  * can fall back to the structured path with an explanation instead of dying
  * with a stack trace on a missing key.
+ *
+ * Which key that is now depends on the provider — see `providerName`. The check
+ * used to name `ANTHROPIC_API_KEY` here and in two other places, which is how a
+ * provider switch turns into a bug hunt.
  */
-export const conceptPathAvailable = (): boolean =>
-  Boolean(process.env['ANTHROPIC_API_KEY'] ?? process.env['ANTHROPIC_AUTH_TOKEN']);
+export const conceptPathAvailable = (): boolean => providerKeyPresent();
+
+/** The variable to export, for the message shown when there is not one. */
+export const conceptKeyVar = (): string => providerKeyVar();
 
 /**
  * How hard the last turn worked, for the line under the model's answer.
@@ -131,7 +139,7 @@ export async function runConceptInterview(
   );
 
   let spinner = { stop: () => {}, label: (_: string) => {} };
-  const live = transport ?? new AnthropicConceptTransport();
+  const live = transport ?? createConceptTransport();
 
   /**
    * Ctrl-C while the model is thinking stops the model, not the session.

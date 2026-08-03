@@ -1,29 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { looksGarbled } from './garbled.js';
-import { zTurnAdvice, type TurnAdvice } from './advice.js';
-import { zAdjudication, type Adjudication } from './challenge.js';
-
-/**
- * A turn that cannot be shown or replayed.
- *
- * Two ways this happens, both seen live. The model returns text that is
- * corrupted — doubled, or two answers interleaved. Or it returns nothing at
- * all: valid JSON, schema-clean, empty strings. The second is the more
- * dangerous, because an empty assistant turn cannot go back into the
- * transcript — the API rejects a whitespace-only content block — so one empty
- * response ends the conversation two turns later with an error about message
- * formatting.
- */
-const isUnusable = (turn: { message: string; cta: string }): boolean =>
-  turn.message.trim().length === 0 ||
-  turn.cta.trim().length === 0 ||
-  looksGarbled(turn.message) ||
-  looksGarbled(turn.cta);
+import { type TurnAdvice, zTurnAdvice } from './advice.js';
+import { type Adjudication, zAdjudication } from './challenge.js';
+import {
+  ADJUDICATION_SCHEMA,
+  ADVICE_SCHEMA,
+  DRAFT_AS_PROSE,
+  DRAFT_SCHEMA,
+  TURN_SCHEMA,
+  isUnusable,
+  stripFence,
+} from './wire.js';
 import {
   MalformedDraftError,
   assertDraftShape,
-  zConceptDraft,
   zInterviewTurn,
   type ConceptDraft,
   type InterviewTurn,
@@ -145,34 +134,6 @@ export interface ConceptTransport {
    */
   readonly usage: UsageTotal;
 }
-
-/**
- * The SDK ships a `zodOutputFormat` helper, but it is typed against Zod 4 and
- * the rest of this monorepo is on Zod 3. Splitting Zod versions across packages
- * to gain one helper is a bad trade — schemas cross package boundaries here —
- * so schemas are converted to plain JSON Schema and handed to
- * `output_config.format` directly, then parsed with the same Zod 3 schema every
- * other package already uses.
- */
-const jsonSchemaFor = (schema: Parameters<typeof zodToJsonSchema>[0]): Record<string, unknown> =>
-  // Structured outputs require `additionalProperties: false` on every object
-  // and reject `$ref`, so the schema has to be emitted inline.
-  zodToJsonSchema(schema, { $refStrategy: 'none' }) as Record<string, unknown>;
-
-const TURN_SCHEMA = jsonSchemaFor(zInterviewTurn);
-const DRAFT_SCHEMA = jsonSchemaFor(zConceptDraft);
-const ADVICE_SCHEMA = jsonSchemaFor(zTurnAdvice);
-const ADJUDICATION_SCHEMA = jsonSchemaFor(zAdjudication);
-
-/**
- * The draft asked for as prose, for the fallback path. Constrained decoding is
- * the better mechanism when it is available; this is what we send when the
- * grammar will not compile.
- */
-const DRAFT_AS_PROSE =
-  'Emit the complete concept draft now, as a single JSON object and nothing ' +
-  'else — no prose before or after, no markdown fence. It must match the ' +
-  'schema you were given exactly, including every required field.';
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -312,9 +273,21 @@ export function isTransient(error: unknown): boolean {
   // whole point of stopping is that the call does not happen again.
   if (isCancellation(error)) return false;
   if (error instanceof Anthropic.APIConnectionError) return true;
-  if (error instanceof Anthropic.APIError) {
-    const status = error.status ?? 0;
+  /**
+   * Read structurally rather than by class, so a second provider's SDK gets
+   * the same retry behaviour without this function importing it.
+   *
+   * Both SDKs put the HTTP status on `status`, and a connection error in both
+   * has no status at all — which is why the undefined case is treated as
+   * transient here: a request that never reached a server is the most retryable
+   * failure there is.
+   */
+  if (error !== null && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status?: number }).status;
+    if (status === undefined) return true;
     if (status === 429 || status === 529 || status >= 500) return true;
+    // A 4xx that reached the server is the caller's fault and will fail again.
+    return false;
   }
   return /overloaded_error|rate_limit|api_error|\b(429|502|503|529)\b/i.test(String(error));
 }
@@ -629,13 +602,6 @@ export class AnthropicConceptTransport implements ConceptTransport {
     }
     return assertDraftShape(json);
   }
-}
-
-/** Unconstrained generation likes markdown fences; constrained never emits one. */
-function stripFence(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed.startsWith('```')) return trimmed;
-  return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
 }
 
 /**

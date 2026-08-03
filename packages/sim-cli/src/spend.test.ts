@@ -59,8 +59,19 @@ describe('what a session cost', () => {
   it('ignores a rate that is not a positive number', () => {
     for (const bad of ['', 'free', '-4', '0', 'NaN']) {
       process.env['BIZSIM_PRICE_OUTPUT'] = bad;
-      expect(rates().output, bad).toBe(75);
+      expect(rates('kimi').output, bad).toBe(15);
     }
+  });
+
+  it('defaults to the resolved provider rather than one hardcoded price list', () => {
+    // The defaults were $15/$1.50/$75 — Opus 4.x rates — which overstated an
+    // Opus 5 session threefold under a comment warning that this was the risk.
+    // Following the provider is what stops that recurring after a switch.
+    delete process.env['BIZSIM_PRICE_INPUT'];
+    delete process.env['BIZSIM_PRICE_CACHED_INPUT'];
+    delete process.env['BIZSIM_PRICE_OUTPUT'];
+    expect(rates('kimi')).toEqual({ input: 3, cachedInput: 0.3, output: 15 });
+    expect(rates('anthropic')).toEqual({ input: 5, cachedInput: 0.5, output: 25 });
   });
 
   it('reports the split rather than one opaque figure', () => {

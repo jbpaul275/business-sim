@@ -4,7 +4,7 @@ import { tick, type TickResult } from '@bizsim/engine';
 import type { WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
 import { play } from './play.js';
-import { AnthropicConceptTransport, type AdviceTransport } from '@bizsim/llm';
+import { createConceptTransport, type AdviceTransport } from '@bizsim/llm';
 import { conceptPathAvailable } from './concept.js';
 import { benchmarkLines } from './portfolio.js';
 import { runSetup } from './setup.js';
@@ -429,7 +429,7 @@ function turnAdvisor(): AdviceTransport | undefined {
     advisorResolved = true;
     advisorInstance =
       conceptPathAvailable() && !process.env['BIZSIM_NO_TURN_AI']
-        ? new AnthropicConceptTransport()
+        ? createConceptTransport()
         : undefined;
   }
   return advisorInstance;

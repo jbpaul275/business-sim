@@ -19,12 +19,13 @@ where anyone with access can read it.
 Kimi is the same shape:
 
 ```sh
-export MOONSHOT_API_KEY=sk-...        # your shell, not the repo, not a config file
-export BIZSIM_LLM_PROVIDER=kimi       # added by this migration; defaults to anthropic
+export MOONSHOT_API_KEY=sk-...     # your shell, not the repo, not a config file
 pnpm sim --new
 ```
 
-Both keys can be present at once — that is what makes the hybrid in §3 and the A/B in §6 possible.
+That is the whole setup. `BIZSIM_LLM_PROVIDER` exists but is not needed: Kimi is used whenever its key is
+present, and Anthropic is the fallback when it is not. Set it explicitly (`kimi` or `anthropic`) to force
+one, which is what an A/B looks like — both keys exported, one variable moved.
 
 ---
 
@@ -56,12 +57,27 @@ transport inside `packages/llm` does not touch that edge.
 
 ## 3. Model mapping
 
-| Call | What it does | Anthropic today | Kimi | Why |
+**Decided: `kimi-k3` for all four calls.** The economy comes from `reasoning_effort` rather than from a
+second, cheaper model — see below.
+
+| Call | What it does | Anthropic before | Kimi | Effort |
 |---|---|---|---|---|
-| `draft` | One shot, several thousand tokens of schema-constrained JSON, minutes of thinking | `claude-opus-5` | `kimi-k3` | The only Kimi tier documented with **json_schema** structured output, not just JSON mode. See §4.1 — this is the whole risk. |
-| `adjudicate` | Rules on a player's challenge to an assumption | `claude-opus-5` | `kimi-k3` | Rules 1 and 6 are in code; the *ruling* is the model, and it is the thing most likely to regress into sycophancy. Do not cheapen it first. |
-| `turn` | Interview reply: ~50 words and a CTA | `claude-opus-5` | `kimi-k2.6` | Short output, conversational judgement, thinking mode on. This is most of the call volume. |
-| `advise` | Turn-loop advisor, already `effort: low`, 4k budget | `claude-opus-5` | `kimi-k2.6`, thinking off | The money guard in `advice.ts` catches the failure mode that matters, so a cheaper model is cheap here in both senses. |
+| `draft` | One shot, several thousand tokens of schema-constrained JSON, minutes of thinking | `claude-opus-5` | `kimi-k3` | `high` |
+| `adjudicate` | Rules on a player's challenge to an assumption | `claude-opus-5` | `kimi-k3` | `low` |
+| `turn` | Interview reply: ~50 words and a CTA | `claude-opus-5` | `kimi-k3` | `low` |
+| `advise` | Turn-loop advisor, 4k budget | `claude-opus-5` | `kimi-k3` | `low` |
+
+**Why not K2.6 for the turns.** It is three to four times cheaper on output and it is the obvious next
+economy. Two things stop it being the default today. It offers JSON *mode* rather than schema-constrained
+decoding (§4.1), and its thinking toggle is a Kimi-specific parameter passed through the SDK's `extra_body`
+whose exact shape this repo has not verified against live documentation — and guessing a request shape is
+how you ship a transport that silently reasons at the wrong tier on every call. `BIZSIM_TURN_MODEL=kimi-k2.6`
+is one variable away once someone checks it, and the transport already degrades to the prompt-carried schema
+if the model refuses `response_format.json_schema`.
+
+**`reasoning_effort` is the dial that matters.** K3 always thinks and its default is `max` — the most
+expensive setting on the most expensive dial. The transport never omits it, and there is a test asserting
+that, because omitting it would have quietly undone the whole migration.
 
 ### Rates
 
@@ -72,14 +88,12 @@ transport inside `packages/llm` does not touch that edge.
 | `kimi-k2.6` | $0.95 | $0.16 | $4.00 |
 | `kimi-k2.5` | $0.60 | $0.15 | $3.00 |
 
-K3 against Opus 5 is a 1.7× saving. K2.6 against Opus 5 is 5–6×. **The saving is in moving `turn` and
-`advise`, not in moving `draft`** — which is convenient, because those are also the two calls where a schema
-regression cannot hurt anything. Reasoning tokens bill as ordinary output on Kimi at the same rate, with no
-separate thinking price, so the `thinkingTokens` split in the meter stays honest.
+K3 against Opus 5 is a flat 1.7× on rates, before effort. K2.6 against Opus 5 would be 5–6× and is the
+remaining economy, gated on §3's two caveats.
 
-A hybrid is a legitimate destination, not a waypoint: `draft` and `adjudicate` on Anthropic, `turn` and
-`advise` on Kimi, is most of the saving with none of the §4.1 risk. Ship that first and measure before
-moving the other two.
+Reasoning tokens bill as ordinary output on Kimi at the same rate, with no separate thinking price, so the
+`thinkingTokens` split in the meter stays honest — it is a breakdown of `outputTokens`, exactly as it was on
+the Anthropic side.
 
 ---
 
@@ -148,17 +162,31 @@ migration two models bill at different rates inside one session.
 
 ## 6. Order of work
 
-1. **Record a baseline.** The meter exists and has never recorded a real session — every `spend` record in
-   `.bizsim/` is a test fixture with zero tokens. One real `pnpm sim --new` on Anthropic, with the corrected
-   rates, is the number everything else is measured against. Do this before writing any transport.
-2. Fix `spend.ts` (§5): correct defaults, per-model rates.
-3. **Extract a transport conformance suite.** The scripted-transport tests assert on behaviour above the
-   interface; what does not exist is a suite that runs the same assertions against a *live* transport. This
-   is also the missing live-call test noted in STATUS.md, and the migration is the reason to finally write it.
-4. Build `KimiConceptTransport` on the `openai` SDK against `https://api.moonshot.ai/v1`.
-5. Add `BIZSIM_LLM_PROVIDER`, per-call model resolution, and keep `BIZSIM_TURN_MODEL` / `BIZSIM_DRAFT_MODEL`
-   working as overrides.
-6. **The gate.** A provider does not become the default until it passes, on fixtures:
+**Built** (`packages/llm/src/kimi.ts`, `provider.ts`, `wire.ts`; 17 tests in `kimi.test.ts`):
+
+- `KimiConceptTransport` on the `openai` SDK against `https://api.moonshot.ai/v1`, implementing all four
+  calls plus `cancel()` and `usage`.
+- `wire.ts` — the four compiled schemas, the prose fallback, the fence stripper and the unusable-turn check,
+  shared by both transports so the shapes cannot drift between providers.
+- `BIZSIM_LLM_PROVIDER` with resolution in one place (`provider.ts`). `conceptPathAvailable` used to name
+  `ANTHROPIC_API_KEY` here and in two other files, which is how a provider switch becomes a bug hunt.
+  Kimi wins when its key is present; Anthropic is the fallback; a forced provider is honoured even without
+  its key, so a forced choice fails visibly rather than billing the other provider silently.
+- `spend.ts` rates follow the resolved provider (§5).
+- `isTransient` now reads the HTTP status structurally rather than by SDK class, so both providers retry
+  alike without `client.ts` importing `openai`.
+
+**Still to do:**
+
+1. **Record a baseline.** The meter has never recorded a real session — every `spend` record in `.bizsim/`
+   is a test fixture with zero tokens. One real `pnpm sim --new` per provider is the number that decides
+   whether any of this was worth it.
+2. **A live-call conformance test.** Every LLM path in this repo is verified against scripted or stubbed
+   transports. Nothing has ever asserted that Moonshot accepts the request this transport builds — that
+   `reasoning_effort` is spelled the way the docs say, that `response_format.json_schema` is honoured on K3
+   rather than silently ignored, that `reasoning_content` arrives. Those are the four things a stub cannot
+   check and the first real call will.
+3. **The gate.** A provider does not become the default until it passes, on fixtures:
    - the single-object draft (§4.1) — no multi-stream drafts;
    - the §11.3 anti-sycophancy fixtures, where the *ruling* is the model's and only rules 1 and 6 are in code;
    - the `advice.ts` money guard — no figures the briefing does not contain;
@@ -166,9 +194,9 @@ migration two models bill at different rates inside one session.
      nothing for OCCUPANCY.
 
    Every one of these is a bug this project has already paid for once. A cheaper model that reintroduces any
-   of them is not cheaper.
-7. A/B on ~10 concepts. Compare cost, draft-validity rate, and adjudication behaviour — then decide between
-   full migration and the hybrid in §3.
+   of them is not cheaper. Kimi is the default *ahead* of this gate, on the user's decision — which makes
+   running it the next thing that happens, not an optional follow-up.
+4. Verify K2.6's `thinking` parameter shape and measure it behind `BIZSIM_TURN_MODEL` (§3).
 
 ---
 

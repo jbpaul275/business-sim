@@ -124,8 +124,16 @@ draft. Phase 3 still reviews every registered assumption with its provenance and
 confidence; Phase 4 is still a real gate — a business that cannot fund its own month zero is
 refused rather than opened with negative cash.
 
-With no `ANTHROPIC_API_KEY` set, setup says so and falls back to the template picker. The
-picker is what you get when there is no model to talk to, not a co-equal alternative.
+The model behind that conversation is **Kimi K3** — `export MOONSHOT_API_KEY=...` and nothing
+else. Anthropic remains a supported provider and is used when only `ANTHROPIC_API_KEY` is set;
+`BIZSIM_LLM_PROVIDER` forces one either way. The reasoning is cost: see
+[05-provider-migration.md](./05-provider-migration.md), which also records the two things this
+switch has *not* yet been through — a real session on the meter, and a live call proving
+Moonshot accepts the request the transport builds. Every LLM path here is still verified
+against stubs.
+
+With neither key set, setup says so and falls back to the template picker. The picker is what
+you get when there is no model to talk to, not a co-equal alternative.
 
 What the conversation replaces is the *input method*, not the phases. A drafted concept
 becomes a **synthetic seed template** and goes through `buildModelFromTemplate` like any
