@@ -88,6 +88,15 @@ describe('what a session cost', () => {
     expect(s.byKind.adjudicate.calls).toBe(0);
   });
 
+  it('gives narration its own bucket rather than lumping it into Q&A', () => {
+    // One per quarter played makes it the volume leader in a long run, and a
+    // routing decision about it needs its cost separated from the advisor's.
+    const s = totalSpend([call({ call: 'narrate', ms: 3_000 }), call({ call: 'advise' })]);
+    expect(s.byKind.narrate.calls).toBe(1);
+    expect(s.byKind.advise.calls).toBe(1);
+    expect(s.byKind.narrate.ms).toBe(3_000);
+  });
+
   it('keeps the wall clock, which the rates do not show', () => {
     // Latency is the half of a routing decision that a price list cannot price.
     // A model that is half the cost and four times the wait is not cheaper.

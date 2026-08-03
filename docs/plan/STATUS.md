@@ -8,11 +8,19 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
-| **M4 — Challenge loop** | 🟡 Mostly | The §11.3 contract, isolated from the thread, with rules 1 and 6 enforced in code rather than requested. Adversarial fixtures and the sycophancy regression are in the suite. `ADJUST_ASSUMPTION` now writes through to the model, which it never did. Reverse challenge (§11.3.1) fires on out-of-band assumptions. Cost catalog is a first tranche (16 items), not D-2's ~500 |
-| **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` not started; `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
+| **M4 — Challenge loop** | 🟡 Mostly | The §11.3 contract, isolated from the thread, with rules 1 and 6 enforced in code rather than requested. Adversarial fixtures and the sycophancy regression are in the suite. `ADJUST_ASSUMPTION` now writes through to the model, which it never did. Reverse challenge (§11.3.1) fires on out-of-band assumptions. Cost catalog at 146 items with word-boundary keyword routing — labor, equipment, licences, services and COGS bands across the played business types. Authored ranges, not retrieved ones (below) |
+| **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` (§11.5) narrates every pause — headline, narrative and suggested questions over the engine's screen, money-guarded like the advisor, silent when it cannot pass the guard. `attributions` deferred (below). `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
+
+**Cross-cutting, added since the milestone plan was written:**
+
+| | State | Notes |
+|---|---|---|
+| **Provider routing** | ✅ Done | `OpenAICompatibleTransport` over a `VENDORS` table — Moonshot, DeepSeek, Groq, Together, OpenRouter, Gemini, OpenAI — plus Anthropic on its own. Kimi K3 is the default. [05](./05-provider-migration.md) |
+| **Per-call telemetry** | ✅ Done | One journal row per model call: type, provider, model, effort, wall clock, four token counts, cost. `--sessions` reports a head-to-head by model on cost, latency and three quality signals |
+| **Telemetry upload** | 🟡 Built, unwired | Supabase schema, two-tier opt-in, insert-only RLS, redaction with tests. Migration never applied; no in-game consent screen; no retention or deletion path. [06](./06-telemetry-upload.md) |
 
 ## M1 exit criteria
 
@@ -168,10 +176,14 @@ which the reference model omitted — the same reason its year three sat above b
 
 - **Six more seed templates**, to reach the twelve §4.7 asks for: quick-service food, retail shop, coffee
   shop, marketing agency, trades contractor, gym/fitness studio.
-- **The rest of the cost catalog.** D-2 scopes ~500 items across twelve templates; sixteen are in, chosen to
-  give the adjudication contract real ranges and real tiers to argue from. The mechanism is done and the
-  content accretes — but until an item is in the catalog, rule 1 clamps against the draft's own estimated
-  range, which is a weaker claim than the rule is meant to make.
+- **The rest of the cost catalog, and its verification.** 146 items of D-2's ~500 — the trades, equipment,
+  licences and rate bands the played business types actually hit. Two honest caveats. Coverage accretes:
+  until an item exists, rule 1 still clamps against the draft's own estimated range. And the ranges are
+  *authored* — written from 2024-era price knowledge with wide bands and tiers, checkable source
+  descriptions, and deliberately generous edges, but not retrieved from live listings. These ranges overrule
+  players, so `PriceRetrieval` (§16 Q1) is not just a feature deferral: it is the upgrade path from
+  "a well-argued range" to "three current listings", and the catalog's numbers should be treated as the
+  former until it lands.
 - **Retrieval (§16 Q1).** `PriceRetrieval` is defined and unimplemented. With web access the argument stops
   being the model's priors against the player's and becomes a question about current listings.
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
@@ -183,8 +195,17 @@ which the reference model omitted — the same reason its year three sat above b
   different second business is a new run today.
 - **A clone re-prompting for each parameter that differs.** §9.5 lists location, rent, traffic, wage rate,
   buildout and unit count; this build takes one size multiplier covering all of them.
-- **`TurnNarration` (§11.5).** The quarterly screen is still engine output with no prose over it. A model
-  now answers questions mid-game (§11.4), but it does not narrate the result of a quarter.
+- **`TurnNarration.attributions` (§11.5).** The narration is built; the `attributions` field — each
+  significant move mapped to the assumption ID driving it, with provenance — is not. It needs §10.4's
+  per-quarter delta attribution, which the engine does not compute yet: knowing *which registered
+  assumption* moved the quarter is sensitivity analysis, not narration, and pretending the model can
+  supply it would be inviting exactly the invented mechanisms §11.5 forbids.
+- **Any live-call test, anywhere.** Every LLM path in this repo is verified against scripted or stubbed
+  transports. Nothing has ever asserted that a real provider accepts the request a transport builds. That
+  was a tolerable gap while there was one provider that had visibly worked; it is the largest unverified
+  surface in the build now that the default provider changed on the strength of stubs alone.
+- **One real session on the meter.** Every `spend` record in `.bizsim/` is a test fixture with zero tokens.
+  The cost case for the provider switch is entirely arithmetic on published rates.
 
 ## Simplifications taken, and where they are recorded
 

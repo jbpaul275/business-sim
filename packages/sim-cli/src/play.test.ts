@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { TurnNarration } from '@bizsim/llm';
 import { play } from './play.js';
 import type { LineSource } from './input.js';
 
@@ -659,5 +660,81 @@ describe('asking what to do', () => {
     const printed = await transcript(['skip 2', 'what now?', 'quit']);
     expect(printed).not.toContain('Unknown command');
     expect(printed).not.toMatch(/probably|might want|consider whether/i);
+  });
+});
+
+
+/**
+ * §11.5 — the narration over each quarter. What is tested is the wiring, not
+ * the prose: it prints when the model behaves, stays silent when the guard
+ * fires twice, and runs once per pause rather than once per skipped quarter.
+ */
+describe('narrating the quarter', () => {
+  const CLEAN: TurnNarration = {
+    headline: 'A quiet quarter with the ramp still climbing.',
+    narrative: 'Demand rose with the ramp and nothing structural moved.',
+    suggestedQuestions: ['is the staffing right for next quarter?'],
+  };
+
+  const advisorWith = (replies: TurnNarration[]) => {
+    const calls: string[] = [];
+    let i = 0;
+    return {
+      calls,
+      advise: async () => ({ advice: { reply: 'x', suggestedCommands: [] } }),
+      narrate: async (_system: string, input: string) => {
+        calls.push(input);
+        const next = replies[i] ?? replies[replies.length - 1]!;
+        i += 1;
+        return next;
+      },
+    };
+  };
+
+  const narrated = async (
+    lines: readonly string[],
+    advisor: ReturnType<typeof advisorWith>,
+  ): Promise<string> => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await play('restaurant', { input: scriptedInput(lines), milestonePeriod: 4, advisor });
+      return log.mock.calls.map((c) => String(c[0])).join('\n');
+    } finally {
+      log.mockRestore();
+    }
+  };
+
+  it('prints the headline and narrative over the quarter screen', async () => {
+    const printed = await narrated(['quit'], advisorWith([CLEAN]));
+    expect(printed).toContain('A quiet quarter with the ramp still climbing.');
+    expect(printed).toContain('nothing structural moved');
+    expect(printed).toContain('worth asking');
+  });
+
+  it('narrates once per pause, not once per skipped quarter', async () => {
+    // `skip 4` is one pause: the player reads one screen, so they get one
+    // paragraph. Narrating all four would be four model calls nobody reads.
+    const advisor = advisorWith([CLEAN]);
+    await narrated(['skip 2', 'quit'], advisor);
+    // Once for the opening render, once after the skip.
+    expect(advisor.calls.length).toBe(2);
+  });
+
+  it('hands the model last quarter and the events, or it cannot narrate change', async () => {
+    const advisor = advisorWith([CLEAN]);
+    await narrated(['', 'quit'], advisor);
+    // The second narration (after one played quarter) carries the prior one.
+    expect(advisor.calls[1]).toContain('Last quarter revenue');
+    expect(advisor.calls[1]).toMatch(/Event \d+ this quarter|deterministic advisor found nothing/);
+  });
+
+  it('prefers silence to a narration that keeps inventing figures', async () => {
+    const fabricating: TurnNarration = {
+      headline: 'Costs hit $999k this quarter.',
+      narrative: 'Spending $999k was the story.',
+      suggestedQuestions: [],
+    };
+    const printed = await narrated(['quit'], advisorWith([fabricating, fabricating]));
+    expect(printed).not.toContain('$999k');
   });
 });

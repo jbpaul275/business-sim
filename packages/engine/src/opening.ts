@@ -162,11 +162,26 @@ export function computeMonthZeroOutlays(model: BusinessModel): MonthZeroOutlays 
     wc.prepaidInsuranceMonths / 3,
   );
 
-  const debtOriginationFees = sum(
-    model.financingPlan.debtRequests.map((d) =>
-      mulRate(d.requestedPrincipal, DEBT_PRODUCTS[d.kind].originationFeePct),
-    ),
-  );
+  /**
+   * A revolver's fee is not a debt origination fee, and saying so contradicted
+   * the screen above it.
+   *
+   * A mobile game studio took the "no debt needed, and a $3,000 revolver"
+   * option and was then charged $15 of "Debt origination fees" — correct
+   * arithmetic (0.5% of the limit) under a label the player had just been told
+   * did not apply to them. It is a commitment fee: paid for the *availability*
+   * of a line nobody has drawn on, which is a different thing from a fee on
+   * borrowed money, and worth its own row precisely because it is the one that
+   * shows up when you borrowed nothing.
+   */
+  const feeFor = (kinds: (d: { kind: keyof typeof DEBT_PRODUCTS }) => boolean): Money =>
+    sum(
+      model.financingPlan.debtRequests
+        .filter(kinds)
+        .map((d) => mulRate(d.requestedPrincipal, DEBT_PRODUCTS[d.kind].originationFeePct)),
+    );
+  const debtOriginationFees = feeFor((d) => d.kind !== 'REVOLVER');
+  const revolverCommitmentFees = feeFor((d) => d.kind === 'REVOLVER');
 
   const partial = {
     leaseSigning,
@@ -177,6 +192,7 @@ export function computeMonthZeroOutlays(model: BusinessModel): MonthZeroOutlays 
     preOpeningPayroll: model.preOpeningCosts.payrollAndTraining,
     preOpeningMarketing: model.preOpeningCosts.marketing,
     debtOriginationFees,
+    revolverCommitmentFees,
   };
 
   return { ...partial, total: totalMonthZero(partial) };
@@ -286,7 +302,12 @@ function openBusiness(
       model.preOpeningCosts.payrollAndTraining +
       model.preOpeningCosts.marketing +
       model.preOpeningCosts.permitsAndLegal +
+      // Both fee lines. They were one field until a revolver's commitment fee
+      // was split onto its own row for the screen, and expensing only the term
+      // half left the opening balance sheet short by exactly the revolver fee —
+      // caught by the articulation suite at period 0, which is what it is for.
       outlays.debtOriginationFees +
+      outlays.revolverCommitmentFees +
       mulRate(model.monthlyRent, 2)
     ),
   };

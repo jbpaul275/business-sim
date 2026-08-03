@@ -139,10 +139,41 @@ export function findCatalogItem(label: string): CatalogItem | undefined {
   let best: { item: CatalogItem; length: number } | undefined;
   for (const item of catalogItems) {
     for (const keyword of item.keywords) {
-      if (text.includes(keyword.toLowerCase()) && (!best || keyword.length > best.length)) {
+      if (keywordMatches(text, keyword.toLowerCase()) && (!best || keyword.length > best.length)) {
         best = { item, length: keyword.length };
       }
     }
   }
   return best?.item;
+}
+
+/**
+ * Whole-word match, not substring.
+ *
+ * `includes` made every short keyword a landmine: "gl" — general liability's
+ * own abbreviation — matched *glycol* and *glassware*, and any label with
+ * "coffee" in it contains "ffe". A wrong match is worse than none here (it
+ * hands the adjudicator an authoritative-looking range for a different item),
+ * and the wrongest matches were the ones nobody would think to test for
+ * because no human reads "coffee" and sees FF&E in the middle of it.
+ *
+ * Boundaries are alphanumeric-based rather than regex `\b`, because keywords
+ * like "ff&e" and "build-out" end in characters `\b` treats as boundaries
+ * already — the check has to be "not glued to another letter or digit".
+ */
+function keywordMatches(text: string, keyword: string): boolean {
+  const boundary = (index: number): boolean =>
+    index >= text.length || !/[a-z0-9]/.test(text[index]!);
+  let from = 0;
+  while (true) {
+    const at = text.indexOf(keyword, from);
+    if (at === -1) return false;
+    const end = at + keyword.length;
+    // An optional trailing "s", because drafts pluralise — "Line cooks (2)",
+    // "Dog daycare attendants" — and a boundary check with no stemming would
+    // trade the substring landmines for a plural blind spot.
+    const afterOk = boundary(end) || (text[end] === 's' && boundary(end + 1));
+    if ((at === 0 || !/[a-z0-9]/.test(text[at - 1]!)) && afterOk) return true;
+    from = at + 1;
+  }
 }

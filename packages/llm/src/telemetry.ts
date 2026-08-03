@@ -21,7 +21,7 @@
  * further up sees a subset and has to guess the rest.
  */
 
-export type CallKind = 'turn' | 'draft' | 'advise' | 'adjudicate';
+export type CallKind = 'turn' | 'draft' | 'advise' | 'adjudicate' | 'narrate';
 
 export interface Rates {
   /** Dollars per million tokens. */

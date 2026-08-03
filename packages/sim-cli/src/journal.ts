@@ -105,6 +105,15 @@ export type JournalEvent =
   | { kind: 'advice_corrected'; question: string; figures: string[] }
   | { kind: 'advice_refused'; question: string }
   | { kind: 'advice_failed'; question: string }
+  /**
+   * §11.5 — the sentence over each quarter. The highest-volume model output in
+   * the game, so its correction rate is the fabrication signal with the most
+   * statistical power: an advisor answers when asked, a narrator speaks every
+   * quarter whether it has something safe to say or not.
+   */
+  | { kind: 'narration'; period: number; headline: string; narrative: string; ms: number }
+  | { kind: 'narration_corrected'; period: number; figures: string[] }
+  | { kind: 'narration_failed'; period: number }
   | { kind: 'end'; reason: string };
 
 export interface Journal {
@@ -201,6 +210,8 @@ export interface SessionSummary {
   retriedCalls: number;
   failedCalls: number;
   questionsAsked: number;
+  /** Quarters the model narrated — the other denominator for the fabrication rate. */
+  narrations: number;
   fabricatedFigures: number;
   /** Times the player stopped a reply mid-flight — a proxy for "too slow". */
   cancelled: number;
@@ -260,7 +271,12 @@ export function readSession(file: string): SessionSummary {
     retriedCalls: calls.filter((c) => c.attempt > 1).length,
     failedCalls: calls.filter((c) => !c.ok).length,
     questionsAsked: events.filter((e) => e.kind === 'asked').length,
-    fabricatedFigures: events.filter((e) => e.kind === 'advice_corrected').length,
+    narrations: events.filter((e) => e.kind === 'narration').length,
+    // Both kinds of §1.1 correction, because they are the same failure caught
+    // by the same guard — money the ledger never produced, re-asked.
+    fabricatedFigures: events.filter(
+      (e) => e.kind === 'advice_corrected' || e.kind === 'narration_corrected',
+    ).length,
     cancelled: events.filter((e) => e.kind === 'cancelled').length,
   };
 }

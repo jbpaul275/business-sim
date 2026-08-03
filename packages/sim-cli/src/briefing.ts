@@ -27,12 +27,25 @@ interface Line {
   money?: boolean;
 }
 
+/**
+ * §11.5's input is *current and prior* statements plus the quarter's events —
+ * narration is about change, and a briefing with one quarter in it can only
+ * describe a level. Optional because the advisor's Q&A path predates it and a
+ * question mid-decision is about the present.
+ */
+export interface BriefingContext {
+  prior?: { revenue: Money; ebitda: Money; cash: Money };
+  /** This quarter's engine events, already described in words. */
+  events?: readonly string[];
+}
+
 export function buildBriefing(
   world: WorldState,
   business: Business,
   result: TickResult,
   findings: readonly string[],
   commands: readonly string[],
+  context: BriefingContext = {},
 ): Briefing {
   const entry = result.statements.byBusiness[business.id];
   const lines: Line[] = [];
@@ -119,6 +132,21 @@ export function buildBriefing(
   }
 
   add('Household cash', toCompact(world.household.cash), true);
+
+  // Last quarter, so "what changed" is a comparison the model was handed rather
+  // than a memory it invents. Money-flagged: the endpoints of a delta are
+  // figures it may quote.
+  if (context.prior) {
+    add('Last quarter revenue', toCompact(context.prior.revenue), true);
+    add('Last quarter EBITDA', toCompact(context.prior.ebitda), true);
+    add('Last quarter closing cash', toCompact(context.prior.cash), true);
+  }
+  // The quarter's events are the only legal sources for a causal claim (§11.5:
+  // no invented mechanisms). Described in words because the model narrates in
+  // words; the money inside them is money the engine printed.
+  for (const [i, event] of (context.events ?? []).entries()) {
+    add(`Event ${i + 1} this quarter`, event, true);
+  }
 
   const text = [
     'BRIEFING — every number below was computed by the engine. You have no others.',

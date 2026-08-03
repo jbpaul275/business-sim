@@ -119,7 +119,7 @@
       "buildout",
       "build-out",
       "leasehold improvements",
-      "construction"
+      "tenant improvement"
     ]
   },
   {
@@ -172,7 +172,7 @@
         "high": 22000
       }
     ],
-    "source": "BLS 35-2014 median wages by metro, 2024, grossed up for payroll load. Fully loaded means employer taxes, workers' comp and any benefits \u2014 typically 12-18% on top of wage.",
+    "source": "BLS 35-2014 median wages by metro, 2024, grossed up for payroll load. Fully loaded means employer taxes, workers' comp and any benefits — typically 12-18% on top of wage.",
     "keywords": [
       "cook",
       "kitchen labor",
@@ -267,7 +267,7 @@
         "high": 75000
       }
     ],
-    "source": "Commercial vehicle listings, 2024. Upfit \u2014 shelving, ladder rack, wrap \u2014 typically adds $4-9k and is usually omitted.",
+    "source": "Commercial vehicle listings, 2024. Upfit — shelving, ladder rack, wrap — typically adds $4-9k and is usually omitted.",
     "keywords": [
       "van",
       "truck",
@@ -302,7 +302,7 @@
         "high": 34000
       }
     ],
-    "source": "BLS 47-2152 and 47-2111 medians, 2024, grossed up for payroll load and workers' comp \u2014 which for trades runs far above the 4% typical of office work.",
+    "source": "BLS 47-2152 and 47-2111 medians, 2024, grossed up for payroll load and workers' comp — which for trades runs far above the 4% typical of office work.",
     "keywords": [
       "plumber",
       "electrician",
@@ -375,7 +375,7 @@
         "high": 90
       }
     ],
-    "source": "Brokerage market reports, 2024. Triple-net adds taxes, insurance and common-area maintenance on top \u2014 often another 20-30%.",
+    "source": "Brokerage market reports, 2024. Triple-net adds taxes, insurance and common-area maintenance on top — often another 20-30%.",
     "keywords": [
       "rent",
       "lease",
@@ -406,7 +406,7 @@
     "source": "Self-storage development cost surveys, 2023-24, excluding land. Climate control roughly doubles both the buildout and the utility line.",
     "keywords": [
       "storage unit",
-      "buildout",
+      "storage buildout",
       "climate control"
     ]
   },
@@ -501,6 +501,3371 @@
       "card processing",
       "merchant fees",
       "interchange"
+    ]
+  },
+  {
+    "id": "dishwasher_wage",
+    "label": "Dishwasher, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7500,
+    "high": 11500,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7500,
+        "high": 9000
+      },
+      {
+        "tier": "major metro",
+        "low": 9500,
+        "high": 11500
+      }
+    ],
+    "source": "BLS 35-9021 medians, 2024, grossed up for payroll load. Almost always the lowest-paid station in the kitchen and the highest-turnover one.",
+    "keywords": [
+      "dishwasher",
+      "dish pit"
+    ]
+  },
+  {
+    "id": "kitchen_manager_wage",
+    "label": "Kitchen manager / sous chef, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 14000,
+    "high": 23000,
+    "tiers": [
+      {
+        "tier": "secondary market",
+        "low": 14000,
+        "high": 18000
+      },
+      {
+        "tier": "major metro",
+        "low": 18000,
+        "high": 23000
+      }
+    ],
+    "source": "BLS 35-1011 and posted salary ranges, 2024, grossed up. The step between this and a line cook is the step from hourly to salaried.",
+    "keywords": [
+      "kitchen manager",
+      "sous chef",
+      "head chef"
+    ]
+  },
+  {
+    "id": "restaurant_gm_wage",
+    "label": "Restaurant general manager, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 17000,
+    "high": 31000,
+    "tiers": [
+      {
+        "tier": "single independent unit",
+        "low": 17000,
+        "high": 24000
+      },
+      {
+        "tier": "high-volume or major metro",
+        "low": 24000,
+        "high": 31000
+      }
+    ],
+    "source": "Posted salary ranges, 2024, grossed up. Usually the largest single payroll line an owner-absent restaurant carries.",
+    "keywords": [
+      "general manager",
+      "restaurant manager"
+    ]
+  },
+  {
+    "id": "barista_wage",
+    "label": "Barista, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7000,
+    "high": 11500,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7000,
+        "high": 9000
+      },
+      {
+        "tier": "major metro",
+        "low": 9000,
+        "high": 11500
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Tips are on top and are the reason the wage holds below fast food in some markets.",
+    "keywords": [
+      "barista"
+    ]
+  },
+  {
+    "id": "bartender_wage",
+    "label": "Bartender, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7000,
+    "high": 17000,
+    "tiers": [
+      {
+        "tier": "tipped, tip-credit state",
+        "low": 7000,
+        "high": 10000
+      },
+      {
+        "tier": "tipped, no tip credit",
+        "low": 12000,
+        "high": 17000
+      }
+    ],
+    "source": "BLS 35-3011 plus state tip-credit rules, 2024. As with servers, whether the state allows a tip credit moves this more than the market does.",
+    "keywords": [
+      "bartender",
+      "bar staff"
+    ]
+  },
+  {
+    "id": "brewer_wage",
+    "label": "Head brewer, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 16000,
+    "high": 28000,
+    "tiers": [
+      {
+        "tier": "assistant brewer",
+        "low": 16000,
+        "high": 20000
+      },
+      {
+        "tier": "head brewer",
+        "low": 20000,
+        "high": 28000
+      }
+    ],
+    "source": "Brewers Association salary survey ranges, 2024, grossed up. Small breweries under ~3,000 bbl usually run one brewer and an assistant.",
+    "keywords": [
+      "brewer",
+      "brewmaster"
+    ]
+  },
+  {
+    "id": "qsr_crew_wage",
+    "label": "Quick-service crew member, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7000,
+    "high": 11000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7000,
+        "high": 9000
+      },
+      {
+        "tier": "major metro",
+        "low": 9000,
+        "high": 11000
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. California fast-food minimums sit at the top of this band.",
+    "keywords": [
+      "crew member",
+      "counter staff",
+      "cashier"
+    ]
+  },
+  {
+    "id": "shift_supervisor_wage",
+    "label": "Shift supervisor, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8500,
+    "high": 13500,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 8500,
+        "high": 11000
+      },
+      {
+        "tier": "major metro",
+        "low": 11000,
+        "high": 13500
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
+    "keywords": [
+      "shift supervisor",
+      "shift lead"
+    ]
+  },
+  {
+    "id": "baker_wage",
+    "label": "Baker, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8000,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "production baker",
+        "low": 8000,
+        "high": 11500
+      },
+      {
+        "tier": "head baker / pastry",
+        "low": 11500,
+        "high": 15000
+      }
+    ],
+    "source": "BLS 51-3011 medians, 2024, grossed up. Overnight shifts carry a premium the band includes.",
+    "keywords": [
+      "baker",
+      "pastry chef"
+    ]
+  },
+  {
+    "id": "retail_associate_wage",
+    "label": "Retail sales associate, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7000,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7000,
+        "high": 9500
+      },
+      {
+        "tier": "major metro",
+        "low": 9500,
+        "high": 12000
+      }
+    ],
+    "source": "BLS 41-2031 medians, 2024, grossed up for payroll load. Commission structures where they exist sit on top.",
+    "keywords": [
+      "sales associate",
+      "retail staff",
+      "store associate"
+    ]
+  },
+  {
+    "id": "store_manager_wage",
+    "label": "Retail store manager, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 13000,
+    "high": 23000,
+    "tiers": [
+      {
+        "tier": "small independent store",
+        "low": 13000,
+        "high": 17000
+      },
+      {
+        "tier": "high-volume or major metro",
+        "low": 17000,
+        "high": 23000
+      }
+    ],
+    "source": "Posted salary ranges, 2024, grossed up for payroll load and the typical store-level bonus.",
+    "keywords": [
+      "store manager"
+    ]
+  },
+  {
+    "id": "warehouse_wage",
+    "label": "Warehouse associate, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8500,
+    "high": 14000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 8500,
+        "high": 11000
+      },
+      {
+        "tier": "major metro",
+        "low": 11000,
+        "high": 14000
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
+    "keywords": [
+      "warehouse",
+      "picker",
+      "fulfillment staff"
+    ]
+  },
+  {
+    "id": "delivery_driver_wage",
+    "label": "Delivery driver (light vehicle), fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 9000,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 9000,
+        "high": 12000
+      },
+      {
+        "tier": "major metro",
+        "low": 12000,
+        "high": 15000
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Excludes the vehicle; commercial auto insurance is its own line.",
+    "keywords": [
+      "delivery driver",
+      "courier"
+    ]
+  },
+  {
+    "id": "cdl_driver_wage",
+    "label": "CDL truck driver, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 15000,
+    "high": 27000,
+    "tiers": [
+      {
+        "tier": "local delivery",
+        "low": 15000,
+        "high": 20000
+      },
+      {
+        "tier": "specialized — mixer, tanker, heavy haul",
+        "low": 19000,
+        "high": 27000
+      }
+    ],
+    "source": "BLS 53-3032 medians, 2024, grossed up. Mixer and tanker endorsements carry a premium, and workers’ comp for drivers runs far above office rates.",
+    "keywords": [
+      "cdl",
+      "truck driver",
+      "mixer driver"
+    ]
+  },
+  {
+    "id": "equipment_operator_wage",
+    "label": "Heavy equipment operator, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 13000,
+    "high": 23000,
+    "tiers": [
+      {
+        "tier": "non-union",
+        "low": 13000,
+        "high": 18000
+      },
+      {
+        "tier": "union or major metro",
+        "low": 18000,
+        "high": 23000
+      }
+    ],
+    "source": "BLS 47-2073 medians, 2024, grossed up including construction-class workers’ comp.",
+    "keywords": [
+      "equipment operator",
+      "loader operator"
+    ]
+  },
+  {
+    "id": "construction_laborer_wage",
+    "label": "Construction laborer, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 9000,
+    "high": 16000,
+    "tiers": [
+      {
+        "tier": "non-union",
+        "low": 9000,
+        "high": 12500
+      },
+      {
+        "tier": "union or major metro",
+        "low": 12500,
+        "high": 16000
+      }
+    ],
+    "source": "BLS 47-2061 medians, 2024, grossed up including construction-class workers’ comp — which is most of the gap over comparable indoor work.",
+    "keywords": [
+      "laborer",
+      "helper",
+      "ground crew"
+    ]
+  },
+  {
+    "id": "landscape_crew_wage",
+    "label": "Landscape crew member, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8500,
+    "high": 14000,
+    "tiers": [
+      {
+        "tier": "seasonal market",
+        "low": 8500,
+        "high": 11000
+      },
+      {
+        "tier": "year-round market",
+        "low": 11000,
+        "high": 14000
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Seasonal markets compress the working year, not the quarterly rate.",
+    "keywords": [
+      "landscaper",
+      "lawn crew",
+      "mowing crew"
+    ]
+  },
+  {
+    "id": "janitorial_wage",
+    "label": "Janitorial / cleaning staff, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7500,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7500,
+        "high": 9500
+      },
+      {
+        "tier": "major metro",
+        "low": 9500,
+        "high": 12000
+      }
+    ],
+    "source": "BLS 37-2011 medians, 2024, grossed up for payroll load. Contracted services price per square foot instead — see the recurring lines.",
+    "keywords": [
+      "janitor",
+      "cleaner",
+      "custodial",
+      "housekeeping (commercial)"
+    ]
+  },
+  {
+    "id": "admin_wage",
+    "label": "Receptionist / office admin, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8500,
+    "high": 14000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 8500,
+        "high": 11000
+      },
+      {
+        "tier": "major metro",
+        "low": 11000,
+        "high": 14000
+      }
+    ],
+    "source": "BLS 43-4171 medians, 2024, grossed up for payroll load.",
+    "keywords": [
+      "receptionist",
+      "office admin",
+      "front office"
+    ]
+  },
+  {
+    "id": "bookkeeper_wage",
+    "label": "Staff bookkeeper, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 11500,
+    "high": 19000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 11500,
+        "high": 14500
+      },
+      {
+        "tier": "major metro",
+        "low": 14500,
+        "high": 19000
+      }
+    ],
+    "source": "BLS 43-3031 medians, 2024, grossed up. An outsourced service is usually cheaper below ~20 hours a week — that is its own catalog line.",
+    "keywords": [
+      "bookkeeper (staff)",
+      "accounting clerk"
+    ]
+  },
+  {
+    "id": "support_rep_wage",
+    "label": "Customer support rep, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 4000,
+    "high": 16500,
+    "tiers": [
+      {
+        "tier": "outsourced offshore, per seat",
+        "low": 4000,
+        "high": 8000
+      },
+      {
+        "tier": "domestic",
+        "low": 9000,
+        "high": 16500
+      }
+    ],
+    "source": "BLS 43-4051 medians and BPO per-seat pricing, 2024. The offshore tier is a vendor invoice, not payroll — no load applies, and quality is the trade.",
+    "keywords": [
+      "customer support",
+      "support rep",
+      "call center"
+    ]
+  },
+  {
+    "id": "inside_sales_wage",
+    "label": "Inside sales rep, fully loaded per quarter (base only)",
+    "templates": [],
+    "unit": "USD",
+    "low": 12000,
+    "high": 20000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 12000,
+        "high": 15500
+      },
+      {
+        "tier": "major metro",
+        "low": 15500,
+        "high": 20000
+      }
+    ],
+    "source": "Posted base ranges, 2024, grossed up. Commission is deliberately excluded — model it as a variable cost against revenue, not payroll.",
+    "keywords": [
+      "inside sales",
+      "sdr",
+      "sales development"
+    ]
+  },
+  {
+    "id": "account_executive_wage",
+    "label": "Account executive, fully loaded per quarter (base only)",
+    "templates": [],
+    "unit": "USD",
+    "low": 15000,
+    "high": 27000,
+    "tiers": [
+      {
+        "tier": "smb sales",
+        "low": 15000,
+        "high": 20000
+      },
+      {
+        "tier": "mid-market and up",
+        "low": 20000,
+        "high": 27000
+      }
+    ],
+    "source": "Posted B2B base ranges, 2024, grossed up. OTE roughly doubles this; the variable half belongs in cost of sales.",
+    "keywords": [
+      "account executive",
+      "field sales"
+    ]
+  },
+  {
+    "id": "recruiter_wage",
+    "label": "Recruiter, fully loaded per quarter",
+    "templates": [
+      "professional_services_firm"
+    ],
+    "unit": "USD",
+    "low": 12500,
+    "high": 21000,
+    "tiers": [
+      {
+        "tier": "coordinator",
+        "low": 12500,
+        "high": 16000
+      },
+      {
+        "tier": "full-desk recruiter",
+        "low": 16000,
+        "high": 21000
+      }
+    ],
+    "source": "BLS 13-1071 medians, 2024, grossed up for payroll load. Agency recruiters bill 15-25% of first-year salary instead, which is a variable cost.",
+    "keywords": [
+      "recruiter",
+      "talent acquisition"
+    ]
+  },
+  {
+    "id": "graphic_designer_wage",
+    "label": "Graphic designer, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 14000,
+    "high": 24000,
+    "tiers": [
+      {
+        "tier": "junior",
+        "low": 14000,
+        "high": 18000
+      },
+      {
+        "tier": "senior",
+        "low": 18000,
+        "high": 24000
+      }
+    ],
+    "source": "BLS 27-1024 medians, 2024, grossed up for payroll load. Freelance rates of $50-120/hr are the common alternative below full-time need.",
+    "keywords": [
+      "graphic designer",
+      "brand designer"
+    ]
+  },
+  {
+    "id": "product_designer_wage",
+    "label": "Product / UX designer, fully loaded per quarter",
+    "templates": [
+      "b2b_saas"
+    ],
+    "unit": "USD",
+    "low": 26000,
+    "high": 41000,
+    "tiers": [
+      {
+        "tier": "secondary market or remote",
+        "low": 26000,
+        "high": 33000
+      },
+      {
+        "tier": "major metro",
+        "low": 33000,
+        "high": 41000
+      }
+    ],
+    "source": "Posted salary ranges, 2024, grossed up. Tracks software engineering pay more closely than graphic design.",
+    "keywords": [
+      "product designer",
+      "ux designer"
+    ]
+  },
+  {
+    "id": "data_analyst_wage",
+    "label": "Data analyst, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 20000,
+    "high": 32000,
+    "tiers": [
+      {
+        "tier": "secondary market or remote",
+        "low": 20000,
+        "high": 26000
+      },
+      {
+        "tier": "major metro",
+        "low": 26000,
+        "high": 32000
+      }
+    ],
+    "source": "BLS 15-2051 medians, 2024, grossed up for payroll load and benefits.",
+    "keywords": [
+      "data analyst",
+      "analytics"
+    ]
+  },
+  {
+    "id": "qa_tester_wage",
+    "label": "QA tester, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 11500,
+    "high": 18500,
+    "tiers": [
+      {
+        "tier": "contract / junior",
+        "low": 11500,
+        "high": 14500
+      },
+      {
+        "tier": "embedded / senior",
+        "low": 14500,
+        "high": 18500
+      }
+    ],
+    "source": "Posted ranges, 2024, grossed up. Games and software QA pay well below development, which is why it is often the first hire after the founders stop testing their own builds.",
+    "keywords": [
+      "qa tester",
+      "quality assurance",
+      "playtester"
+    ]
+  },
+  {
+    "id": "personal_trainer_wage",
+    "label": "Personal trainer, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 11500,
+    "high": 24000,
+    "tiers": [
+      {
+        "tier": "staff trainer",
+        "low": 11500,
+        "high": 17000
+      },
+      {
+        "tier": "senior / specialist",
+        "low": 17000,
+        "high": 24000
+      }
+    ],
+    "source": "BLS 39-9031 medians, 2024, grossed up. Many gyms pay per session instead — if so this is a variable cost, not a block.",
+    "keywords": [
+      "personal trainer",
+      "fitness instructor",
+      "coach"
+    ]
+  },
+  {
+    "id": "gym_desk_wage",
+    "label": "Gym front desk, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7000,
+    "high": 11000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7000,
+        "high": 9000
+      },
+      {
+        "tier": "major metro",
+        "low": 9000,
+        "high": 11000
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage.",
+    "keywords": [
+      "front desk (gym)",
+      "membership desk"
+    ]
+  },
+  {
+    "id": "daycare_attendant_wage",
+    "label": "Dog daycare attendant, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7500,
+    "high": 11500,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 7500,
+        "high": 9500
+      },
+      {
+        "tier": "major metro",
+        "low": 9500,
+        "high": 11500
+      }
+    ],
+    "source": "BLS occupational wage data, 2024, grossed up for payroll load — employer taxes, workers' comp and any benefits, typically 12-18% on top of wage. Ratios are the constraint: one attendant per 10-15 dogs is the insurable norm, which makes this a true step-fixed line.",
+    "keywords": [
+      "daycare attendant",
+      "kennel staff",
+      "dog handler"
+    ]
+  },
+  {
+    "id": "groomer_wage",
+    "label": "Pet groomer, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 10000,
+    "high": 19000,
+    "tiers": [
+      {
+        "tier": "salary or hourly",
+        "low": 10000,
+        "high": 14000
+      },
+      {
+        "tier": "commission-equivalent",
+        "low": 14000,
+        "high": 19000
+      }
+    ],
+    "source": "Posted ranges, 2024, grossed up. Commission splits of 40-60% of service revenue are common and turn this into a variable cost.",
+    "keywords": [
+      "groomer",
+      "pet grooming staff"
+    ]
+  },
+  {
+    "id": "housekeeper_wage",
+    "label": "Hotel housekeeper, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8000,
+    "high": 13000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 8000,
+        "high": 10500
+      },
+      {
+        "tier": "major metro or resort",
+        "low": 10500,
+        "high": 13000
+      }
+    ],
+    "source": "BLS 37-2012 medians, 2024, grossed up. Rule of thumb is 12-16 rooms cleaned per shift, which sets the blocks-per-occupied-room arithmetic.",
+    "keywords": [
+      "housekeeper",
+      "room attendant"
+    ]
+  },
+  {
+    "id": "hotel_desk_wage",
+    "label": "Hotel front desk agent, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8000,
+    "high": 13000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 8000,
+        "high": 10500
+      },
+      {
+        "tier": "major metro",
+        "low": 10500,
+        "high": 13000
+      }
+    ],
+    "source": "BLS 43-4081 medians, 2024, grossed up for payroll load. A 24-hour desk is 4.2 full-time-equivalents, not three shifts.",
+    "keywords": [
+      "front desk agent",
+      "guest services"
+    ]
+  },
+  {
+    "id": "night_auditor_wage",
+    "label": "Night auditor, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8500,
+    "high": 13500,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 8500,
+        "high": 11000
+      },
+      {
+        "tier": "major metro",
+        "low": 11000,
+        "high": 13500
+      }
+    ],
+    "source": "BLS 43-4081 plus overnight differential, 2024, grossed up. A limited-service hotel cannot legally run unstaffed overnight, which makes this block a true minimum.",
+    "keywords": [
+      "night auditor",
+      "overnight desk"
+    ]
+  },
+  {
+    "id": "maintenance_tech_wage",
+    "label": "Property maintenance tech, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 10000,
+    "high": 18000,
+    "tiers": [
+      {
+        "tier": "handyman grade",
+        "low": 10000,
+        "high": 14000
+      },
+      {
+        "tier": "licensed trades exposure",
+        "low": 14000,
+        "high": 18000
+      }
+    ],
+    "source": "BLS 49-9071 medians, 2024, grossed up for payroll load. One tech per 60-100 hotel rooms or 150-250 storage units is the staffing norm.",
+    "keywords": [
+      "maintenance tech",
+      "handyman",
+      "facilities"
+    ]
+  },
+  {
+    "id": "security_guard_wage",
+    "label": "Security guard, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 8500,
+    "high": 14000,
+    "tiers": [
+      {
+        "tier": "unarmed",
+        "low": 8500,
+        "high": 11500
+      },
+      {
+        "tier": "armed or overnight",
+        "low": 11500,
+        "high": 14000
+      }
+    ],
+    "source": "BLS 33-9032 medians, 2024, grossed up for payroll load. Contract guard services bill $25-45/hr and carry the liability themselves.",
+    "keywords": [
+      "security guard",
+      "door staff"
+    ]
+  },
+  {
+    "id": "stylist_wage",
+    "label": "Hair stylist, fully loaded per quarter (employee model)",
+    "templates": [],
+    "unit": "USD",
+    "low": 8000,
+    "high": 16000,
+    "tiers": [
+      {
+        "tier": "new stylist",
+        "low": 8000,
+        "high": 11500
+      },
+      {
+        "tier": "established, with clientele",
+        "low": 11500,
+        "high": 16000
+      }
+    ],
+    "source": "BLS 39-5012 medians, 2024, grossed up. Booth rental flips this line entirely: the stylist becomes a tenant paying you $150-400 a week instead of a cost.",
+    "keywords": [
+      "stylist",
+      "hairdresser",
+      "barber"
+    ]
+  },
+  {
+    "id": "massage_therapist_wage",
+    "label": "Massage therapist, fully loaded per quarter (employee model)",
+    "templates": [],
+    "unit": "USD",
+    "low": 11500,
+    "high": 22000,
+    "tiers": [
+      {
+        "tier": "employee, hourly",
+        "low": 11500,
+        "high": 16500
+      },
+      {
+        "tier": "per-service equivalent",
+        "low": 16500,
+        "high": 22000
+      }
+    ],
+    "source": "BLS 31-9011 medians, 2024, grossed up. Per-service pay of $25-50 per massage is the more common structure and is variable, not step-fixed.",
+    "keywords": [
+      "massage therapist",
+      "esthetician"
+    ]
+  },
+  {
+    "id": "childcare_wage",
+    "label": "Childcare worker, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 7500,
+    "high": 11500,
+    "tiers": [
+      {
+        "tier": "assistant",
+        "low": 7500,
+        "high": 9500
+      },
+      {
+        "tier": "lead teacher",
+        "low": 9500,
+        "high": 11500
+      }
+    ],
+    "source": "BLS 39-9011 medians, 2024, grossed up. State-mandated ratios (1:4 infants, 1:10+ preschool) make staffing a hard function of enrollment mix.",
+    "keywords": [
+      "childcare",
+      "daycare teacher"
+    ]
+  },
+  {
+    "id": "instructor_wage",
+    "label": "Instructor / tutor, fully loaded per quarter",
+    "templates": [],
+    "unit": "USD",
+    "low": 10000,
+    "high": 22000,
+    "tiers": [
+      {
+        "tier": "group instruction",
+        "low": 10000,
+        "high": 15000
+      },
+      {
+        "tier": "specialized or certified",
+        "low": 15000,
+        "high": 22000
+      }
+    ],
+    "source": "Posted ranges across tutoring, music and enrichment, 2024, grossed up. Per-session contractor pay is the common alternative and is variable.",
+    "keywords": [
+      "tutor",
+      "instructor",
+      "teacher"
+    ]
+  },
+  {
+    "id": "espresso_machine",
+    "label": "Commercial espresso machine",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 25000,
+    "tiers": [
+      {
+        "tier": "used 2-group",
+        "low": 3000,
+        "high": 7000
+      },
+      {
+        "tier": "new 2-group",
+        "low": 9000,
+        "high": 16000
+      },
+      {
+        "tier": "new 3-group",
+        "low": 14000,
+        "high": 25000
+      }
+    ],
+    "source": "Specialty coffee equipment dealer listings, 2024. Installation wants a dedicated water line and often a filtration system at $500-1,500 more.",
+    "keywords": [
+      "espresso machine",
+      "espresso"
+    ]
+  },
+  {
+    "id": "coffee_grinder",
+    "label": "Commercial coffee grinder",
+    "templates": [],
+    "unit": "USD",
+    "low": 500,
+    "high": 3500,
+    "tiers": [
+      {
+        "tier": "shop grinder",
+        "low": 500,
+        "high": 1500
+      },
+      {
+        "tier": "high-volume / grind-by-weight",
+        "low": 1500,
+        "high": 3500
+      }
+    ],
+    "source": "Dealer listings, 2024. Busy shops run two — one for espresso, one for batch.",
+    "keywords": [
+      "coffee grinder"
+    ]
+  },
+  {
+    "id": "coffee_roaster",
+    "label": "Shop coffee roaster",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 60000,
+    "tiers": [
+      {
+        "tier": "sample / 1kg",
+        "low": 3000,
+        "high": 10000
+      },
+      {
+        "tier": "shop 5kg",
+        "low": 15000,
+        "high": 45000
+      },
+      {
+        "tier": "production 12kg+",
+        "low": 35000,
+        "high": 60000
+      }
+    ],
+    "source": "Roaster manufacturer list prices and used listings, 2024. Ventilation and afterburner requirements can add five figures in some jurisdictions.",
+    "keywords": [
+      "roaster",
+      "coffee roasting"
+    ]
+  },
+  {
+    "id": "reach_in_cooler",
+    "label": "Reach-in cooler",
+    "templates": [],
+    "unit": "USD",
+    "low": 900,
+    "high": 6000,
+    "tiers": [
+      {
+        "tier": "used single-door",
+        "low": 900,
+        "high": 2000
+      },
+      {
+        "tier": "new single-door",
+        "low": 1800,
+        "high": 3500
+      },
+      {
+        "tier": "new double-door",
+        "low": 3000,
+        "high": 6000
+      }
+    ],
+    "source": "Restaurant equipment dealer listings, 2024. A fifth the price of a walk-in and the thing a bare \"cooler\" usually means.",
+    "keywords": [
+      "reach-in",
+      "reach in cooler"
+    ]
+  },
+  {
+    "id": "reach_in_freezer",
+    "label": "Reach-in freezer",
+    "templates": [],
+    "unit": "USD",
+    "low": 1200,
+    "high": 7000,
+    "tiers": [
+      {
+        "tier": "used single-door",
+        "low": 1200,
+        "high": 2500
+      },
+      {
+        "tier": "new double-door",
+        "low": 3500,
+        "high": 7000
+      }
+    ],
+    "source": "Restaurant equipment dealer listings, 2024. Used units carry no warranty on the compressor, which is most of the value.",
+    "keywords": [
+      "reach-in freezer"
+    ]
+  },
+  {
+    "id": "ice_machine",
+    "label": "Commercial ice machine",
+    "templates": [],
+    "unit": "USD",
+    "low": 1500,
+    "high": 8000,
+    "tiers": [
+      {
+        "tier": "300 lb/day undercounter",
+        "low": 1500,
+        "high": 3500
+      },
+      {
+        "tier": "600-800 lb/day with bin",
+        "low": 4000,
+        "high": 8000
+      }
+    ],
+    "source": "Dealer listings, 2024. Leasing at $100-200/month is common and moves this to a fixed cost.",
+    "keywords": [
+      "ice machine",
+      "ice maker"
+    ]
+  },
+  {
+    "id": "dish_machine",
+    "label": "Commercial dish machine",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 30000,
+    "tiers": [
+      {
+        "tier": "undercounter high-temp",
+        "low": 3000,
+        "high": 6000
+      },
+      {
+        "tier": "door-type",
+        "low": 8000,
+        "high": 16000
+      },
+      {
+        "tier": "conveyor",
+        "low": 15000,
+        "high": 30000
+      }
+    ],
+    "source": "Dealer listings, 2024. Chemical-rinse lease programs at $150-300/month with detergent contracts are the common alternative to owning.",
+    "keywords": [
+      "dish machine",
+      "commercial dishwasher",
+      "warewasher"
+    ]
+  },
+  {
+    "id": "convection_oven",
+    "label": "Convection oven",
+    "templates": [],
+    "unit": "USD",
+    "low": 2000,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "used single-deck",
+        "low": 2000,
+        "high": 4500
+      },
+      {
+        "tier": "new double-deck",
+        "low": 6000,
+        "high": 12000
+      }
+    ],
+    "source": "Restaurant equipment dealer listings, 2024. Combi ovens with steam sit at the top of the band and want a water line.",
+    "keywords": [
+      "convection oven",
+      "combi oven"
+    ]
+  },
+  {
+    "id": "pizza_oven",
+    "label": "Pizza oven",
+    "templates": [],
+    "unit": "USD",
+    "low": 4000,
+    "high": 35000,
+    "tiers": [
+      {
+        "tier": "gas deck, single",
+        "low": 4000,
+        "high": 12000
+      },
+      {
+        "tier": "double stone deck",
+        "low": 8000,
+        "high": 20000
+      },
+      {
+        "tier": "rotating brick / wood-fired",
+        "low": 18000,
+        "high": 35000
+      }
+    ],
+    "source": "Dealer and importer listings, 2024. Wood-fired installs add flue and clearance work that can rival the oven.",
+    "keywords": [
+      "pizza oven",
+      "deck oven",
+      "wood-fired oven"
+    ]
+  },
+  {
+    "id": "fryer",
+    "label": "Commercial fryer",
+    "templates": [],
+    "unit": "USD",
+    "low": 1000,
+    "high": 6000,
+    "tiers": [
+      {
+        "tier": "used single-vat",
+        "low": 1000,
+        "high": 2500
+      },
+      {
+        "tier": "new two-vat with filtration",
+        "low": 3000,
+        "high": 6000
+      }
+    ],
+    "source": "Restaurant equipment dealer listings, 2024. Built-in filtration halves oil spend, which pays the price gap back within a year at volume.",
+    "keywords": [
+      "fryer",
+      "deep fryer"
+    ]
+  },
+  {
+    "id": "draft_system",
+    "label": "Draft beer system",
+    "templates": [],
+    "unit": "USD",
+    "low": 2500,
+    "high": 20000,
+    "tiers": [
+      {
+        "tier": "4-tap direct-draw",
+        "low": 2500,
+        "high": 6000
+      },
+      {
+        "tier": "8-12 tap glycol long-draw",
+        "low": 8000,
+        "high": 20000
+      }
+    ],
+    "source": "Draft installer quotes, 2024. Long-draw glycol runs are priced per foot and per tap; the walk-in it pulls from is a separate line.",
+    "keywords": [
+      "draft system",
+      "tap system",
+      "taps"
+    ]
+  },
+  {
+    "id": "brewhouse",
+    "label": "Brewhouse",
+    "templates": [],
+    "unit": "USD",
+    "low": 40000,
+    "high": 350000,
+    "tiers": [
+      {
+        "tier": "3-3.5 bbl",
+        "low": 40000,
+        "high": 90000
+      },
+      {
+        "tier": "7 bbl",
+        "low": 70000,
+        "high": 180000
+      },
+      {
+        "tier": "15 bbl",
+        "low": 150000,
+        "high": 350000
+      }
+    ],
+    "source": "Brewing equipment manufacturer quotes and used listings, 2024. Turnkey with fermenters roughly doubles the brewhouse-only figure.",
+    "keywords": [
+      "brewhouse",
+      "brewing system",
+      "3bbl",
+      "7bbl"
+    ]
+  },
+  {
+    "id": "fermenter",
+    "label": "Fermenter (unitank)",
+    "templates": [],
+    "unit": "USD",
+    "low": 5000,
+    "high": 25000,
+    "tiers": [
+      {
+        "tier": "3-7 bbl",
+        "low": 5000,
+        "high": 15000
+      },
+      {
+        "tier": "15 bbl",
+        "low": 12000,
+        "high": 25000
+      }
+    ],
+    "source": "Manufacturer quotes and used listings, 2024. Count them against annual barrelage — fermenter capacity, not the brewhouse, usually caps output.",
+    "keywords": [
+      "fermenter",
+      "unitank",
+      "brite tank"
+    ]
+  },
+  {
+    "id": "keg",
+    "label": "Half-barrel keg, each",
+    "templates": [],
+    "unit": "USD",
+    "low": 60,
+    "high": 170,
+    "tiers": [
+      {
+        "tier": "used",
+        "low": 60,
+        "high": 100
+      },
+      {
+        "tier": "new",
+        "low": 110,
+        "high": 170
+      }
+    ],
+    "source": "Keg supplier pricing, 2024. A self-distributing brewpub needs roughly 2-3 kegs in circulation per tap handle sold.",
+    "keywords": [
+      "keg"
+    ]
+  },
+  {
+    "id": "glycol_chiller",
+    "label": "Glycol chiller",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "2-3 hp",
+        "low": 3000,
+        "high": 7000
+      },
+      {
+        "tier": "5+ hp",
+        "low": 7000,
+        "high": 15000
+      }
+    ],
+    "source": "Manufacturer quotes, 2024. Sized to fermenter count; undersizing shows up as lost batches, not higher bills.",
+    "keywords": [
+      "glycol",
+      "chiller"
+    ]
+  },
+  {
+    "id": "grease_trap",
+    "label": "Grease trap / interceptor, installed",
+    "templates": [],
+    "unit": "USD",
+    "low": 1500,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "under-sink unit",
+        "low": 1500,
+        "high": 4000
+      },
+      {
+        "tier": "in-ground gravity interceptor",
+        "low": 6000,
+        "high": 15000
+      }
+    ],
+    "source": "Plumbing contractor quotes, 2024. Many jurisdictions size it by fixture count and will not open a kitchen without it.",
+    "keywords": [
+      "grease trap",
+      "grease interceptor"
+    ]
+  },
+  {
+    "id": "food_truck",
+    "label": "Food truck, complete build",
+    "templates": [],
+    "unit": "USD",
+    "low": 40000,
+    "high": 200000,
+    "tiers": [
+      {
+        "tier": "used, operating",
+        "low": 40000,
+        "high": 90000
+      },
+      {
+        "tier": "new custom build",
+        "low": 100000,
+        "high": 200000
+      }
+    ],
+    "source": "Builder quotes and resale listings, 2024. Commissary rent, permits and generator fuel are the recurring lines people forget.",
+    "keywords": [
+      "food truck",
+      "trailer kitchen"
+    ]
+  },
+  {
+    "id": "dough_mixer",
+    "label": "Spiral / planetary dough mixer",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "used 40-60 qt",
+        "low": 3000,
+        "high": 7000
+      },
+      {
+        "tier": "new 60-80 qt spiral",
+        "low": 8000,
+        "high": 15000
+      }
+    ],
+    "source": "Bakery equipment dealer listings, 2024. Spiral mixers handle stiff doughs a planetary cannot; buying the wrong one is a full re-buy.",
+    "keywords": [
+      "dough mixer",
+      "spiral mixer",
+      "planetary mixer"
+    ]
+  },
+  {
+    "id": "display_case",
+    "label": "Refrigerated display case",
+    "templates": [],
+    "unit": "USD",
+    "low": 2000,
+    "high": 10000,
+    "tiers": [
+      {
+        "tier": "used 4-6 ft",
+        "low": 2000,
+        "high": 4500
+      },
+      {
+        "tier": "new 6-8 ft curved glass",
+        "low": 5000,
+        "high": 10000
+      }
+    ],
+    "source": "Restaurant equipment dealer listings, 2024. Curved-glass service cases cost roughly double the grab-and-go equivalent.",
+    "keywords": [
+      "display case",
+      "pastry case",
+      "deli case"
+    ]
+  },
+  {
+    "id": "soft_serve",
+    "label": "Soft-serve / frozen yogurt machine",
+    "templates": [],
+    "unit": "USD",
+    "low": 4000,
+    "high": 25000,
+    "tiers": [
+      {
+        "tier": "used single-flavor",
+        "low": 4000,
+        "high": 8000
+      },
+      {
+        "tier": "new twin-twist, gravity",
+        "low": 9000,
+        "high": 16000
+      },
+      {
+        "tier": "new pressurized high-volume",
+        "low": 16000,
+        "high": 25000
+      }
+    ],
+    "source": "Dealer listings, 2024. Pressurized machines overrun more air into the product, which is margin — the price gap pays back in COGS.",
+    "keywords": [
+      "soft serve",
+      "soft-serve",
+      "frozen yogurt machine"
+    ]
+  },
+  {
+    "id": "retail_fitout_sqft",
+    "label": "Retail fit-out per square foot",
+    "templates": [],
+    "unit": "USD",
+    "low": 40,
+    "high": 150,
+    "tiers": [
+      {
+        "tier": "paint, fixtures, lighting",
+        "low": 40,
+        "high": 80
+      },
+      {
+        "tier": "full remodel",
+        "low": 90,
+        "high": 150
+      }
+    ],
+    "source": "Retail construction cost surveys, 2023-24. A second-generation retail space with usable flooring and lighting halves this.",
+    "keywords": [
+      "retail fitout",
+      "store buildout",
+      "fixtures"
+    ]
+  },
+  {
+    "id": "security_system",
+    "label": "Camera / security system, installed",
+    "templates": [],
+    "unit": "USD",
+    "low": 800,
+    "high": 10000,
+    "tiers": [
+      {
+        "tier": "4-8 camera NVR",
+        "low": 800,
+        "high": 3000
+      },
+      {
+        "tier": "16-camera professional",
+        "low": 4000,
+        "high": 10000
+      }
+    ],
+    "source": "Installer quotes, 2024. Monitoring contracts add $30-80 a month.",
+    "keywords": [
+      "security camera",
+      "cctv",
+      "alarm system"
+    ]
+  },
+  {
+    "id": "signage",
+    "label": "Exterior signage",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 40000,
+    "tiers": [
+      {
+        "tier": "channel letters",
+        "low": 3000,
+        "high": 15000
+      },
+      {
+        "tier": "monument / pylon",
+        "low": 15000,
+        "high": 40000
+      }
+    ],
+    "source": "Sign fabricator quotes, 2024. Permitting and landlord criteria drive more variance than fabrication; some centers dictate the sign vendor.",
+    "keywords": [
+      "signage",
+      "sign",
+      "channel letters"
+    ]
+  },
+  {
+    "id": "gym_cardio",
+    "label": "Commercial treadmill / cardio unit",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 9000,
+    "tiers": [
+      {
+        "tier": "used, refurbished",
+        "low": 3000,
+        "high": 5000
+      },
+      {
+        "tier": "new commercial grade",
+        "low": 5000,
+        "high": 9000
+      }
+    ],
+    "source": "Fitness equipment dealer pricing, 2024. Residential-grade units fail in months under commercial duty and void their warranties.",
+    "keywords": [
+      "treadmill",
+      "cardio equipment",
+      "elliptical"
+    ]
+  },
+  {
+    "id": "gym_strength",
+    "label": "Strength station — rack, bar, plates",
+    "templates": [],
+    "unit": "USD",
+    "low": 1500,
+    "high": 5000,
+    "tiers": [
+      {
+        "tier": "rack with bar and bumpers",
+        "low": 1500,
+        "high": 3000
+      },
+      {
+        "tier": "full station with platform",
+        "low": 3000,
+        "high": 5000
+      }
+    ],
+    "source": "Fitness equipment dealer pricing, 2024. Commercial-duty bars and bumpers, not the residential grade that fails under daily drops.",
+    "keywords": [
+      "squat rack",
+      "power rack",
+      "weights",
+      "dumbbells"
+    ]
+  },
+  {
+    "id": "gym_fitout_sqft",
+    "label": "Gym fit-out per square foot",
+    "templates": [],
+    "unit": "USD",
+    "low": 20,
+    "high": 120,
+    "tiers": [
+      {
+        "tier": "boutique studio, minimal equipment",
+        "low": 20,
+        "high": 60
+      },
+      {
+        "tier": "full-service with equipment",
+        "low": 60,
+        "high": 120
+      }
+    ],
+    "source": "Fitness industry buildout surveys, 2023-24, equipment-inclusive at the top tier. Flooring and HVAC upgrades are the underestimated half.",
+    "keywords": [
+      "gym buildout",
+      "fitness studio buildout"
+    ]
+  },
+  {
+    "id": "hotel_ffe_key",
+    "label": "Hotel FF&E per key",
+    "templates": [],
+    "unit": "USD",
+    "low": 4000,
+    "high": 50000,
+    "tiers": [
+      {
+        "tier": "economy refresh",
+        "low": 4000,
+        "high": 10000
+      },
+      {
+        "tier": "midscale renovation",
+        "low": 12000,
+        "high": 25000
+      },
+      {
+        "tier": "upscale",
+        "low": 25000,
+        "high": 50000
+      }
+    ],
+    "source": "Hotel renovation cost surveys and franchise PIP ranges, 2023-24. A franchise property-improvement plan makes the midscale tier mandatory, not optional.",
+    "keywords": [
+      "ff&e",
+      "ffe",
+      "per key",
+      "room renovation",
+      "hotel furniture"
+    ]
+  },
+  {
+    "id": "commercial_laundry",
+    "label": "Commercial washer or dryer, each",
+    "templates": [],
+    "unit": "USD",
+    "low": 2000,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "stack dryer / small washer",
+        "low": 2000,
+        "high": 5000
+      },
+      {
+        "tier": "60+ lb washer-extractor",
+        "low": 6000,
+        "high": 12000
+      }
+    ],
+    "source": "Commercial laundry dealer pricing, 2024. On-premise laundry pays back against linen service at roughly 60+ rooms.",
+    "keywords": [
+      "commercial washer",
+      "washer-extractor",
+      "laundry equipment"
+    ]
+  },
+  {
+    "id": "batch_plant",
+    "label": "Ready-mix batch plant",
+    "templates": [],
+    "unit": "USD",
+    "low": 100000,
+    "high": 1500000,
+    "tiers": [
+      {
+        "tier": "portable / used",
+        "low": 100000,
+        "high": 400000
+      },
+      {
+        "tier": "stationary central-mix",
+        "low": 400000,
+        "high": 1500000
+      }
+    ],
+    "source": "Plant manufacturer quotes and used listings, 2024. Permitting, power and water infrastructure are on top and site-specific.",
+    "keywords": [
+      "batch plant",
+      "concrete plant"
+    ]
+  },
+  {
+    "id": "wheel_loader",
+    "label": "Wheel loader",
+    "templates": [],
+    "unit": "USD",
+    "low": 60000,
+    "high": 350000,
+    "tiers": [
+      {
+        "tier": "used, 8-15 years",
+        "low": 60000,
+        "high": 150000
+      },
+      {
+        "tier": "new mid-size",
+        "low": 150000,
+        "high": 350000
+      }
+    ],
+    "source": "Heavy equipment dealer and auction listings, 2024.",
+    "keywords": [
+      "wheel loader",
+      "front loader"
+    ]
+  },
+  {
+    "id": "cement_silo",
+    "label": "Cement silo",
+    "templates": [],
+    "unit": "USD",
+    "low": 15000,
+    "high": 60000,
+    "tiers": [
+      {
+        "tier": "used portable",
+        "low": 15000,
+        "high": 30000
+      },
+      {
+        "tier": "new, larger capacity",
+        "low": 30000,
+        "high": 60000
+      }
+    ],
+    "source": "Heavy equipment listings, 2024. Erection and foundations are on top and can approach the silo price for larger units.",
+    "keywords": [
+      "silo",
+      "cement storage"
+    ]
+  },
+  {
+    "id": "mini_excavator",
+    "label": "Mini excavator",
+    "templates": [],
+    "unit": "USD",
+    "low": 25000,
+    "high": 90000,
+    "tiers": [
+      {
+        "tier": "used",
+        "low": 25000,
+        "high": 45000
+      },
+      {
+        "tier": "new",
+        "low": 45000,
+        "high": 90000
+      }
+    ],
+    "source": "Dealer and auction listings, 2024. Renting at $1,500-3,000/month beats owning below ~60% utilisation.",
+    "keywords": [
+      "excavator",
+      "mini ex"
+    ]
+  },
+  {
+    "id": "skid_steer",
+    "label": "Skid steer",
+    "templates": [],
+    "unit": "USD",
+    "low": 20000,
+    "high": 75000,
+    "tiers": [
+      {
+        "tier": "used",
+        "low": 20000,
+        "high": 40000
+      },
+      {
+        "tier": "new with attachments",
+        "low": 40000,
+        "high": 75000
+      }
+    ],
+    "source": "Heavy equipment dealer and auction listings, 2024. Attachments — forks, augers, breakers — are $2-15k each and are usually the point.",
+    "keywords": [
+      "skid steer",
+      "bobcat"
+    ]
+  },
+  {
+    "id": "generator_towable",
+    "label": "Towable generator",
+    "templates": [],
+    "unit": "USD",
+    "low": 8000,
+    "high": 40000,
+    "tiers": [
+      {
+        "tier": "25-45 kVA used",
+        "low": 8000,
+        "high": 18000
+      },
+      {
+        "tier": "100+ kVA new",
+        "low": 20000,
+        "high": 40000
+      }
+    ],
+    "source": "Heavy equipment listings, 2024. Fuel at load is the real cost of ownership; a 45 kVA unit burns roughly 3 gallons an hour.",
+    "keywords": [
+      "generator"
+    ]
+  },
+  {
+    "id": "scaffolding",
+    "label": "Scaffolding set",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "frame set, 2-3 stories",
+        "low": 3000,
+        "high": 7000
+      },
+      {
+        "tier": "system scaffold package",
+        "low": 7000,
+        "high": 15000
+      }
+    ],
+    "source": "Supplier pricing, 2024. Rental is the norm below constant use.",
+    "keywords": [
+      "scaffolding",
+      "scaffold"
+    ]
+  },
+  {
+    "id": "zero_turn_mower",
+    "label": "Commercial zero-turn mower",
+    "templates": [],
+    "unit": "USD",
+    "low": 7000,
+    "high": 16000,
+    "tiers": [
+      {
+        "tier": "48-52 inch",
+        "low": 7000,
+        "high": 10500
+      },
+      {
+        "tier": "60-72 inch diesel",
+        "low": 10500,
+        "high": 16000
+      }
+    ],
+    "source": "Dealer pricing, 2024. Residential zero-turns at half the price last one commercial season.",
+    "keywords": [
+      "zero-turn",
+      "commercial mower",
+      "mower"
+    ]
+  },
+  {
+    "id": "equipment_trailer",
+    "label": "Equipment / utility trailer",
+    "templates": [],
+    "unit": "USD",
+    "low": 3000,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "landscape utility",
+        "low": 3000,
+        "high": 6000
+      },
+      {
+        "tier": "deckover equipment",
+        "low": 6000,
+        "high": 12000
+      }
+    ],
+    "source": "Trailer dealer listings, 2024. GVWR drives both the price and whether a CDL is needed to tow it loaded.",
+    "keywords": [
+      "trailer (equipment)",
+      "utility trailer"
+    ]
+  },
+  {
+    "id": "refrigerated_van",
+    "label": "Refrigerated van",
+    "templates": [],
+    "unit": "USD",
+    "low": 30000,
+    "high": 95000,
+    "tiers": [
+      {
+        "tier": "used with reefer unit",
+        "low": 30000,
+        "high": 55000
+      },
+      {
+        "tier": "new with reefer unit",
+        "low": 60000,
+        "high": 95000
+      }
+    ],
+    "source": "Commercial vehicle listings, 2024. The reefer unit and insulation are $15-30k of the total and age faster than the chassis.",
+    "keywords": [
+      "refrigerated van",
+      "reefer van"
+    ]
+  },
+  {
+    "id": "pickup_work",
+    "label": "Work pickup truck",
+    "templates": [],
+    "unit": "USD",
+    "low": 25000,
+    "high": 65000,
+    "tiers": [
+      {
+        "tier": "used 3/4-ton",
+        "low": 25000,
+        "high": 40000
+      },
+      {
+        "tier": "new 3/4-ton work spec",
+        "low": 40000,
+        "high": 65000
+      }
+    ],
+    "source": "Dealer listings, 2024. Work-spec trim; crew-cab comfort packages add $10-15k and haul nothing extra.",
+    "keywords": [
+      "pickup",
+      "work truck"
+    ]
+  },
+  {
+    "id": "passenger_van",
+    "label": "Passenger / shuttle van",
+    "templates": [],
+    "unit": "USD",
+    "low": 35000,
+    "high": 70000,
+    "tiers": [
+      {
+        "tier": "used 12-15 passenger",
+        "low": 35000,
+        "high": 50000
+      },
+      {
+        "tier": "new with ADA lift",
+        "low": 50000,
+        "high": 70000
+      }
+    ],
+    "source": "Dealer listings, 2024. An ADA lift adds $15-25k and is required for many contract routes.",
+    "keywords": [
+      "shuttle van",
+      "passenger van",
+      "15-passenger"
+    ]
+  },
+  {
+    "id": "dev_workstation",
+    "label": "Developer workstation",
+    "templates": [],
+    "unit": "USD",
+    "low": 1500,
+    "high": 4500,
+    "tiers": [
+      {
+        "tier": "capable laptop",
+        "low": 1500,
+        "high": 2500
+      },
+      {
+        "tier": "high-end / GPU workstation",
+        "low": 2500,
+        "high": 4500
+      }
+    ],
+    "source": "Retail configuration pricing, 2024. Game development with local builds sits at the top of the band.",
+    "keywords": [
+      "workstation",
+      "dev machine",
+      "computer",
+      "laptop"
+    ]
+  },
+  {
+    "id": "telescope_rental",
+    "label": "Telescope, rental-fleet grade",
+    "templates": [],
+    "unit": "USD",
+    "low": 600,
+    "high": 7000,
+    "tiers": [
+      {
+        "tier": "8-12 inch Dobsonian",
+        "low": 600,
+        "high": 2000
+      },
+      {
+        "tier": "8-11 inch SCT with tracking mount",
+        "low": 2500,
+        "high": 7000
+      }
+    ],
+    "source": "Astronomy retailer list prices, 2024. Rental duty favours Dobsonians — fewer motors to break and collimation is the only maintenance.",
+    "keywords": [
+      "telescope",
+      "dobsonian"
+    ]
+  },
+  {
+    "id": "kennel_run",
+    "label": "Kennel run buildout, per run",
+    "templates": [],
+    "unit": "USD",
+    "low": 800,
+    "high": 3000,
+    "tiers": [
+      {
+        "tier": "chain link, indoor",
+        "low": 800,
+        "high": 1500
+      },
+      {
+        "tier": "glass-front with drainage",
+        "low": 1500,
+        "high": 3000
+      }
+    ],
+    "source": "Kennel construction supplier pricing, 2024. Drainage and sound attenuation are what separate the tiers — and what inspections check.",
+    "keywords": [
+      "kennel",
+      "dog run"
+    ]
+  },
+  {
+    "id": "grooming_tub",
+    "label": "Grooming tub and table",
+    "templates": [],
+    "unit": "USD",
+    "low": 1000,
+    "high": 4000,
+    "tiers": [
+      {
+        "tier": "walk-in tub",
+        "low": 1000,
+        "high": 2200
+      },
+      {
+        "tier": "electric-lift tub and table",
+        "low": 2200,
+        "high": 4000
+      }
+    ],
+    "source": "Pet industry supplier pricing, 2024. Electric-lift tables are a workers-comp argument as much as a comfort one.",
+    "keywords": [
+      "grooming tub",
+      "grooming station"
+    ]
+  },
+  {
+    "id": "rv_site_development",
+    "label": "Campground site development, per site",
+    "templates": [],
+    "unit": "USD",
+    "low": 1000,
+    "high": 25000,
+    "tiers": [
+      {
+        "tier": "tent site",
+        "low": 1000,
+        "high": 4000
+      },
+      {
+        "tier": "RV site, full hookups",
+        "low": 8000,
+        "high": 25000
+      }
+    ],
+    "source": "Campground development cost guides, 2023-24, excluding land. Utility runs dominate: the far sites cost multiples of the near ones.",
+    "keywords": [
+      "rv site",
+      "campsite",
+      "hookups"
+    ]
+  },
+  {
+    "id": "septic_commercial",
+    "label": "Commercial septic system",
+    "templates": [],
+    "unit": "USD",
+    "low": 15000,
+    "high": 60000,
+    "tiers": [
+      {
+        "tier": "conventional",
+        "low": 15000,
+        "high": 30000
+      },
+      {
+        "tier": "engineered / mound system",
+        "low": 30000,
+        "high": 60000
+      }
+    ],
+    "source": "Septic contractor quotes, 2024. Soil percolation results decide the tier, and you cannot choose them.",
+    "keywords": [
+      "septic"
+    ]
+  },
+  {
+    "id": "liquor_license",
+    "label": "Liquor license",
+    "templates": [],
+    "unit": "USD",
+    "low": 300,
+    "high": 400000,
+    "tiers": [
+      {
+        "tier": "beer and wine",
+        "low": 300,
+        "high": 3000
+      },
+      {
+        "tier": "full liquor, license-fee state",
+        "low": 1000,
+        "high": 15000
+      },
+      {
+        "tier": "full liquor, quota state",
+        "low": 50000,
+        "high": 400000
+      }
+    ],
+    "source": "State ABC fee schedules and quota-state resale listings, 2024. In quota states — Florida, New Jersey, parts of others — licenses trade on a secondary market into six figures, and the band is honest about that.",
+    "keywords": [
+      "liquor license",
+      "liquor licence",
+      "abc license"
+    ]
+  },
+  {
+    "id": "health_permit",
+    "label": "Health department permit, annual",
+    "templates": [],
+    "unit": "USD",
+    "low": 100,
+    "high": 1500,
+    "tiers": [
+      {
+        "tier": "low-risk / prepackaged",
+        "low": 100,
+        "high": 400
+      },
+      {
+        "tier": "full-service kitchen",
+        "low": 400,
+        "high": 1500
+      }
+    ],
+    "source": "County health department fee schedules, 2024.",
+    "keywords": [
+      "health permit",
+      "food permit"
+    ]
+  },
+  {
+    "id": "llc_formation",
+    "label": "Business formation — LLC filing and basics",
+    "templates": [],
+    "unit": "USD",
+    "low": 100,
+    "high": 800,
+    "tiers": [
+      {
+        "tier": "self-filed",
+        "low": 100,
+        "high": 300
+      },
+      {
+        "tier": "with registered agent and operating agreement",
+        "low": 300,
+        "high": 800
+      }
+    ],
+    "source": "State filing fee schedules plus registered-agent pricing, 2024. Attorney-drafted agreements for multi-member LLCs run $1-3k beyond this.",
+    "keywords": [
+      "llc",
+      "incorporation",
+      "business formation"
+    ]
+  },
+  {
+    "id": "trademark",
+    "label": "Trademark registration",
+    "templates": [],
+    "unit": "USD",
+    "low": 250,
+    "high": 2500,
+    "tiers": [
+      {
+        "tier": "self-filed, per class",
+        "low": 250,
+        "high": 350
+      },
+      {
+        "tier": "attorney-filed",
+        "low": 1000,
+        "high": 2500
+      }
+    ],
+    "source": "USPTO fee schedule plus typical attorney flat fees, 2024.",
+    "keywords": [
+      "trademark"
+    ]
+  },
+  {
+    "id": "bookkeeping_service",
+    "label": "Outsourced bookkeeping, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 300,
+    "high": 2500,
+    "tiers": [
+      {
+        "tier": "low transaction volume",
+        "low": 300,
+        "high": 800
+      },
+      {
+        "tier": "multi-entity or inventory-heavy",
+        "low": 1000,
+        "high": 2500
+      }
+    ],
+    "source": "Bookkeeping firm pricing, 2024. Cheaper than a staff bookkeeper below roughly 20 hours a week of work.",
+    "keywords": [
+      "bookkeeping",
+      "outsourced accounting"
+    ]
+  },
+  {
+    "id": "tax_prep",
+    "label": "Business tax preparation, annual",
+    "templates": [],
+    "unit": "USD",
+    "low": 500,
+    "high": 5000,
+    "tiers": [
+      {
+        "tier": "single-entity pass-through",
+        "low": 500,
+        "high": 1500
+      },
+      {
+        "tier": "multi-entity or C-corp",
+        "low": 1500,
+        "high": 5000
+      }
+    ],
+    "source": "CPA firm pricing surveys, 2024. Multi-state nexus and inventory accounting are what push a return into the upper tier.",
+    "keywords": [
+      "tax prep",
+      "tax return",
+      "cpa"
+    ]
+  },
+  {
+    "id": "payroll_service",
+    "label": "Payroll service, per employee per month",
+    "templates": [],
+    "unit": "USD",
+    "low": 4,
+    "high": 15,
+    "tiers": [
+      {
+        "tier": "base tier",
+        "low": 4,
+        "high": 8
+      },
+      {
+        "tier": "with benefits administration",
+        "low": 8,
+        "high": 15
+      }
+    ],
+    "source": "Published payroll provider pricing, 2024, excluding the per-run base fee of $20-50.",
+    "keywords": [
+      "payroll service",
+      "payroll software"
+    ]
+  },
+  {
+    "id": "pos_software",
+    "label": "POS software, monthly per location",
+    "templates": [],
+    "unit": "USD",
+    "low": 60,
+    "high": 300,
+    "tiers": [
+      {
+        "tier": "single terminal",
+        "low": 60,
+        "high": 120
+      },
+      {
+        "tier": "multi-terminal with KDS",
+        "low": 120,
+        "high": 300
+      }
+    ],
+    "source": "Vendor published pricing, 2024. The hardware is a separate capex line already in this catalog.",
+    "keywords": [
+      "pos software",
+      "pos subscription"
+    ]
+  },
+  {
+    "id": "ecommerce_platform",
+    "label": "E-commerce platform, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 30,
+    "high": 400,
+    "tiers": [
+      {
+        "tier": "starter",
+        "low": 30,
+        "high": 80
+      },
+      {
+        "tier": "advanced / plus tier",
+        "low": 80,
+        "high": 400
+      }
+    ],
+    "source": "Published platform pricing, 2024. Payment processing is on top and is its own line.",
+    "keywords": [
+      "shopify",
+      "ecommerce platform",
+      "web store"
+    ]
+  },
+  {
+    "id": "email_marketing",
+    "label": "Email marketing platform, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 20,
+    "high": 300,
+    "tiers": [
+      {
+        "tier": "under 5k contacts",
+        "low": 20,
+        "high": 80
+      },
+      {
+        "tier": "50k+ contacts",
+        "low": 100,
+        "high": 300
+      }
+    ],
+    "source": "Published vendor list pricing, 2024. Priced by contact count, so a stale list is a bill as well as a deliverability problem.",
+    "keywords": [
+      "email marketing",
+      "klaviyo",
+      "mailchimp"
+    ]
+  },
+  {
+    "id": "crm_seat",
+    "label": "CRM, per seat per month",
+    "templates": [],
+    "unit": "USD",
+    "low": 15,
+    "high": 150,
+    "tiers": [
+      {
+        "tier": "starter tier",
+        "low": 15,
+        "high": 50
+      },
+      {
+        "tier": "enterprise tier",
+        "low": 80,
+        "high": 150
+      }
+    ],
+    "source": "Published vendor list pricing, 2024. The enterprise tier is mostly permissions and reporting, not more CRM.",
+    "keywords": [
+      "crm"
+    ]
+  },
+  {
+    "id": "unity_license",
+    "label": "Game engine license, per seat per year",
+    "templates": [],
+    "unit": "USD",
+    "low": 2000,
+    "high": 5000,
+    "tiers": [
+      {
+        "tier": "Unity Pro",
+        "low": 2000,
+        "high": 2600
+      },
+      {
+        "tier": "Enterprise tiers",
+        "low": 3000,
+        "high": 5000
+      }
+    ],
+    "source": "Published Unity pricing, 2024. Unreal charges no seat fee — its 5% royalty above $1M of gross is a separate catalog line.",
+    "keywords": [
+      "unity",
+      "game engine license"
+    ]
+  },
+  {
+    "id": "engine_royalty",
+    "label": "Game engine royalty (Unreal)",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.0,
+    "high": 0.05,
+    "tiers": [
+      {
+        "tier": "under $1M lifetime gross",
+        "low": 0.0,
+        "high": 0.0
+      },
+      {
+        "tier": "above $1M lifetime gross",
+        "low": 0.05,
+        "high": 0.05
+      }
+    ],
+    "source": "Published Unreal Engine terms, 2024: 5% of gross above the first $1M per product, waived below it.",
+    "keywords": [
+      "unreal",
+      "engine royalty"
+    ]
+  },
+  {
+    "id": "platform_commission",
+    "label": "App / platform store commission",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.15,
+    "high": 0.3,
+    "tiers": [
+      {
+        "tier": "small-business program (under $1M/yr)",
+        "low": 0.15,
+        "high": 0.15
+      },
+      {
+        "tier": "standard rate",
+        "low": 0.3,
+        "high": 0.3
+      }
+    ],
+    "source": "Published Apple, Google and Steam terms, 2024. Apple and Google take 15% under their small-business thresholds and 30% above; Steam starts at 30% and steps down only past $10M. This is revenue that never arrives, not a cost you pay.",
+    "keywords": [
+      "app store",
+      "platform commission",
+      "steam",
+      "apple commission"
+    ]
+  },
+  {
+    "id": "cost_per_install",
+    "label": "Mobile paid install (CPI)",
+    "templates": [],
+    "unit": "USD",
+    "low": 1.5,
+    "high": 12,
+    "tiers": [
+      {
+        "tier": "casual, broad targeting",
+        "low": 1.5,
+        "high": 5
+      },
+      {
+        "tier": "midcore / RPG",
+        "low": 4,
+        "high": 12
+      }
+    ],
+    "source": "Mobile user-acquisition benchmark reports, 2024, US campaigns. iOS runs above Android; install-to-payer conversion of 2-5% is what turns this into a $20-50 cost per paying subscriber.",
+    "keywords": [
+      "cost per install",
+      "cpi",
+      "install ads",
+      "user acquisition"
+    ]
+  },
+  {
+    "id": "cpc_search",
+    "label": "Search advertising, cost per click",
+    "templates": [],
+    "unit": "USD",
+    "low": 1,
+    "high": 8,
+    "tiers": [
+      {
+        "tier": "broad retail terms",
+        "low": 1,
+        "high": 3
+      },
+      {
+        "tier": "high-intent local service terms",
+        "low": 3,
+        "high": 8
+      }
+    ],
+    "source": "Published search advertising benchmarks, 2024. Legal, insurance and finance keywords exceed this band and are not what a small operator should be buying.",
+    "keywords": [
+      "cpc",
+      "search ads",
+      "google ads"
+    ]
+  },
+  {
+    "id": "cpm_social",
+    "label": "Social advertising, CPM",
+    "templates": [],
+    "unit": "USD",
+    "low": 5,
+    "high": 18,
+    "tiers": [
+      {
+        "tier": "broad awareness",
+        "low": 5,
+        "high": 10
+      },
+      {
+        "tier": "narrow retargeting",
+        "low": 10,
+        "high": 18
+      }
+    ],
+    "source": "Published social advertising benchmarks, 2024.",
+    "keywords": [
+      "cpm",
+      "social ads",
+      "meta ads",
+      "instagram ads"
+    ]
+  },
+  {
+    "id": "seo_agency",
+    "label": "SEO / content agency, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 1000,
+    "high": 7500,
+    "tiers": [
+      {
+        "tier": "local SEO",
+        "low": 1000,
+        "high": 2500
+      },
+      {
+        "tier": "content program",
+        "low": 2500,
+        "high": 7500
+      }
+    ],
+    "source": "Agency pricing surveys, 2024. Below $1k/month is usually a report, not a service.",
+    "keywords": [
+      "seo",
+      "content agency"
+    ]
+  },
+  {
+    "id": "website_build",
+    "label": "Website build, one-time",
+    "templates": [],
+    "unit": "USD",
+    "low": 2000,
+    "high": 50000,
+    "tiers": [
+      {
+        "tier": "template on a builder",
+        "low": 2000,
+        "high": 8000
+      },
+      {
+        "tier": "custom design and build",
+        "low": 10000,
+        "high": 50000
+      }
+    ],
+    "source": "Agency and freelancer pricing surveys, 2024. The template tier assumes your photography; custom assumes theirs.",
+    "keywords": [
+      "website",
+      "web design"
+    ]
+  },
+  {
+    "id": "app_development",
+    "label": "App development, agency-built",
+    "templates": [],
+    "unit": "USD",
+    "low": 30000,
+    "high": 500000,
+    "tiers": [
+      {
+        "tier": "MVP",
+        "low": 30000,
+        "high": 150000
+      },
+      {
+        "tier": "full product with backend",
+        "low": 150000,
+        "high": 500000
+      }
+    ],
+    "source": "Agency pricing surveys, 2024. The wide band is honest: scope, not rate, is the variable, and every figure here assumes you are not writing it yourself.",
+    "keywords": [
+      "app development",
+      "mobile app build"
+    ]
+  },
+  {
+    "id": "workers_comp_rate",
+    "label": "Workers’ compensation rate, share of payroll",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.002,
+    "high": 0.15,
+    "tiers": [
+      {
+        "tier": "office / clerical",
+        "low": 0.002,
+        "high": 0.01
+      },
+      {
+        "tier": "restaurant / retail",
+        "low": 0.015,
+        "high": 0.05
+      },
+      {
+        "tier": "construction trades",
+        "low": 0.05,
+        "high": 0.15
+      }
+    ],
+    "source": "State rating-bureau class rates, 2024. Roofing and steel erection exceed the top of this band. The class code, not negotiation, is what sets it.",
+    "keywords": [
+      "workers comp",
+      "workers compensation"
+    ]
+  },
+  {
+    "id": "liquor_liability",
+    "label": "Liquor liability insurance, annual",
+    "templates": [],
+    "unit": "USD",
+    "low": 500,
+    "high": 8000,
+    "tiers": [
+      {
+        "tier": "beer and wine, low volume",
+        "low": 500,
+        "high": 2000
+      },
+      {
+        "tier": "full bar, late hours",
+        "low": 2500,
+        "high": 8000
+      }
+    ],
+    "source": "Broker quote ranges, 2024. Priced off alcohol sales volume and closing time.",
+    "keywords": [
+      "liquor liability",
+      "dram shop"
+    ]
+  },
+  {
+    "id": "commercial_auto",
+    "label": "Commercial auto insurance, per vehicle per year",
+    "templates": [],
+    "unit": "USD",
+    "low": 1500,
+    "high": 15000,
+    "tiers": [
+      {
+        "tier": "light vehicle",
+        "low": 1500,
+        "high": 4500
+      },
+      {
+        "tier": "heavy truck / mixer",
+        "low": 6000,
+        "high": 15000
+      }
+    ],
+    "source": "Broker quote ranges, 2024. Radius of operation and driver records move this as much as the vehicle does.",
+    "keywords": [
+      "commercial auto",
+      "vehicle insurance",
+      "fleet insurance"
+    ]
+  },
+  {
+    "id": "property_insurance",
+    "label": "Commercial property insurance, annual",
+    "templates": [],
+    "unit": "USD",
+    "low": 800,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "office / light retail",
+        "low": 800,
+        "high": 3000
+      },
+      {
+        "tier": "restaurant or coastal / hail zone",
+        "low": 3000,
+        "high": 12000
+      }
+    ],
+    "source": "Broker quote ranges, 2024. Cooking exposure and catastrophe zones set the tier; a sprinklered building earns a real discount.",
+    "keywords": [
+      "property insurance"
+    ]
+  },
+  {
+    "id": "professional_liability",
+    "label": "Professional liability / E&O, annual",
+    "templates": [],
+    "unit": "USD",
+    "low": 800,
+    "high": 6000,
+    "tiers": [
+      {
+        "tier": "consulting, low exposure",
+        "low": 800,
+        "high": 2500
+      },
+      {
+        "tier": "licensed professional",
+        "low": 2500,
+        "high": 6000
+      }
+    ],
+    "source": "Broker quote ranges, 2024. Claims-made policies need tail coverage when they end, which is the cost people meet at the worst time.",
+    "keywords": [
+      "professional liability",
+      "errors and omissions",
+      "e&o"
+    ]
+  },
+  {
+    "id": "trash_service",
+    "label": "Commercial trash service, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 100,
+    "high": 800,
+    "tiers": [
+      {
+        "tier": "2-yard dumpster, weekly",
+        "low": 100,
+        "high": 300
+      },
+      {
+        "tier": "8-yard or multiple pickups",
+        "low": 300,
+        "high": 800
+      }
+    ],
+    "source": "Hauler pricing, 2024. Restaurants add grease rendering, which is often revenue rather than cost.",
+    "keywords": [
+      "trash",
+      "dumpster",
+      "waste service"
+    ]
+  },
+  {
+    "id": "hood_cleaning",
+    "label": "Hood and duct cleaning, per service",
+    "templates": [],
+    "unit": "USD",
+    "low": 300,
+    "high": 1200,
+    "tiers": [
+      {
+        "tier": "single hood, quarterly",
+        "low": 300,
+        "high": 600
+      },
+      {
+        "tier": "multi-hood or heavy use",
+        "low": 600,
+        "high": 1200
+      }
+    ],
+    "source": "Service contractor pricing, 2024. Fire code sets the frequency — quarterly for most full-service kitchens — so this is 4x a year, not optional.",
+    "keywords": [
+      "hood cleaning",
+      "duct cleaning"
+    ]
+  },
+  {
+    "id": "grease_service",
+    "label": "Grease trap pumping, per service",
+    "templates": [],
+    "unit": "USD",
+    "low": 150,
+    "high": 600,
+    "tiers": [
+      {
+        "tier": "under-sink unit",
+        "low": 150,
+        "high": 300
+      },
+      {
+        "tier": "in-ground interceptor",
+        "low": 300,
+        "high": 600
+      }
+    ],
+    "source": "Service contractor pricing, 2024. Frequency is set by trap size and code, typically monthly to quarterly for a full-service kitchen.",
+    "keywords": [
+      "grease pumping",
+      "trap service"
+    ]
+  },
+  {
+    "id": "pest_control",
+    "label": "Pest control, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 60,
+    "high": 300,
+    "tiers": [
+      {
+        "tier": "office / retail",
+        "low": 60,
+        "high": 120
+      },
+      {
+        "tier": "food service",
+        "low": 120,
+        "high": 300
+      }
+    ],
+    "source": "Service contractor pricing, 2024. Food service pays the higher tier because the visits are documented for health inspections.",
+    "keywords": [
+      "pest control",
+      "exterminator"
+    ]
+  },
+  {
+    "id": "linen_service",
+    "label": "Linen and uniform service, weekly",
+    "templates": [],
+    "unit": "USD",
+    "low": 100,
+    "high": 800,
+    "tiers": [
+      {
+        "tier": "aprons and towels",
+        "low": 100,
+        "high": 300
+      },
+      {
+        "tier": "full linens, tablecloths",
+        "low": 300,
+        "high": 800
+      }
+    ],
+    "source": "Linen service pricing, 2024. On-premise laundry beats this above roughly 60 hotel rooms — see the commercial laundry line.",
+    "keywords": [
+      "linen service",
+      "uniform service"
+    ]
+  },
+  {
+    "id": "electricity_kwh",
+    "label": "Commercial electricity, per kWh",
+    "templates": [],
+    "unit": "USD",
+    "low": 0.08,
+    "high": 0.3,
+    "tiers": [
+      {
+        "tier": "gulf / mountain states",
+        "low": 0.08,
+        "high": 0.12
+      },
+      {
+        "tier": "national mid-band",
+        "low": 0.11,
+        "high": 0.16
+      },
+      {
+        "tier": "California / Northeast",
+        "low": 0.18,
+        "high": 0.3
+      }
+    ],
+    "source": "EIA state commercial rate tables, 2024. Hawaii exceeds this band. Demand charges for heavy equipment are billed separately and can rival the energy itself.",
+    "keywords": [
+      "electricity",
+      "kwh",
+      "power"
+    ]
+  },
+  {
+    "id": "gas_therm",
+    "label": "Natural gas, per therm",
+    "templates": [],
+    "unit": "USD",
+    "low": 0.8,
+    "high": 2.5,
+    "tiers": [
+      {
+        "tier": "producing states",
+        "low": 0.8,
+        "high": 1.3
+      },
+      {
+        "tier": "coastal metros",
+        "low": 1.3,
+        "high": 2.5
+      }
+    ],
+    "source": "EIA commercial rate tables, 2024. Delivery charges roughly double the commodity price in coastal metros.",
+    "keywords": [
+      "natural gas",
+      "therm"
+    ]
+  },
+  {
+    "id": "business_internet",
+    "label": "Business internet, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 60,
+    "high": 400,
+    "tiers": [
+      {
+        "tier": "cable / fiber, standard",
+        "low": 60,
+        "high": 150
+      },
+      {
+        "tier": "dedicated fiber with SLA",
+        "low": 200,
+        "high": 400
+      }
+    ],
+    "source": "Published ISP business pricing, 2024. The SLA tier buys a repair clock, which matters exactly as much as downtime costs.",
+    "keywords": [
+      "internet",
+      "broadband"
+    ]
+  },
+  {
+    "id": "music_licensing",
+    "label": "Music licensing (PROs), annual",
+    "templates": [],
+    "unit": "USD",
+    "low": 400,
+    "high": 2500,
+    "tiers": [
+      {
+        "tier": "background music, small venue",
+        "low": 400,
+        "high": 900
+      },
+      {
+        "tier": "live music or larger room",
+        "low": 900,
+        "high": 2500
+      }
+    ],
+    "source": "ASCAP, BMI and SESAC published rate schedules, 2024. Three separate societies, three separate invoices — and they audit. A commercial streaming service with licensing built in covers the background tier.",
+    "keywords": [
+      "music licensing",
+      "ascap",
+      "bmi"
+    ]
+  },
+  {
+    "id": "commissary_rent",
+    "label": "Commissary kitchen rent, monthly",
+    "templates": [],
+    "unit": "USD",
+    "low": 400,
+    "high": 1500,
+    "tiers": [
+      {
+        "tier": "storage and parking only",
+        "low": 400,
+        "high": 800
+      },
+      {
+        "tier": "with prep hours included",
+        "low": 800,
+        "high": 1500
+      }
+    ],
+    "source": "Commissary listing rates, 2024. Most health departments require a licensed commissary for a food truck; this line is not optional.",
+    "keywords": [
+      "commissary"
+    ]
+  },
+  {
+    "id": "smallwares",
+    "label": "Kitchen smallwares, opening set, per seat",
+    "templates": [],
+    "unit": "USD",
+    "low": 100,
+    "high": 300,
+    "tiers": [
+      {
+        "tier": "casual service",
+        "low": 100,
+        "high": 180
+      },
+      {
+        "tier": "full service",
+        "low": 180,
+        "high": 300
+      }
+    ],
+    "source": "Restaurant supplier opening-package pricing, 2024. The line every opening budget forgets and every chef re-buys in month two.",
+    "keywords": [
+      "smallwares",
+      "kitchenware",
+      "pans and utensils"
+    ]
+  },
+  {
+    "id": "food_cost_pct",
+    "label": "Food cost, full-service restaurant",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "pct",
+    "low": 0.26,
+    "high": 0.36,
+    "tiers": [
+      {
+        "tier": "tight menu, high-margin",
+        "low": 0.26,
+        "high": 0.3
+      },
+      {
+        "tier": "protein-heavy or premium",
+        "low": 0.3,
+        "high": 0.36
+      }
+    ],
+    "source": "Industry operating surveys, 2023-24. Sustained readings above the band are a menu-pricing problem, not a purchasing problem.",
+    "keywords": [
+      "food cost",
+      "food cogs"
+    ]
+  },
+  {
+    "id": "qsr_food_paper_pct",
+    "label": "Food and paper cost, quick service",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.26,
+    "high": 0.34,
+    "tiers": [
+      {
+        "tier": "limited menu",
+        "low": 0.26,
+        "high": 0.3
+      },
+      {
+        "tier": "broad menu or delivery-heavy",
+        "low": 0.3,
+        "high": 0.34
+      }
+    ],
+    "source": "Industry operating surveys, 2023-24. Paper and packaging are 3-5 points of this and spike with delivery mix.",
+    "keywords": [
+      "food and paper",
+      "qsr food cost"
+    ]
+  },
+  {
+    "id": "pour_cost_pct",
+    "label": "Pour cost (bar)",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.16,
+    "high": 0.26,
+    "tiers": [
+      {
+        "tier": "cocktail-led",
+        "low": 0.16,
+        "high": 0.2
+      },
+      {
+        "tier": "beer and wine-led",
+        "low": 0.2,
+        "high": 0.26
+      }
+    ],
+    "source": "Bar operating surveys, 2023-24. Above the band means over-pouring or shrinkage; the fix is jiggers and inventory counts, not price.",
+    "keywords": [
+      "pour cost",
+      "beverage cost",
+      "bar cogs"
+    ]
+  },
+  {
+    "id": "coffee_cogs_pct",
+    "label": "COGS, coffee shop",
+    "templates": [],
+    "unit": "pct",
+    "low": 0.25,
+    "high": 0.4,
+    "tiers": [
+      {
+        "tier": "drip and espresso-led",
+        "low": 0.25,
+        "high": 0.32
+      },
+      {
+        "tier": "food-forward menu",
+        "low": 0.32,
+        "high": 0.4
+      }
+    ],
+    "source": "Specialty coffee operating surveys, 2023-24. Milk and cups move this more than beans do.",
+    "keywords": [
+      "coffee cogs"
+    ]
+  },
+  {
+    "id": "brewing_inputs_bbl",
+    "label": "Brewing inputs, per barrel",
+    "templates": [],
+    "unit": "USD",
+    "low": 30,
+    "high": 80,
+    "tiers": [
+      {
+        "tier": "standard ales and lagers",
+        "low": 30,
+        "high": 55
+      },
+      {
+        "tier": "hop-heavy or adjunct styles",
+        "low": 50,
+        "high": 80
+      }
+    ],
+    "source": "Maltster and hop supplier pricing, 2024 — grain, hops and yeast only. Packaging roughly doubles the per-barrel figure for cans versus draft.",
+    "keywords": [
+      "brewing cost",
+      "per barrel",
+      "grain and hops"
+    ]
+  },
+  {
+    "id": "retail_cogs_pct",
+    "label": "COGS, general retail",
+    "templates": [
+      "ecommerce_dtc_brand"
+    ],
+    "unit": "pct",
+    "low": 0.45,
+    "high": 0.62,
+    "tiers": [
+      {
+        "tier": "keystone categories",
+        "low": 0.45,
+        "high": 0.52
+      },
+      {
+        "tier": "thin-margin categories",
+        "low": 0.52,
+        "high": 0.62
+      }
+    ],
+    "source": "Retail operating surveys, 2023-24. Keystone (2x) markup implies 50%; sustained readings above 62% are wholesale pricing, not retail.",
+    "keywords": [
+      "retail cogs",
+      "merchandise cost"
+    ]
+  },
+  {
+    "id": "dtc_landed_cogs_pct",
+    "label": "Landed COGS, DTC brand",
+    "templates": [
+      "ecommerce_dtc_brand"
+    ],
+    "unit": "pct",
+    "low": 0.2,
+    "high": 0.45,
+    "tiers": [
+      {
+        "tier": "high-margin category",
+        "low": 0.2,
+        "high": 0.32
+      },
+      {
+        "tier": "heavy or import-duty exposed",
+        "low": 0.32,
+        "high": 0.45
+      }
+    ],
+    "source": "DTC operating benchmarks, 2023-24, landed — freight and duty included. Quoting factory cost without freight is the classic understatement.",
+    "keywords": [
+      "landed cost",
+      "dtc cogs"
     ]
   }
 ]

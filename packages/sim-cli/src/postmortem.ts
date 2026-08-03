@@ -352,7 +352,7 @@ export function postmortem(history: readonly RunPoint[], business: Business): Po
   if (turnedAway > 0) {
     lines.push(
       `You were capacity-bound in ${turnedAway} of ${quarters} quarters — demand was not the ` +
-        `constraint in those, the building was.`,
+        `constraint in those, what you had built and staffed was.`,
     );
   }
 

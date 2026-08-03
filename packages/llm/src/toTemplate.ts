@@ -289,6 +289,11 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
   }
   // The seasonal shape is the model's, and carries no provenance of its own.
   byName.set('seasonality', 'LLM_ESTIMATE');
+  // So is the opening marketing budget. It arrives on the draft's stream rather
+  // than in `params`, so the parameter loop above never sees it, and without
+  // this it would fall through to the `streams.*` catch-all and be reported as
+  // an engine default the model never touched.
+  byName.set('marketingSpendPerQuarter', 'LLM_ESTIMATE');
 
   const provenanceFor = (path: string): Provenance | undefined => {
     // A cost line the mapper minted carries the draft's own claim. An id it

@@ -1,4 +1,5 @@
 export * from './advice.js';
+export * from './narration.js';
 export * from './challenge.js';
 export * from './draft.js';
 export * from './prompt.js';

@@ -169,6 +169,15 @@ export interface MonthZeroOutlays {
   preOpeningPayroll: Money;
   preOpeningMarketing: Money;
   debtOriginationFees: Money;
+  /**
+   * Paid for the availability of a line nobody has drawn on.
+   *
+   * Its own field rather than folded into `debtOriginationFees`, because it is
+   * the one that appears when you borrowed nothing — and reporting it as debt
+   * origination contradicts the screen that just offered "no debt needed, and
+   * a $3,000 revolver".
+   */
+  revolverCommitmentFees: Money;
   total: Money;
 }
 
@@ -182,5 +191,6 @@ export function totalMonthZero(outlays: Omit<MonthZeroOutlays, 'total'>): Money 
     outlays.preOpeningPayroll,
     outlays.preOpeningMarketing,
     outlays.debtOriginationFees,
+    outlays.revolverCommitmentFees,
   ]);
 }

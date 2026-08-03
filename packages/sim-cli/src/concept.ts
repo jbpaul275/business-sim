@@ -134,11 +134,19 @@ export async function runConceptInterview(
       ),
     ),
   );
-  console.log(
-    `${DIM}  \`why\` shows the reasoning · \`undo\` takes back your last message ·` +
-      ` Ctrl-C stops a reply${RESET}\n`,
-  );
-
+  /**
+   * Which model is answering, said before it answers.
+   *
+   * "How can I confirm it's using Kimi and not Anthropic?" had no answer until
+   * the session ended and the spend line named the models — which is too late
+   * to be running the comparison you meant to run. Two provider keys can be
+   * exported at once by design, so the resolved one is not guessable from the
+   * environment either.
+   *
+   * Deliberately dim and on the hint line rather than announced: a player who
+   * does not care should not have to read about model routing before they have
+   * described their business.
+   */
   let spinner = { stop: () => {}, label: (_: string) => {} };
   /**
    * Every model call, on disk as it happens.
@@ -156,6 +164,28 @@ export async function runConceptInterview(
         journal?.write({ kind: 'call', ...record });
       },
     });
+
+  /**
+   * Which model is answering, said before it answers.
+   *
+   * "How can I confirm it's using Kimi and not Anthropic?" had no answer until
+   * the session ended and the spend line named the models — which is too late
+   * to be running the comparison you meant to be running. Two provider keys can
+   * be exported at once by design, so the resolved one is not guessable from
+   * the environment either.
+   *
+   * Read off the transport rather than re-derived, because the transport has
+   * already resolved it. A screen naming the wrong model would be worse than
+   * one naming none: it is the answer to the question being asked.
+   *
+   * Dim, and on the hint line rather than announced. A player who does not care
+   * should not have to read about model routing before describing a business.
+   */
+  console.log(
+    `${DIM}  \`why\` shows the reasoning · \`undo\` takes back your last message ·` +
+      ` Ctrl-C stops a reply` +
+      `${live.describe ? `\n  answered by ${live.describe()}` : ''}${RESET}\n`,
+  );
 
   /**
    * Ctrl-C while the model is thinking stops the model, not the session.

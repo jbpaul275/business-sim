@@ -1,10 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { type TurnAdvice, zTurnAdvice } from './advice.js';
+import { type TurnNarration, zTurnNarration } from './narration.js';
 import { type Adjudication, zAdjudication } from './challenge.js';
 import { ZERO_TOKENS, emitCall, type CallKind, type CallSink } from './telemetry.js';
 import {
   ADJUDICATION_SCHEMA,
   ADVICE_SCHEMA,
+  NARRATION_SCHEMA,
   DRAFT_AS_PROSE,
   DRAFT_SCHEMA,
   TURN_SCHEMA,
@@ -122,8 +124,27 @@ export interface ConceptTransport {
    * could accidentally supply it, so the isolation lives here.
    */
   adjudicate(system: string, input: string): Promise<Adjudication>;
+  /**
+   * One quarter, narrated — §11.5. Optional because a scripted transport and
+   * old callers predate it; the play loop checks before calling.
+   *
+   * A single message and no history, like `adjudicate`: a narrator that
+   * remembers earlier quarters starts writing a story arc, and a story arc is a
+   * temptation to make this quarter fit it.
+   */
+  narrate?(system: string, input: string): Promise<TurnNarration>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
+  /**
+   * Who is answering, for the player — "kimi · kimi-k3".
+   *
+   * On the transport rather than derived from the environment, because the
+   * transport has already done the resolution: option, then `BIZSIM_TURN_MODEL`,
+   * then `BIZSIM_MODEL`, then the vendor default. A second copy of that ladder
+   * anywhere else would drift, and a screen that names the wrong model is worse
+   * than one that names none — it is the answer to the question being asked.
+   */
+  describe?(): string;
   /**
    * Everything this transport has spent, running.
    *
@@ -390,6 +411,12 @@ export class AnthropicConceptTransport implements ConceptTransport {
     this.onCall = options.onCall;
   }
 
+  describe(): string {
+    return this.turnModel === this.draftModel
+      ? `anthropic · ${this.turnModel}`
+      : `anthropic · ${this.turnModel} (turns), ${this.draftModel} (draft)`;
+  }
+
   private async complete(
     kind: CallKind,
     attempt: number,
@@ -584,6 +611,9 @@ export class AnthropicConceptTransport implements ConceptTransport {
    * supply it, so the transport is where the isolation is enforced.
    */
   async adjudicate(system: string, input: string): Promise<Adjudication> {
+    // On the draft model, matching the OpenAI-compatible transport: the ruling
+    // is the call the risk register says not to cheapen, and "which model
+    // adjudicates" should not change meaning across providers.
     const attempt = await this.complete(
       'adjudicate',
       1,
@@ -591,10 +621,29 @@ export class AnthropicConceptTransport implements ConceptTransport {
       [{ role: 'user', content: input }],
       ADJUDICATION_SCHEMA,
       this.turnEffort,
-      this.turnModel,
+      this.draftModel,
       this.turnMaxTokens,
     );
     return zAdjudication.parse(JSON.parse(attempt.text));
+  }
+
+  /**
+   * On the advisor's dials — low effort, small budget — because it fires every
+   * quarter and answers in four sentences. Narration at draft-grade thinking
+   * would make the wait between quarters the game's dominant experience.
+   */
+  async narrate(system: string, input: string): Promise<TurnNarration> {
+    const attempt = await this.complete(
+      'narrate',
+      1,
+      system,
+      [{ role: 'user', content: input }],
+      NARRATION_SCHEMA,
+      this.adviceEffort,
+      this.turnModel,
+      this.adviceMaxTokens,
+    );
+    return zTurnNarration.parse(JSON.parse(attempt.text));
   }
 
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
@@ -708,7 +757,22 @@ export class ScriptedTransport implements ConceptTransport {
     private readonly reasoning: readonly string[] = [],
     private readonly advice: readonly TurnAdvice[] = [],
     private readonly rulings: readonly Adjudication[] = [],
+    private readonly narrations: readonly TurnNarration[] = [],
   ) {}
+
+  private narrationIndex = 0;
+
+  async narrate(system: string, input: string): Promise<TurnNarration> {
+    this.seen.push({ system, messages: [{ role: 'user', content: input }] });
+    const next = this.narrations[this.narrationIndex];
+    if (!next) throw new Error('ScriptedTransport has no narration to return.');
+    this.narrationIndex += 1;
+    return next;
+  }
+
+  describe(): string {
+    return 'a scripted transport — no model was called';
+  }
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
     this.seen.push({ system, messages: [...messages] });
