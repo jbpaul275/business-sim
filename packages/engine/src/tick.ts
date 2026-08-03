@@ -941,9 +941,36 @@ function settleInsolvency(
       incomeStatement,
       balanceSheet,
       cashFlow,
+      /**
+       * Real metrics for the closing period, not a cast stub.
+       *
+       * This was `{ streamMetrics: [] } as unknown as DerivedMetrics`, so
+       * every other field was `undefined` and the CLI rendered
+       * `Peak cash need $NaN`, an infinite runway and a 320% EBITDA margin on
+       * the screen announcing the business had died. A cast that lies about a
+       * shape is a bug with a type annotation on it.
+       *
+       * The values here are true rather than convenient: no streams because
+       * nothing operated, no runway because running out of it is why this
+       * period exists, and the real peak cash need, which is the single most
+       * useful number to carry out of a failure.
+       */
       derivedMetrics: {
+        grossMarginPct: 0,
+        ebitdaMarginPct: 0,
+        netMarginPct: 0,
+        peakCashNeed: business.peakCashNeed,
+        peakCashNeedPeriod: business.peakCashNeedPeriod,
+        cashRunwayQuarters: 0,
+        breakEvenRevenue: 0n,
+        dscr: 0,
+        currentRatio: 0,
+        debtToEbitda: 0,
+        roic: 0,
+        cashConversionCycle: 0,
+        ownerEconomicReturn: balanceSheet.totalEquity,
         streamMetrics: [],
-      } as unknown as StatementSet['byBusiness'][string]['derivedMetrics'],
+      },
     },
     assertions,
     events: result.events,

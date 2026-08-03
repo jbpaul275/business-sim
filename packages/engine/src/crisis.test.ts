@@ -251,3 +251,52 @@ describe('peak cash need (§5.4)', () => {
     }
   });
 });
+
+describe('the closing period reports real metrics', () => {
+  it('does not hand the caller a cast stub', () => {
+    // `{ streamMetrics: [] } as unknown as DerivedMetrics` left every other
+    // field undefined, and the screen announcing a business had died read
+    // `Peak cash need $NaN`, an infinite runway and a 320% EBITDA margin. A
+    // cast that lies about a shape is a bug with a type annotation on it.
+    const model = buildModelFromTemplate({
+      businessName: 'Doomed',
+      template: getSeedTemplate('full_service_restaurant'),
+      scale: {
+        seats: 120,
+        turnsPerDay: 2,
+        addressableTrafficPerQuarter: 30_000,
+        captureRate: 0.02,
+        price: fromDisplay(20),
+      },
+      equityInjection: fromDisplay(400_000),
+      debt: [{ kind: 'SBA_7A', principal: fromDisplay(300_000), termQuarters: 40 }],
+    });
+    let state: WorldState = createWorld({
+      id: 'doomed',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model],
+    });
+    const id = state.businesses[0]!.id;
+
+    let closing;
+    for (let i = 0; i < 40 && !closing; i++) {
+      const result = tick(state, [], { throwOnAssertionFailure: false });
+      state = result.state;
+      if (state.businesses[0]!.status === 'CLOSED') closing = result;
+    }
+    expect(closing, 'the business never closed').toBeDefined();
+
+    const m = closing!.statements.byBusiness[id]?.derivedMetrics;
+    expect(m).toBeDefined();
+    // The three the screen actually read, and the shape of the answer.
+    expect(Number.isNaN(Number(m!.peakCashNeed))).toBe(false);
+    expect(m!.peakCashNeed).toBeGreaterThan(0n);
+    expect(m!.cashRunwayQuarters).toBe(0);
+    expect(m!.streamMetrics).toEqual([]);
+    // And nothing else is undefined either, which is what the cast hid.
+    for (const [key, value] of Object.entries(m!)) {
+      expect(value, key).toBeDefined();
+    }
+  });
+});

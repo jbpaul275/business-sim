@@ -5,6 +5,7 @@ import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, type LineSource } from './input.js';
 import { rule } from './ui.js';
 import type { Journal } from './journal.js';
+import { describeEvent } from './events.js';
 
 /**
  * The interactive turn loop — spec §9.1 Phase 5, without the LLM.
@@ -49,6 +50,40 @@ const pad = (s: string, n: number): string =>
   s.length > n - 1 ? `${s.slice(0, n - 2)}… ` : s.padEnd(n);
 const rpad = (s: string, n: number): string => s.padStart(n);
 const pct = (v: number): string => `${(v * 100).toFixed(1)}%`;
+
+/**
+ * What an action will do, in the units the player typed it in.
+ *
+ * `[1 queued]` says a thing happened without saying which. Someone typed
+ * `marketing $5`, meaning `$5k`, and found out two quarters later when
+ * revenue had fallen — a typo the confirmation could have caught for free.
+ */
+function describeAction(a: Action): string {
+  switch (a.kind) {
+    case 'SET_PRICE':
+      return `price → ${toDisplay(a.newPrice, { showCents: false })}`;
+    case 'SET_MARKETING_SPEND':
+      return `marketing → ${toDisplay(a.amountPerQuarter, { showCents: false })} a quarter`;
+    case 'ADD_STEP_BLOCK':
+      return `hire ${a.blocks} × ${a.costId}`;
+    case 'REMOVE_STEP_BLOCK':
+      return `fire ${a.blocks} × ${a.costId}`;
+    case 'RAISE_DEBT':
+      return `borrow ${toDisplay(a.spec.requestedPrincipal, { showCents: false })}`;
+    case 'DRAW_REVOLVER':
+      return `draw ${toDisplay(a.amount, { showCents: false })} on the revolver`;
+    case 'INJECT_CAPITAL':
+      return `put in ${toDisplay(a.amount, { showCents: false })} of your own`;
+    case 'DISTRIBUTE':
+      return `take out ${toDisplay(a.amount, { showCents: false })}`;
+    case 'EXPAND_CAPACITY':
+      return `expand for ${toDisplay(a.spec.buildoutCost, { showCents: false })}`;
+    case 'SET_CRISIS_POLICY':
+      return `crisis order → ${a.policy.join(', ')}`;
+    default:
+      return a.kind;
+  }
+}
 
 const severityColour = (s: EngineEvent['severity']): string =>
   s === 'CRITICAL' ? RED : s === 'WARNING' ? YELLOW : DIM;
@@ -169,11 +204,9 @@ function renderTurn(result: TickResult, business: Business): void {
   }
 
   const notable = result.events.filter((e) => e.severity !== 'INFO');
+  if (notable.length > 0) console.log('');
   for (const e of notable) {
-    const detail = Object.entries(e.detail)
-      .map(([k, v]) => `${k}=${v}`)
-      .join(' ');
-    console.log(`  ${severityColour(e.severity)}▸ ${e.kind}  ${detail}${RESET}`);
+    console.log(`  ${severityColour(e.severity)}▸ ${describeEvent(e)}${RESET}`);
   }
 
   const failed = result.assertions.filter((a) => !a.passed);
@@ -794,6 +827,10 @@ export async function play(
         }
         if (parsed.actions.length > 0) {
           queued.push(...parsed.actions);
+          // Say what was queued, not just that something was. A player who
+          // typed `marketing $5` meaning `$5k` had no way to notice until the
+          // quarter came back with less revenue than the one before it.
+          console.log(`  ${DIM}queued: ${parsed.actions.map(describeAction).join(', ')}${RESET}`);
           // Name the asymmetry out loud, as §11.4 requires of any confirmation.
           for (const a of parsed.actions) {
             if (a.kind === 'ADD_STEP_BLOCK') {
