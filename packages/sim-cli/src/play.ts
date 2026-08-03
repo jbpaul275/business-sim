@@ -11,6 +11,7 @@ import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@b
 import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
+import { postmortem, runPoint, type RunPoint } from './postmortem.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
@@ -276,6 +277,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}quotes${RESET} · ${BOLD}portfolio${RESET}     the catalog, and what you hold
 
   ${BOLD}skip${RESET} <n>              run n quarters with no actions
+  ${BOLD}postmortem${RESET}            what would have had to be true ${DIM}— any time, not just at the end${RESET}
   ${BOLD}costs${RESET}                 where the money goes, biggest line first
   ${BOLD}lines${RESET}                 list step-fixed cost line ids
   ${BOLD}help${RESET} · ${BOLD}quit${RESET}
@@ -329,6 +331,7 @@ interface ParseResult {
  * it, finds their question absent, and concludes the tool is not listening.
  */
 type Topic =
+  | 'postmortem'
   | 'invest'
   | 'capacity'
   | 'product'
@@ -356,6 +359,14 @@ type Topic =
  * archetype is named after.
  */
 const TOPIC_PATTERNS: [Topic, RegExp][] = [
+  /**
+   * "What went wrong?" — §9.4's post-mortem, reached in the words a player
+   * actually uses rather than only through a command they have to know exists.
+   */
+  [
+    'postmortem',
+    /\b(what went wrong|went wrong|what killed|why did (it|this|we)|what happened|post-?mortem|would have had to be true|where did (it|we) go wrong)\b/,
+  ],
   /**
    * The other thing money can do.
    *
@@ -479,6 +490,7 @@ function advise(
   business: Business,
   result: TickResult,
   world: WorldState,
+  history: readonly RunPoint[],
   question = '',
   memory?: AdvisorMemory,
 ): string[] {
@@ -616,6 +628,17 @@ function advise(
         `${toCompact(asRate)} a quarter instead. The game will not tell you a waterpark is worth 10%; ` +
         `that number is yours, and the run is what tests it.`,
     );
+  }
+
+  /**
+   * "What went wrong?"
+   *
+   * Routed to the same analysis the `postmortem` command prints, because a
+   * player who asks the question in English deserves the answer they would have
+   * got by typing a word they had no way to know about.
+   */
+  if (topic === 'postmortem') {
+    out.push(...postmortem(history, business).lines.filter((l) => l !== ''));
   }
 
   /**
@@ -1037,7 +1060,7 @@ function remember(
  * are commands, and that set is exactly this.
  */
 const VERBS = new Set([
-  '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
+  '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing', 'postmortem',
   'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
   'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
 ]);
@@ -1119,11 +1142,28 @@ function renderCosts(business: Business, result: TickResult): void {
   );
 }
 
+/**
+ * The heading has to come from the verdict, not from where it is printed.
+ *
+ * "WHAT IT RESTED ON" over an analysis that opens "short by $1.4k a quarter"
+ * is the screen contradicting itself in its first two lines.
+ */
+function printPostmortem(history: readonly RunPoint[], business: Business, colour = ''): void {
+  const analysis = postmortem(history, business);
+  const heading =
+    analysis.verdict === 'WORKED' ? 'WHAT IT RESTS ON' : 'WHAT WOULD HAVE HAD TO BE TRUE';
+  console.log(`\n${colour ? DIM : BOLD}${heading}${RESET}`);
+  for (const line of analysis.lines) {
+    console.log(line === '' ? '' : `  ${colour}${line}${colour ? RESET : ''}`);
+  }
+}
+
 function parseCommand(
   line: string,
   business: Business,
   result: TickResult,
   world: WorldState,
+  history: readonly RunPoint[],
   journal?: Journal,
   memory?: AdvisorMemory,
 ): ParseResult {
@@ -1156,6 +1196,18 @@ function parseCommand(
     amount !== undefined && amount <= 0n
       ? `A negative \`${verb}\` is not the opposite of ${verb} — ${instead}`
       : undefined;
+
+  /**
+   * A bare `why` is the post-mortem; `why does revenue keep swinging?` is not.
+   *
+   * Making `why` a verb outright would swallow every why-question into the same
+   * answer, which is the exact failure the topic router exists to prevent — so
+   * it is a command only when it is the whole line.
+   */
+  if (verb.toLowerCase() === 'why' && rest.length === 0) {
+    printPostmortem(history, business, DIM);
+    return none;
+  }
 
   switch (verb.toLowerCase()) {
     case '':
@@ -1635,6 +1687,16 @@ function parseCommand(
       return { actions: [{ kind: 'SELL_SECURITY', ticker, shares }] };
     }
 
+    /**
+     * "What would have had to be true" — §9.4, mandatory on insolvency and
+     * available on demand at any time, which is the half that matters. A player
+     * who can ask this in period 12 can still act on the answer.
+     */
+    case 'postmortem': {
+      printPostmortem(history, business, DIM);
+      return none;
+    }
+
     case 'policy': {
       const tokens = (rest[0] ?? '').split(',').filter(Boolean);
       const policy: CrisisRemedy[] = [];
@@ -1649,7 +1711,7 @@ function parseCommand(
 
     default:
       if (looksLikeAQuestion(line, verb)) {
-        const answered = advise(business, result, world, line, memory);
+        const answered = advise(business, result, world, history, line, memory);
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
         journal?.write({ kind: 'asked', question: line, answered });
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
@@ -1710,9 +1772,23 @@ export async function play(
    * summarised at the end, because the sessions worth reading are the ones
    * that end abruptly.
    */
+  /**
+   * Every quarter, kept.
+   *
+   * The post-mortem is arithmetic on the run's history, so the history has to
+   * exist while the run is happening — a summary written at the end cannot say
+   * which period the business was actually lost in.
+   */
+  const history: RunPoint[] = [];
+
   const record = (result: TickResult): void => {
     const entry = result.statements.byBusiness[businessId];
     if (!entry) return;
+    const business = state.businesses.find((b) => b.id === businessId);
+    if (business) {
+      const point = runPoint(result, business);
+      if (point) history.push(point);
+    }
     options.journal?.write({
       kind: 'quarter',
       period: result.statements.period,
@@ -1741,6 +1817,10 @@ export async function play(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need was ${toDisplay(business.peakCashNeed)}`,
         );
+        // §9.4: mandatory on insolvency. A run that ends with a liquidation
+        // figure tells the player they lost without telling them what would
+        // have had to be different, and the gap between those is the product.
+        printPostmortem(history, business);
         console.log('');
         for (const line of benchmarkLines(
           state,
@@ -1757,6 +1837,7 @@ export async function play(
           `Household net worth ${toDisplay(last.statements.household.netWorth)} · ` +
             `peak cash need ${toDisplay(business.peakCashNeed)} at period ${business.peakCashNeedPeriod}`,
         );
+        printPostmortem(history, business);
         // The number the run was missing: what the same money would have done
         // sitting in an index fund for the same ten years.
         console.log('');
@@ -1786,7 +1867,7 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business, last, state, options.journal, memory);
+        const parsed = parseCommand(line, business, last, state, history, options.journal, memory);
         if (parsed.message) console.log(parsed.message);
         if (parsed.quit) {
           quit = true;

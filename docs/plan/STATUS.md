@@ -9,7 +9,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
 | **M4 — Challenge loop** | ⬜ Not started | Same |
-| **M5 — Turn loop + actions** | 🟡 Partial | §9.1 Phases 0-5 playable via `pnpm sim --new`: capital choice, business design, assumption review, commit gate, quarterly operate. `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
+| **M5 — Turn loop + actions** | 🟡 Partial | §9.1 Phases 0-5 playable via `pnpm sim --new`: capital choice, business design, assumption review, commit gate, quarterly operate. The §9.4 post-mortem is in, mandatory on insolvency and available any time via `postmortem`. `ActionTranslation`/`TurnNarration` not started; `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | 🟡 Partial | Consolidation and household roll-up work; `DELEGATE`/`RECLAIM` implemented; clone not started |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
@@ -165,6 +165,9 @@ which the reference model omitted — the same reason its year three sat above b
   is a second engine and needs the HyperFormula recalc harness from its first commit.
 - **The UI.** The three-pane shell in [01-architecture.md §7](./01-architecture.md) is unstarted.
 - **`START_BUSINESS` and `SELL_BUSINESS`** reject with an `ACTION_REJECTED` event rather than half-working.
+- **A model anywhere in the turn loop.** The advisor and the post-mortem are arithmetic on the run's own
+  history; nothing mid-game calls an LLM. That is why the advisor can price a claim a player makes but
+  cannot originate one.
 
 ## Simplifications taken, and where they are recorded
 

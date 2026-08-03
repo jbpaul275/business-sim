@@ -119,12 +119,29 @@ export interface PriceOptimum {
   band: { low: Money; high: Money };
 }
 
-export function priceOptimum(
+/**
+ * The contribution curve, as a function anything can walk.
+ *
+ * Shared rather than duplicated, because the post-mortem asks the mirror-image
+ * question of the advisor's. The advisor wants the price that earns the most;
+ * the post-mortem wants the price that would have been *enough*. Two searches
+ * over one curve — and if they ever disagreed about the curve, one of the two
+ * answers would be quietly wrong with nothing to catch it.
+ */
+export interface ContributionModel {
+  /** Contribution and served volume at a price, in the engine's own terms. */
+  at(price: Money): { value: number; volume: number };
+  /** The band the engine will defend: outside it the demand response clamps. */
+  band: { low: Money; high: Money };
+  elasticity: number;
+}
+
+export function contributionModel(
   business: Business,
   stream: RevenueStream,
   metrics: StreamMetrics,
   currentPrice: Money,
-): PriceOptimum | undefined {
+): ContributionModel | undefined {
   const reference = stream.params.referencePrice;
   const elasticity = stream.modifiers.priceElasticity;
   if (currentPrice <= 0n || reference <= 0n || metrics.realizedVolume <= 0) return undefined;
@@ -144,20 +161,31 @@ export function priceOptimum(
   if (now.multiplier <= 0) return undefined;
   const demandAtReference = metrics.demandVolume / now.multiplier;
 
-  const contributionAt = (price: Money): { value: number; volume: number } => {
-    const demand = demandAtReference * priceEffect(price, reference, elasticity).multiplier;
-    const volume = Math.min(demand, capacity);
-    const perUnit =
-      (revenuePerUnit * (Number(price) / Number(currentPrice))) * (1 - variable.pctOfRevenue) -
-      Number(variable.perUnit);
-    return { value: volume * perUnit, volume };
+  return {
+    at(price: Money) {
+      const demand = demandAtReference * priceEffect(price, reference, elasticity).multiplier;
+      const volume = Math.min(demand, capacity);
+      const perUnit =
+        revenuePerUnit * (Number(price) / Number(currentPrice)) * (1 - variable.pctOfRevenue) -
+        Number(variable.perUnit);
+      return { value: volume * perUnit, volume };
+    },
+    band: { low: mulRate(reference, 0.4), high: mulRate(reference, 3.0) },
+    elasticity,
   };
+}
 
-  // The band is the engine's, not a taste judgement: outside [0.4, 3.0] of the
-  // reference price the demand response is clamped, and a recommendation that
-  // lives there is an answer about the clamp rather than about the business.
-  const low = mulRate(reference, 0.4);
-  const high = mulRate(reference, 3.0);
+export function priceOptimum(
+  business: Business,
+  stream: RevenueStream,
+  metrics: StreamMetrics,
+  currentPrice: Money,
+): PriceOptimum | undefined {
+  const model = contributionModel(business, stream, metrics, currentPrice);
+  if (!model) return undefined;
+  const contributionAt = model.at;
+  const { low, high } = model.band;
+  const elasticity = model.elasticity;
   const steps = 200;
 
   let bestPrice = currentPrice;
@@ -180,6 +208,7 @@ export function priceOptimum(
   const best = contributionAt(price);
   const here = contributionAt(currentPrice);
   const atEdge = price > currentPrice ? price >= high - 1n : price <= low + 1n;
+  const capacity = metrics.capacityVolume ?? Number.POSITIVE_INFINITY;
   const clears = Number.isFinite(capacity) && best.volume >= capacity - 1e-9;
 
   return {

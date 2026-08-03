@@ -477,6 +477,47 @@ describe('asking what to do', () => {
     expect(printed).not.toMatch(/staffed for the building/);
   });
 
+  it('explains a failure instead of ending on a liquidation figure', async () => {
+    // §9.4: the post-mortem is mandatory on insolvency. "For a prospective
+    // founder, this is the single most valuable output the product can
+    // generate — it converts a loss into a specific, checkable claim about the
+    // real world." A run used to end with a number and no reason.
+    const printed = await transcript(['fire kitchen_labor 5', '', 'skip 40', 'quit']);
+    expect(printed).toMatch(/WHAT WOULD HAVE HAD TO BE TRUE/);
+    expect(printed).toMatch(/covers\/day to break even/);
+    expect(printed).toMatch(/holds everything else at what it actually was/);
+  });
+
+  it('answers on demand, which is the half that matters', async () => {
+    // A player who can ask this in period 12 can still act on the answer.
+    const printed = await transcript(['skip 2', 'postmortem', 'quit'], 'storage');
+    expect(printed).toMatch(/What (would have had to be true|it rests on)/);
+    expect(printed).toMatch(/to break even/);
+  });
+
+  it('takes the question in English too', async () => {
+    const printed = await transcript(['skip 2', 'what went wrong?', 'quit'], 'storage');
+    expect(printed).toMatch(/to break even/);
+    expect(printed).not.toContain('Unknown command');
+  });
+
+  it('does not let a bare `why` swallow every why-question', async () => {
+    // Making `why` a verb outright routes "why does revenue keep swinging?"
+    // into the post-mortem — the exact failure the topic router exists to stop.
+    const swing = await transcript(['why does revenue keep swinging?', 'quit'], 'ecommerce');
+    expect(swing).toMatch(/seasonal, not a trend/);
+    expect(swing).not.toMatch(/to break even/);
+
+    const bare = await transcript(['why', 'quit'], 'ecommerce');
+    expect(bare).toMatch(/to break even/);
+  });
+
+  it('does not tell a working business what went wrong', async () => {
+    const printed = await transcript(['skip 2', 'postmortem', 'quit'], 'cash-crunch');
+    expect(printed).toMatch(/What it rests on/);
+    expect(printed).toMatch(/clear by/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);
