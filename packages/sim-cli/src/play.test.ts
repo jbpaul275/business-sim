@@ -231,6 +231,96 @@ describe('asking what to do', () => {
     expect(printed).toMatch(/of revenue against .* of pay/);
   });
 
+  it('answers the question the occupancy archetype is named after', async () => {
+    // "how can we get occupancy up?" — asked of a hotel running at 68% of its
+    // keys, answered with "Nothing is obviously binding this quarter", because
+    // the word `occupancy` appeared in none of the topic patterns and the
+    // question fell through to the general diagnosis.
+    const printed = await transcript(['how can we get occupancy up?', 'quit'], 'storage');
+    expect(printed).not.toMatch(/Nothing is obviously binding/);
+    expect(printed).toMatch(/of 620 units/);
+    // The ceiling, which is the actual answer: stabilized occupancy, and the
+    // one lever that moves it.
+    expect(printed).toMatch(/tops out near/);
+    expect(printed).toMatch(/stabilized occupancy/);
+  });
+
+  it('says marketing does nothing when the model gives it nothing to do', async () => {
+    // §3.0.2 exempts OCCUPANCY from the marketing multiplier: the spend is
+    // expensed and demand never reads it. A hotel owner at $18k a quarter was
+    // told his spend had "saturated" — an explanation of a curve the engine
+    // does not evaluate for this archetype, and the reason he kept paying it.
+    const printed = await transcript(['should we raise marketing spend?', 'quit'], 'storage');
+    expect(printed).toMatch(/does not move this archetype/);
+    expect(printed).toMatch(/`marketing 0`/);
+    expect(printed).not.toMatch(/half-saturation/);
+    // And it is named as a simplification rather than a fact about hotels.
+    expect(printed).toMatch(/simplification/);
+  });
+
+  it('quotes the price in the units the player is thinking in', async () => {
+    // `price 8213` is what the engine stores and what the command takes. It is
+    // also incomprehensible to someone who has spent the session thinking in a
+    // nightly rate, and nothing on screen connected the two.
+    const printed = await transcript(['what about raising prices?', 'quit'], 'storage');
+    expect(printed).toMatch(/per unit per quarter/);
+    expect(printed).toMatch(/a month/);
+  });
+
+  it('computes the optimal price instead of restating that elasticity exists', async () => {
+    // "what's the optimal price?" was answered with the same elasticity
+    // paragraph the player had already read twice, which never contained a
+    // price. Either a price or the finding that there is not one — never a
+    // description of the mechanism.
+    const printed = await transcript(['what is the optimal price?', 'quit'], 'storage');
+    expect(printed).toMatch(/Contribution (peaks at|barely moves)|nothing to win here/);
+  });
+
+  it('routes a question by what it leads with, not by rule order', async () => {
+    // "how could we support higher prices when we're only at 68% occupancy as
+    // is?" is a pricing question that mentions occupancy. "what's our occupancy
+    // rate?" is an occupancy question that mentions a rate. A fixed rule order
+    // gets one of them wrong whichever way it is written; where the subject
+    // appears is the better signal, because the thing being asked about leads.
+    const priced = await transcript(
+      ['how could we support higher prices when we are only at 20% occupancy?', 'quit'],
+      'storage',
+    );
+    expect(priced).toMatch(/per unit per quarter/);
+    expect(priced).not.toMatch(/tops out near/);
+
+    const filled = await transcript(['what is our occupancy rate?', 'quit'], 'storage');
+    expect(filled).toMatch(/tops out near/);
+    expect(filled).not.toMatch(/per unit per quarter/);
+  });
+
+  it('does not answer two different questions with the same paragraph', async () => {
+    // "woah so we're probably overspending on marketing" got the marketing
+    // paragraph the player had just been shown, verbatim; "what's the optimal
+    // price?" got the price paragraph, verbatim. Repeating an answer word for
+    // word says the second thing you typed was not read.
+    const printed = await transcript(
+      ['should we raise marketing spend?', 'so we are overspending on marketing?', 'quit'],
+      'storage',
+    );
+    const lines = printed.split('\n').filter((l) => l.includes('does not move this archetype'));
+    expect(lines.length).toBe(1);
+  });
+
+  it('says so plainly when it has genuinely run out of new things to say', async () => {
+    const printed = await transcript(
+      [
+        'should we raise marketing spend?',
+        'so we are overspending on marketing?',
+        'what about the marketing budget?',
+        'marketing though?',
+        'quit',
+      ],
+      'storage',
+    );
+    expect(printed).toMatch(/Same answer as last time/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);

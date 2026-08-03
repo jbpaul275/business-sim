@@ -1,6 +1,14 @@
 import { fromDisplay, mulRate, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
-import { tick, type TickResult } from '@bizsim/engine';
+import {
+  marketingMovesDemand,
+  maturityRamp,
+  priceEffect,
+  streamPrice,
+  tick,
+  type TickResult,
+} from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
+import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
@@ -291,18 +299,97 @@ interface ParseResult {
  * `Unknown command` it replaced: it looks like an answer, so the player reads
  * it, finds their question absent, and concludes the tool is not listening.
  */
-type Topic = 'capacity' | 'price' | 'marketing' | 'staff' | 'debt' | 'seasonality' | 'general';
+type Topic =
+  | 'capacity'
+  | 'demand'
+  | 'price'
+  | 'marketing'
+  | 'staff'
+  | 'debt'
+  | 'seasonality'
+  | 'general';
+
+/**
+ * Earliest keyword wins, not first rule in the list.
+ *
+ * "how could we support higher prices when we're only at 68% occupancy as is?"
+ * is a pricing question that mentions occupancy; "what's our occupancy rate?"
+ * is an occupancy question that mentions a rate. A fixed rule order gets one of
+ * them wrong whichever way it is written. Where the subject appears in the
+ * sentence is a better signal than which regex the author happened to put
+ * first, because the thing being asked about almost always leads.
+ *
+ * `occupancy` was in none of these until a hotel owner asked how to raise it
+ * and got "Nothing is obviously binding this quarter" — on the one metric the
+ * archetype is named after.
+ */
+const TOPIC_PATTERNS: [Topic, RegExp][] = [
+  [
+    'demand',
+    /\b(occupanc\w*|occupied|utili[sz]ation|fill|filling|filled|empty|vacan\w*|booked|bookings|footfall|traffic|more customers|more guests|demand)\b/,
+  ],
+  [
+    'price',
+    /\b(price|prices|priced|pricing|charge|charging|adr|discount|rate card|nightly rate|room rate|day rate|hourly rate|raise rates?|cut rates?)\b/,
+  ],
+  ['marketing', /\b(marketing|advertis\w*|promote|promotion|campaign|ads?|awareness)\b/],
+  ['capacity', /\b(expand|more sites|more seats|more rooms|capacity|bigger|quadruple|double|scale)\b/],
+  ['staff', /\b(staff\w*|labou?r|payroll|hire|fire|crew|employee|headcount|cut costs|costs)\b/],
+  ['debt', /\b(debt|borrow|loan|revolver|financ\w*|raise money|invest)\b/],
+  ['seasonality', /\b(season\w*|swing|winter|summer)\b/],
+];
 
 function topicOf(question: string): Topic {
   const q = question.toLowerCase();
-  if (/\b(expand|more sites|more seats|capacity|bigger|quadruple|double|scale)\b/.test(q)) return 'capacity';
-  if (/\b(price|prices|pricing|charge|rate|raise prices)\b/.test(q)) return 'price';
-  if (/\b(marketing|advertis|promote|reach|awareness)\b/.test(q)) return 'marketing';
-  if (/\b(staff|labou?r|payroll|hire|fire|crew|employee|cut costs|costs)\b/.test(q)) return 'staff';
-  if (/\b(debt|borrow|loan|revolver|financ|raise money|invest)\b/.test(q)) return 'debt';
-  if (/\b(season|swing|winter|summer|why.*(quarter|drop|fall))\b/.test(q)) return 'seasonality';
-  return 'general';
+  let best: { topic: Topic; at: number } | undefined;
+  for (const [topic, pattern] of TOPIC_PATTERNS) {
+    const at = q.search(pattern);
+    if (at >= 0 && (best === undefined || at < best.at)) best = { topic, at };
+  }
+  return best?.topic ?? 'general';
 }
+
+/**
+ * What has already been said this session.
+ *
+ * A hotel owner said "woah so we're probably overspending on marketing" and got
+ * the marketing paragraph he had just been shown, verbatim; then asked "what's
+ * the optimal price?" and got the price paragraph he had just been shown,
+ * verbatim. Repeating an answer word for word is a specific kind of insult: it
+ * says the second thing you typed was not read.
+ *
+ * A set of what was already printed is enough. It does not need to be clever —
+ * it needs to never print the same sentence twice and to say something rather
+ * than nothing when it has run out.
+ */
+export interface AdvisorMemory {
+  said: Set<string>;
+}
+
+export const newAdvisorMemory = (): AdvisorMemory => ({ said: new Set() });
+
+/**
+ * Why the optimum stops where it does.
+ *
+ * A price recommendation with no reason behind it is a number to be trusted or
+ * ignored, and neither is what the player wants. All three of these are real
+ * and different: one is arithmetic, one is a sold-out building, and one is the
+ * model refusing to extrapolate past where it means anything.
+ */
+const BINDING_NOTE: Record<PriceOptimum['binding'], string> = {
+  CONTRIBUTION:
+    'That is a genuine peak: past it the volume you give up costs more than the rate you gain.',
+  CAPACITY:
+    'It stops there because you sell out — below that price the extra demand has nowhere to go, ' +
+    'so cutting further only lowers what you get for the units you were always going to fill.',
+  MODEL_BAND:
+    'It stops there because the model does: outside 0.4×–3× the reference price the demand ' +
+    'response is clamped, and anything past this edge would be a statement about the clamp.',
+};
+
+const elasticityCaveat = (elasticity: number): string =>
+  `All of it rests on the price elasticity of ${elasticity.toFixed(1)} the concept was drafted ` +
+  `with — an assumption, not a measurement of your customers.`;
 
 /**
  * "What do I do now?"
@@ -318,7 +405,12 @@ function topicOf(question: string): Topic {
  * the last tick. What it says is chosen by what was asked; the full diagnosis
  * is the answer to a general question, not the answer to every question.
  */
-function advise(business: Business, result: TickResult, question = ''): string[] {
+function advise(
+  business: Business,
+  result: TickResult,
+  question = '',
+  memory?: AdvisorMemory,
+): string[] {
   const entry = result.statements.byBusiness[business.id];
   if (!entry) return ['No statements yet — run a quarter first.'];
   const is = entry.incomeStatement;
@@ -395,35 +487,156 @@ function advise(business: Business, result: TickResult, question = ''): string[]
     }
   }
 
-  if (topic === 'price') {
-    const p = business.streams[0]?.params;
-    const price =
-      p && 'avgTicket' in p ? p.avgTicket
-      : p && 'ratePerUnitPerQuarter' in p ? p.ratePerUnitPerQuarter
-      : undefined;
+  const first = business.streams[0];
+
+  /**
+   * "how can we get occupancy up?"
+   *
+   * Fell through to the general diagnosis, which looked at a hotel running at
+   * 68% of its keys and said "nothing is obviously binding this quarter". The
+   * question has a real answer and the engine has all of it: occupancy is
+   * `stabilizedOccupancy × ramp × priceEffect × season`, capped at the unit
+   * count. Three of those four are visible, and the ceiling they imply is the
+   * single most useful number a player at 68% could be told.
+   */
+  if (topic === 'demand' && first && stream) {
+    const p = first.params;
+    const priceNow = streamPrice(first);
+    const priceMultiplier = priceEffect(priceNow, p.referencePrice, first.modifiers.priceElasticity)
+      .multiplier;
+    const quarters = first.state.quartersSinceLaunch;
+    const ramp = maturityRamp(quarters, first.modifiers.rampFloor, first.modifiers.rampConstant);
+
+    if (p.kind === 'OCCUPANCY') {
+      const occupancy = stream.occupancy ?? used ?? 0;
+      const ceiling = Math.min(1, p.stabilizedOccupancy * priceMultiplier);
+      // Only worth two numbers when the price has actually moved the ceiling
+      // off the drafted figure; otherwise it is the same number said twice.
+      const moved = Math.abs(priceMultiplier - 1) > 0.02;
+      out.push(
+        `You are at ${pct(occupancy)} of ${p.units.toLocaleString()} units, and at today's rate ` +
+          `the model tops out near ${pct(ceiling)}` +
+          (moved
+            ? ` — the concept's stabilized occupancy of ${pct(p.stabilizedOccupancy)}, moved by where ` +
+              `you have priced. Price is what moves that ceiling; nothing else does.`
+            : `, the stabilized occupancy the concept was drafted with. Price is what moves that ` +
+              `ceiling; nothing else does.`),
+      );
+      if (ramp < 0.97) {
+        out.push(
+          `Some of the gap closes on its own: ${quarters === 0 ? 'you have not finished a quarter yet' : `${quarters} quarters in`}, ` +
+            `the ramp has you at ${pct(ramp)} of stabilized demand and it climbs without you doing anything.`,
+        );
+      }
+    } else if (used !== undefined) {
+      const idle = Math.round((stream.capacityVolume ?? 0) - stream.realizedVolume);
+      out.push(
+        stream.lostDemand > 0.5
+          ? `Demand is not the problem — you turned away ${Math.round(stream.lostDemand).toLocaleString()} ` +
+              `this quarter. Capacity is what is binding: \`hire\` or \`expand\`.`
+          : `You are running at ${pct(used)} with ${idle.toLocaleString()} of capacity going unused. ` +
+              `Demand is what is short, not the building.`,
+      );
+    }
+  }
+
+  if (topic === 'price' && first) {
+    const priceNow = streamPrice(first);
+    const units = priceUnits(first, priceNow);
     out.push(
-      price !== undefined
-        ? `\`price ${Math.round(Number(price) / 100)}\` sets it. Elasticity is modelled: a 10% rise ` +
-            `loses roughly 12% of volume, so it helps only while you have empty capacity to lose.`
-        : `\`price <amount>\` sets it. Elasticity is modelled, so a rise trades volume for margin.`,
+      `You are at $${units.command.toLocaleString()} ${units.per}` +
+        `${units.colloquial ? ` — ${units.colloquial}` : ''}. \`price ${units.command}\` is how it is ` +
+        `typed: the command takes the first of those numbers, not the second.`,
     );
+
+    const optimum = stream ? priceOptimum(business, first, stream, priceNow) : undefined;
+    // Worth doing, not merely different. A 22% rate cut that earns the same
+    // money is an argmax, not a recommendation, and the two have to read
+    // differently or the player learns to distrust both.
+    const gain =
+      optimum === undefined
+        ? 0
+        : optimum.contributionNow > 0n
+          ? Number(optimum.contribution - optimum.contributionNow) / Number(optimum.contributionNow)
+          : optimum.contribution > optimum.contributionNow
+            ? 1
+            : 0;
+    const worthMoving = gain > 0.02;
+
+    if (optimum === undefined) {
+      out.push('Elasticity is modelled, so a rise trades volume for margin.');
+    } else if (!worthMoving && optimum.flat) {
+      // "Cut your rent 22% to earn the same money" is what an argmax over a
+      // plateau produces, and it is worse than no answer. At an elasticity near
+      // 1 the volume response gives back what the rate change takes, and the
+      // finding is that this business does not have a pricing decision.
+      const lowEnd = priceUnits(first, optimum.band.low);
+      const highEnd = priceUnits(first, optimum.band.high);
+      out.push(
+        `Contribution barely moves: anywhere from $${lowEnd.command.toLocaleString()} to ` +
+          `$${highEnd.command.toLocaleString()}` +
+          // "$46 a month to $345 a month" says the unit twice.
+          `${lowEnd.colloquial ? ` (${lowEnd.colloquial.replace(/ an? \w+$/, '')} to ${highEnd.colloquial})` : ''} is worth within ` +
+          `2% of the same money, because at an elasticity of ${optimum.elasticity.toFixed(1)} the volume ` +
+          `you gain is almost exactly what the rate gives up. Price is not the lever in this business.`,
+      );
+    } else if (!worthMoving) {
+      out.push(
+        `Moving it is worth less than 2% of contribution either way, so there is nothing to win ` +
+          `here — the lever is already about where it should be.`,
+      );
+    } else {
+      const targetUnits = priceUnits(first, optimum.price);
+      out.push(
+        `Contribution peaks at $${targetUnits.command.toLocaleString()}` +
+          `${targetUnits.colloquial ? ` (${targetUnits.colloquial})` : ''}, ` +
+          `${optimum.factor > 1 ? 'up' : 'down'} ${pct(Math.abs(optimum.factor - 1))}: volume ` +
+          `${Math.round(optimum.volumeNow).toLocaleString()} → ${Math.round(optimum.volume).toLocaleString()}, ` +
+          `contribution ${toCompact(optimum.contributionNow)} → ${toCompact(optimum.contribution)} a ` +
+          `quarter. \`price ${targetUnits.command}\` sets it.`,
+      );
+      out.push(`${BINDING_NOTE[optimum.binding]} ${elasticityCaveat(optimum.elasticity)}`);
+    }
   }
 
   if (topic === 'marketing') {
-    const spend = business.streams[0]?.marketingSpendPerQuarter ?? 0n;
-    const half = business.streams[0]?.modifiers.halfSaturationSpend ?? 0n;
+    const spend = first?.marketingSpendPerQuarter ?? 0n;
+    const half = first?.modifiers.halfSaturationSpend ?? 0n;
     // Past twice the half-saturation point, more spend is close to free money
     // thrown away — and repeating "response saturates" to someone who has
     // already tripled their budget and seen nothing is not advice.
     const tapped = half > 0n && spend > half * 2n;
-    out.push(
-      tapped
-        ? `You are at ${toCompact(spend)} a quarter against a half-saturation point of ` +
-            `${toCompact(half)} — this lever is spent, which is why the last raise did nothing. ` +
-            `Growth from here is a bigger market (\`market <pct> <cost>\`) or a higher price, not more spend.`
-        : `\`marketing <amount>\` — you are at ${toCompact(spend)} a quarter. Response saturates: ` +
-            `each extra dollar buys less than the last, and it moves demand rather than capacity.`,
-    );
+    /**
+     * For some archetypes the curve is not flat — it is absent.
+     *
+     * A hotel owner at $18k a quarter was told his spend had "saturated",
+     * which describes a multiplier the engine never evaluates for OCCUPANCY:
+     * §3.0.2 exempts it. The spend was expensed and bought nothing at any
+     * level, and the honest thing is to say so and hand back the money.
+     */
+    if (first && !marketingMovesDemand(first.params.kind)) {
+      out.push(
+        spend > 0n
+          ? `Marketing does not move this archetype in the model at all — not weakly, not with ` +
+              `diminishing returns: the spend is expensed and demand never reads it. You are paying ` +
+              `${toCompact(spend)} a quarter for that, and \`marketing 0\` is that much straight onto EBITDA.`
+          : `Marketing does not move this archetype in the model — the spend is expensed and demand ` +
+              `never reads it. Rate and time are what fill the units here.`,
+      );
+      out.push(
+        `That is a simplification, and worth knowing as one: real hotels and landlords do buy demand. ` +
+          `In this model they do not, so do not plan around it.`,
+      );
+    } else {
+      out.push(
+        tapped
+          ? `You are at ${toCompact(spend)} a quarter against a half-saturation point of ` +
+              `${toCompact(half)} — this lever is spent, which is why the last raise did nothing. ` +
+              `Growth from here is a bigger market (\`market <pct> <cost>\`) or a higher price, not more spend.`
+          : `\`marketing <amount>\` — you are at ${toCompact(spend)} a quarter. Response saturates: ` +
+              `each extra dollar buys less than the last, and it moves demand rather than capacity.`,
+      );
+    }
   }
 
   if (topic === 'staff') {
@@ -514,7 +727,11 @@ function advise(business: Business, result: TickResult, question = ''): string[]
   }
 
   // ── The general diagnosis, when nothing specific was asked ───────────────
-  if (topic === 'general' || out.length === 0) {
+  // Extracted so that a repeated question can fall back to it: the second time
+  // someone asks about marketing, the state of their business is a better
+  // answer than the marketing paragraph they have already read.
+  const generalDiagnosis = (): string[] => {
+    const out: string[] = [];
     const runway = m.cashRunwayQuarters;
     if (Number.isFinite(runway) && runway < 2) {
       out.push(
@@ -555,8 +772,9 @@ function advise(business: Business, result: TickResult, question = ''): string[]
     // Named before the debt line, because it is the only lever here that
     // changes the trajectory rather than buying time against it.
     if (sparePay > 0n) {
+      const spareBlocks = overstaffed.reduce((a, o) => a + o.spare, 0);
       out.push(
-        `You are paying for ${overstaffed.reduce((a, o) => a + o.spare, 0)} blocks this quarter's ` +
+        `You are paying for ${spareBlocks} ${spareBlocks === 1 ? 'block' : 'blocks'} this quarter's ` +
           `volume does not need — ${toCompact(sparePay)} a quarter. ` +
           `${overstaffed.map((o) => `\`fire ${o.line.id} ${o.spare}\``).join(' and ')}.`,
       );
@@ -567,7 +785,10 @@ function advise(business: Business, result: TickResult, question = ''): string[]
           `of EBITDA. Borrowing more raises that number rather than solving it.`,
       );
     }
-  }
+    return out;
+  };
+
+  if (topic === 'general' || out.length === 0) out.push(...generalDiagnosis());
 
   if (out.length === 0) {
     out.push(
@@ -575,7 +796,35 @@ function advise(business: Business, result: TickResult, question = ''): string[]
         `\`expand\` are the levers; \`skip 4\` runs a year if you want to see the trend first.`,
     );
   }
-  return out;
+
+  return remember(out, generalDiagnosis, memory);
+}
+
+/**
+ * Print nothing the player has already been given word for word.
+ *
+ * The fallbacks descend: the answer to what was asked, then the state of the
+ * business, then an admission. The admission is allowed to repeat — "nothing
+ * has changed" is a true sentence every time it is printed, and it is short.
+ */
+function remember(
+  lines: string[],
+  fallback: () => string[],
+  memory: AdvisorMemory | undefined,
+): string[] {
+  if (!memory) return lines;
+  const keep = (candidates: string[]): string[] => candidates.filter((l) => !memory.said.has(l));
+
+  let fresh = keep(lines);
+  if (fresh.length === 0) fresh = keep(fallback());
+  if (fresh.length === 0) {
+    return [
+      `Same answer as last time — nothing in this quarter's numbers has moved since you asked. ` +
+        `\`skip 1\` runs a quarter and changes them.`,
+    ];
+  }
+  for (const line of fresh) memory.said.add(line);
+  return fresh;
 }
 
 /**
@@ -674,6 +923,7 @@ function parseCommand(
   business: Business,
   result: TickResult,
   journal?: Journal,
+  memory?: AdvisorMemory,
 ): ParseResult {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
   const streamId = business.streams[0]?.id ?? 's1';
@@ -961,7 +1211,7 @@ function parseCommand(
 
     default:
       if (looksLikeAQuestion(line, verb)) {
-        const answered = advise(business, result, line);
+        const answered = advise(business, result, line, memory);
         for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
         journal?.write({ kind: 'asked', question: line, answered });
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
@@ -1067,6 +1317,10 @@ export async function play(
       const queued: Action[] = [];
       let quit = false;
       let skip = 0;
+      // Per quarter, not per session: repeating yourself inside one decision is
+      // not listening, and repeating yourself after a quarter has run is the
+      // same answer holding because the same numbers do.
+      const memory = newAdvisorMemory();
 
       while (true) {
         const prompt = queued.length > 0 ? `${DIM}[${queued.length} queued]${RESET} > ` : '> ';
@@ -1076,7 +1330,7 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business, last, options.journal);
+        const parsed = parseCommand(line, business, last, options.journal, memory);
         if (parsed.message) console.log(parsed.message);
         if (parsed.quit) {
           quit = true;

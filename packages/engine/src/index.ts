@@ -44,7 +44,12 @@ export {
 } from './debt.js';
 export { computeTax, SECTION_179_CAP, SE_TAX_WAGE_BASE } from './tax.js';
 export { quarterlyDepreciation } from './depreciation.js';
-export { maintenanceReservePerQuarter, resolveCapacity } from './costs.js';
+export {
+  maintenanceReservePerQuarter,
+  resolveCapacity,
+  streamVariableCosts,
+  type StreamVariableCosts,
+} from './costs.js';
 export { deltaNetWorkingCapital, cashConversionCycle } from './workingCapital.js';
 export type { ComputationTrace } from './context.js';
 export type { CapacityResolution } from './costs.js';
@@ -53,3 +58,7 @@ export {
   type BuildModelOptions,
   type ScaleInput,
 } from './buildModel.js';
+// The advisor has to be able to say "marketing does nothing for this
+// archetype" without guessing, and to read the price off a stream without
+// re-implementing the six-way switch that would drift from this one.
+export { streamPrice, marketingMovesDemand } from './archetypes.js';

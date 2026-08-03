@@ -322,25 +322,46 @@ export function streamContributionMarginPct(
   stream: RevenueStream,
   pricePerUnit: Money,
 ): number {
-  let variablePct = 0;
+  const { pctOfRevenue, perUnit } = streamVariableCosts(business, stream);
+  const activityPct = pricePerUnit > 0n ? Number(perUnit) / Number(pricePerUnit) : 0;
+  return Math.max(0, 1 - pctOfRevenue - activityPct);
+}
+
+/**
+ * The two halves of a stream's variable cost, kept apart.
+ *
+ * Contribution margin collapses them into one percentage, which is the right
+ * summary and the wrong input for a pricing question: a commission that is 8%
+ * of revenue moves with the price and a laundry cost of $14 a room-night does
+ * not. Anything asking "what price maximises contribution" needs to know which
+ * is which, so the split is exposed rather than re-derived by every caller.
+ */
+export interface StreamVariableCosts {
+  /** Costs expressed as a share of this stream's revenue — scale with price. */
+  pctOfRevenue: number;
+  /** Costs per unit of this stream's own driver — do not scale with price. */
+  perUnit: Money;
+}
+
+export function streamVariableCosts(business: Business, stream: RevenueStream): StreamVariableCosts {
+  let pctOfRevenue = 0;
   for (const cost of business.costs.variableWithRevenue) {
-    if (applies(cost.appliesToStreamIds, stream.id)) variablePct += cost.pctOfRevenue;
+    if (applies(cost.appliesToStreamIds, stream.id)) pctOfRevenue += cost.pctOfRevenue;
   }
 
   // Activity costs are attributed per unit of the stream's own driver. Because
   // both the cost and the revenue are linear in volume, the ratio is the same
   // whether it is evaluated at demand or at realized volume — which is what
   // lets this be computed before capacity is resolved.
-  let activityPerUnit = 0n;
+  let perUnit = 0n;
   const driver = ARCHETYPE_DRIVER[stream.params.kind];
   for (const cost of business.costs.variableWithActivity) {
     if (!applies(cost.appliesToStreamIds, stream.id)) continue;
     if (cost.driver !== driver) continue;
-    activityPerUnit += cost.costPerUnit;
+    perUnit += cost.costPerUnit;
   }
 
-  const activityPct = pricePerUnit > 0n ? Number(activityPerUnit) / Number(pricePerUnit) : 0;
-  return Math.max(0, 1 - variablePct - activityPct);
+  return { pctOfRevenue, perUnit };
 }
 
 /**

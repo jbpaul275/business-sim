@@ -1,6 +1,7 @@
 import { mulRate, ratio, type Money } from '@bizsim/money';
 import {
   ARCHETYPE_DRIVER,
+  type ArchetypeParams,
   type PeriodIndex,
   type RevenueStream,
   type StreamMetrics,
@@ -109,6 +110,19 @@ export function setStreamPrice(stream: RevenueStream, price: Money): void {
       p.avgContractValue = price;
       break;
   }
+}
+
+/**
+ * Whether marketing spend moves demand at all for this archetype.
+ *
+ * A hotel owner raised marketing to $18k a quarter, watched nothing happen, and
+ * was told the spend had "saturated" — an explanation of a curve that is not
+ * being evaluated. For OCCUPANCY the multiplier is not diminishing, it is
+ * absent: the spend is expensed and drives nothing. The advisor has to be able
+ * to say that, and it has to read it from the same table the engine uses.
+ */
+export function marketingMovesDemand(kind: ArchetypeParams['kind']): boolean {
+  return APPLIES[kind].marketing;
 }
 
 /** Spec §3.0.2 — the exemptions are deliberate, not oversights. */
