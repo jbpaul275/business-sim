@@ -1,4 +1,4 @@
-import { mulRate, sum, type Money } from '@bizsim/money';
+import { mulRate, sum, toDisplay, type Money } from '@bizsim/money';
 import type {
   Business,
   CrisisRemedy,
@@ -96,7 +96,7 @@ export function applyRemedy(
       return {
         applied: true,
         raised: draw,
-        note: `Drew ${draw} on the revolver.`,
+        note: `Drew ${toDisplay(draw)} on the revolver.`,
         householdConsumed: 0n,
       };
     }
@@ -112,7 +112,7 @@ export function applyRemedy(
       return {
         applied: true,
         raised: amount,
-        note: `Household injected ${amount}.`,
+        note: `Household injected ${toDisplay(amount)}.`,
         householdConsumed: amount,
       };
     }
@@ -129,7 +129,7 @@ export function applyRemedy(
       return {
         applied: true,
         raised: factored - cost,
-        note: `Factored ${factored} of receivables at a ${FACTORING_DISCOUNT * 100}% discount.`,
+        note: `Factored ${toDisplay(factored)} of receivables at a ${FACTORING_DISCOUNT * 100}% discount.`,
         householdConsumed: 0n,
       };
     }
@@ -143,7 +143,7 @@ export function applyRemedy(
       return {
         applied: true,
         raised: ctx.ownerCompThisPeriod,
-        note: `Deferred ${ctx.ownerCompThisPeriod} of owner compensation.`,
+        note: `Deferred ${toDisplay(ctx.ownerCompThisPeriod)} of owner compensation.`,
         householdConsumed: 0n,
       };
     }
@@ -174,7 +174,7 @@ export function applyRemedy(
       return {
         applied: true,
         raised: principal - fee,
-        note: `Raised ${principal} of emergency debt at ${((ctx.config.primeRate + EMERGENCY_DEBT_SPREAD) * 100).toFixed(1)}% with a personal guarantee.`,
+        note: `Raised ${toDisplay(principal)} of emergency debt at ${((ctx.config.primeRate + EMERGENCY_DEBT_SPREAD) * 100).toFixed(1)}% with a personal guarantee.`,
         householdConsumed: 0n,
       };
     }
@@ -212,7 +212,7 @@ export function applyRemedy(
       return {
         applied: true,
         raised: proceeds,
-        note: `Sold and leased back ${asset.label} for ${proceeds}; a permanent lease cost replaces it.`,
+        note: `Sold and leased back ${asset.label} for ${toDisplay(proceeds)}; a permanent lease cost replaces it.`,
         householdConsumed: 0n,
       };
     }

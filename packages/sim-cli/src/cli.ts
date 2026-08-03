@@ -3,6 +3,7 @@ import { ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
 import { tick, type TickResult } from '@bizsim/engine';
 import type { WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
+import { play } from './play.js';
 
 /**
  * The headless runner. This is the calibration harness for seed templates and
@@ -14,10 +15,12 @@ interface Args {
   scenario: string;
   periods: number;
   print: 'statements' | 'summary' | 'events' | 'bands';
+  /** Interactive turn loop (§9.1 Phase 5) rather than a batch run. */
+  interactive: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { scenario: 'restaurant', periods: 40, print: 'summary' };
+  const args: Args = { scenario: 'restaurant', periods: 40, print: 'summary', interactive: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = argv[i + 1];
@@ -30,6 +33,8 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === '--print' && value) {
       args.print = value as Args['print'];
       i++;
+    } else if (arg === '--play' || arg === '--interactive') {
+      args.interactive = true;
     }
   }
   return args;
@@ -168,8 +173,14 @@ function printBands(results: TickResult[]): void {
   for (let year = 0; year < 10; year++) forYear(year);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.interactive) {
+    await play(args.scenario);
+    return;
+  }
+
   const build = SCENARIOS[args.scenario];
   if (!build) {
     console.error(
@@ -240,4 +251,4 @@ function main(): void {
   if (failures > 0) process.exit(1);
 }
 
-main();
+void main();
