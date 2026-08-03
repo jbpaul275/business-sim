@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ScriptedTransport, type ConceptTransport } from './client.js';
+import { EMPTY_USAGE, ScriptedTransport, type ConceptTransport } from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
 import { zConceptDraft, zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
@@ -504,6 +504,7 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
     const transport: ConceptTransport = {
       turn: async () => ({ turn: ready('Building it.') }),
       draft: async () => broken as never,
+      usage: EMPTY_USAGE,
     };
     const interview = new ConceptInterview({ transport });
 

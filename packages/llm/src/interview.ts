@@ -1,7 +1,7 @@
 import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
-import type { ConceptTransport, InterviewMessage } from './client.js';
+import { EMPTY_USAGE, type ConceptTransport, type InterviewMessage, type UsageTotal } from './client.js';
 
 /**
  * The concept interview — §9.1 Phases 1-2, with the LLM as the input method
@@ -113,6 +113,18 @@ export class ConceptInterview {
    */
   lastReasoning: string | undefined;
   readonly transcript: InterviewMessage[] = [];
+
+  /**
+   * Everything the interview has spent, read straight off the transport.
+   *
+   * Deliberately not accumulated here: the transport makes calls this loop
+   * never sees — the retry after a garbled turn, the unconstrained fallback
+   * when the draft grammar will not compile — and a meter that misses those
+   * lies in exactly the case where the number is worth knowing.
+   */
+  get usage(): UsageTotal {
+    return this.transport.usage ?? EMPTY_USAGE;
+  }
 
   private readonly onDrafting: (() => void) | undefined;
 

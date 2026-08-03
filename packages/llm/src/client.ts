@@ -45,10 +45,46 @@ export interface InterviewMessage {
   content: string;
 }
 
-/** What a call cost, so the CLI can show the split rather than guess at it. */
+/**
+ * What a call cost, so the CLI can show the split rather than guess at it.
+ *
+ * Thinking is billed at the output rate and is much the larger half here — a
+ * turn emits fifty words and thinks for twenty seconds — so a usage figure
+ * that omits it understates the bill by an order of magnitude. It is carried
+ * separately as well as inside `outputTokens` because the interesting question
+ * is which of the two dials to turn.
+ */
 export interface TurnUsage {
-  thinkingTokens: number;
+  inputTokens: number;
+  /** Input served from the cache, billed at a tenth of the read rate. */
+  cachedInputTokens: number;
   outputTokens: number;
+  /** Part of `outputTokens`, not additional to it. */
+  thinkingTokens: number;
+}
+
+/** Usage summed across a whole interview. */
+export interface UsageTotal extends TurnUsage {
+  calls: number;
+}
+
+export const EMPTY_USAGE: UsageTotal = {
+  calls: 0,
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  outputTokens: 0,
+  thinkingTokens: 0,
+};
+
+export function addUsage(total: UsageTotal, next: TurnUsage | undefined): UsageTotal {
+  if (!next) return total;
+  return {
+    calls: total.calls + 1,
+    inputTokens: total.inputTokens + next.inputTokens,
+    cachedInputTokens: total.cachedInputTokens + next.cachedInputTokens,
+    outputTokens: total.outputTokens + next.outputTokens,
+    thinkingTokens: total.thinkingTokens + next.thinkingTokens,
+  };
 }
 
 export interface TurnResult {
@@ -73,6 +109,16 @@ export interface ConceptTransport {
   turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
+  /**
+   * Everything this transport has spent, running.
+   *
+   * On the transport rather than threaded through return types because the
+   * draft call, the retry after a garbled turn and the unconstrained fallback
+   * all cost real money and none of them are visible to the interview loop.
+   * A meter that misses the retries is a meter that lies in exactly the
+   * situation where the number matters.
+   */
+  readonly usage: UsageTotal;
 }
 
 /**
@@ -168,6 +214,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
   private readonly draftEffort: Effort;
   /** How often a response came back empty or corrupted. Surfaced, not swallowed. */
   unusableRetries = 0;
+  /** Every call this transport has made, including retries and fallbacks. */
+  usage: UsageTotal = EMPTY_USAGE;
 
   constructor(options: AnthropicTransportOptions = {}) {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
@@ -223,6 +271,14 @@ export class AnthropicConceptTransport implements ConceptTransport {
     if (!text) {
       throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
     }
+    const spent: TurnUsage = {
+      inputTokens: response.usage.input_tokens,
+      cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
+      outputTokens: response.usage.output_tokens,
+      thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
+    };
+    this.usage = addUsage(this.usage, spent);
+
     const reasoning = response.content
       .filter((block) => block.type === 'thinking')
       .map((block) => block.thinking)
@@ -232,10 +288,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     return {
       text,
       ...(reasoning ? { reasoning } : {}),
-      usage: {
-        thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
-        outputTokens: response.usage.output_tokens,
-      },
+      usage: spent,
     };
   }
 
@@ -348,6 +401,8 @@ export class UnusableResponseError extends Error {
 export class ScriptedTransport implements ConceptTransport {
   private index = 0;
   readonly seen: { system: string; messages: InterviewMessage[] }[] = [];
+  /** Nothing was spent; a scripted run makes no calls. */
+  readonly usage: UsageTotal = EMPTY_USAGE;
 
   constructor(
     private readonly turns: readonly InterviewTurn[],

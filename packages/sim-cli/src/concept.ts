@@ -14,7 +14,8 @@ import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
 import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
-import { accent, rule, speech, youPrompt } from './ui.js';
+import { accent, note, rule, speech, youPrompt } from './ui.js';
+import { spendLine } from './spend.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -280,6 +281,12 @@ export async function runConceptInterview(
       reply = objection;
       continue;
     }
+
+    // What the conversation cost, once, at the end. Not a running total: a
+    // number ticking up while someone decides what to build changes what they
+    // build, and this is a design tool before it is a budget.
+    const spent = spendLine(interview.usage);
+    if (spent) console.log(`\n${note(spent)}`);
 
     return { mapped: draftToTemplate(state.draft), draft: state.draft };
   }
