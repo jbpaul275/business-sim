@@ -2,6 +2,7 @@ import { fromDisplay, mulRate, toDisplay, type Money } from '@bizsim/money';
 import {
   DEBT_PRODUCTS,
   buildModelFromTemplate,
+  underwrite,
   computeMonthZeroOutlays,
   createWorld,
   createWorldConfig,
@@ -587,6 +588,57 @@ export async function runSetup(
 
     console.log(`\n${rule('Before you commit')}`);
     renderOpening(candidate, candidateWorld);
+
+    /**
+     * The lender gets a say, which until now it did not.
+     *
+     * `underwrite` has always been here — collateral coverage, a 10% owner
+     * equity minimum, DSCR once there is history — and setup granted every
+     * facility unconditionally, so it was never consulted for the one loan
+     * that matters most. A live run answered a $203,902 shortfall by asking
+     * for a $4M SBA and a $4M revolver against $140,000 of equity and $3.6M
+     * of buildout, and got all of it. The engine would have declined it twice
+     * over: 10% of $4M is $400,000, and lending value on that capex is $2.16M.
+     *
+     * It refuses rather than warns, which is only safe because the financing
+     * loop exists: a decline sends the player back to the same screen with
+     * the reason, instead of ending the run.
+     */
+    const declined = candidate.financingPlan.debtRequests
+      .map((spec) => ({
+        spec,
+        decision: underwrite(
+          candidateWorld.businesses[0]!,
+          spec,
+          config,
+          candidateWorld.household,
+          0,
+        ),
+      }))
+      .filter((d) => !d.decision.approved);
+
+    if (declined.length > 0 && attempt < MAX_FINANCING_ATTEMPTS) {
+      console.log(`\n${RED}${BOLD}The lender declined.${RESET}`);
+      for (const d of declined) {
+        console.log(`  ${RED}${d.spec.kind}  ${d.decision.reason}${RESET}`);
+      }
+      console.log(
+        note(
+          'Collateral and your own money into the deal are what a first loan is written' +
+            ' against — there is no trading history to underwrite yet. More equity, a' +
+            ' smaller facility, or a smaller build.',
+        ),
+      );
+      const retry = await input.next('\nTry different financing? (Y/n) ');
+      if (retry === undefined) return undefined;
+      const t = retry.trim().toLowerCase();
+      if (t === 'n' || t === 'no') {
+        console.log(`${DIM}Nothing committed.${RESET}`);
+        return undefined;
+      }
+      console.log(`${DIM}  — attempt ${attempt + 1}${RESET}`);
+      continue;
+    }
 
     // Phase 4 is a gate, not a formality. A business that cannot fund its own
     // month zero has not been financed; letting it open would start the run with

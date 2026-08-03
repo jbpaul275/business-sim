@@ -362,12 +362,12 @@ describe('the concept path reaches the same gate as the picker', () => {
       '2', // set the funding myself
       '0', // no loan
       '', // revolver
-      '1000', // equity — nowhere near month zero
+      '50000', // equity — enough to be lent to, nowhere near month zero
       'y', // yes, try different financing
       '2', // again by hand
-      '900000', // an SBA loan that actually covers it
+      '0', // still no loan
       '', // revolver
-      '', // equity
+      '700000', // and this time enough of his own to open
       'y', // commit
     ]);
 
@@ -382,6 +382,43 @@ describe('the concept path reaches the same gate as the picker', () => {
       expect(printed.match(/How many scopes/g)?.length).toBe(1);
       expect(result?.committed).toBe(true);
       expect(result?.world.businesses[0]?.cash).toBeGreaterThan(0n);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('lets the lender decline, instead of granting whatever is asked for', async () => {
+    // A live run answered a $203,902 shortfall with a $4M SBA and a $4M
+    // revolver against $140,000 of equity, and got all of it. `underwrite` has
+    // always been in the engine — 10% owner injection, collateral coverage —
+    // and setup never consulted it for the one loan that matters most.
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Press enter.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '', // nothing to argue with
+      '2', // set the funding myself
+      '5000000', // five million against a $174,000 buildout
+      '',
+      '10000',
+      'n', // and leave it there
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(await runSetup(input, { transport })).toBeUndefined();
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('The lender declined');
+      // The reason is the engine's own, with the arithmetic in it.
+      expect(printed).toMatch(/collateral coverage|10% minimum/);
     } finally {
       log.mockRestore();
     }

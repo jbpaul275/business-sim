@@ -1,4 +1,4 @@
-import { fromDisplay, ratio, toCompact, toDisplay } from '@bizsim/money';
+import { fromDisplay, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
 import { tick, type TickResult } from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
@@ -41,7 +41,11 @@ const VOLUME_UNIT: Record<string, string> = {
 const GREEN = '\x1b[32m';
 const RESET = '\x1b[0m';
 
-const pad = (s: string, n: number): string => s.padEnd(n);
+// Truncating is the point, not an accident: "Bath attendants and front desk"
+// ran straight into its block count with no space between them, because
+// padEnd on an over-long string returns it unchanged.
+const pad = (s: string, n: number): string =>
+  s.length > n - 1 ? `${s.slice(0, n - 2)}… ` : s.padEnd(n);
 const rpad = (s: string, n: number): string => s.padStart(n);
 const pct = (v: number): string => `${(v * 100).toFixed(1)}%`;
 
@@ -149,7 +153,7 @@ function renderTurn(result: TickResult, business: Business): void {
         : '';
     const pending = cost.pendingBlocks > 0 ? `${DIM} (+${cost.pendingBlocks} arriving)${RESET}` : '';
     console.log(
-      `  ${DIM}${pad(cost.label, 20)}${RESET}${cost.currentBlocks} blocks${pending}${gap}` +
+      `  ${DIM}${pad(cost.label, 22)}${RESET}${cost.currentBlocks} blocks${pending}${gap}` +
         `  ${DIM}${toCompact(cost.blockCostPerQuarter)}/block${RESET}`,
     );
   }
@@ -220,7 +224,103 @@ interface ParseResult {
   message?: string;
 }
 
-function parseCommand(line: string, business: Business): ParseResult {
+/**
+ * "What do I do now?"
+ *
+ * Asked three times in one live session — `what do i do now?`, `how can we cut
+ * costs?`, `hwo can we cut costs or increase revnues?` — and answered three
+ * times with `Unknown command "how". Try \`help\``. The whole premise of the
+ * product is that you talk to it, and then the half where the decisions
+ * actually happen is a strict verb parser. §11.4: "natural language is the
+ * on-ramp, not the only road" — there was no on-ramp here at all.
+ *
+ * This is not narration and it does not call a model. Every line is read off
+ * the last tick: the levers that exist, ordered by what this quarter's numbers
+ * say is binding. A player who asks what to do is owed the state of their own
+ * business, not a list of verbs they have already seen.
+ */
+function advise(business: Business, result: TickResult): string[] {
+  const entry = result.statements.byBusiness[business.id];
+  if (!entry) return ['No statements yet — run a quarter first.'];
+  const is = entry.incomeStatement;
+  const m = entry.derivedMetrics;
+  const stream = m.streamMetrics[0];
+  const out: string[] = [];
+
+  const runway = m.cashRunwayQuarters;
+  if (Number.isFinite(runway) && runway < 2) {
+    out.push(
+      `Cash is the binding problem: ${runway.toFixed(1)} quarters of runway. ` +
+        `\`draw\` on the revolver or \`inject\` from the household buys time; neither fixes it.`,
+    );
+  }
+
+  // Utilisation says which half of the P&L is worth attacking. A business at a
+  // third of capacity does not have a cost problem it can cut its way out of.
+  if (stream?.capacityVolume !== undefined && stream.capacityVolume > 0) {
+    const used = stream.realizedVolume / stream.capacityVolume;
+    if (stream.lostDemand > 0.5) {
+      out.push(
+        `You are turning away ${Math.round(stream.lostDemand).toLocaleString()} of demand. ` +
+          `\`expand\` or \`hire\` converts that into revenue; \`price\` up captures it without spending.`,
+      );
+    } else if (used < 0.6) {
+      out.push(
+        `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
+          `\`marketing\` and \`price\` move volume; cutting staff you have already paid for does not.`,
+      );
+    }
+  }
+
+  const contribution = is.grossProfit;
+  if (is.revenue > 0n && contribution <= 0n) {
+    out.push(
+      `Every sale loses money before a single fixed cost: variable costs exceed revenue. ` +
+        `Volume makes this worse, not better — \`price\` is the only lever that helps.`,
+    );
+  }
+
+  const fixed = business.costs.fixedPeriod.reduce<Money>((a, c) => a + c.amountPerQuarter, 0n);
+  const blocks = business.costs.stepFixed.reduce<Money>(
+    (a, c) => a + c.blockCostPerQuarter * BigInt(c.currentBlocks),
+    0n,
+  );
+  if (is.ebitda < 0n && is.revenue > 0n) {
+    out.push(
+      `EBITDA is ${toCompact(is.ebitda)} on ${toCompact(is.revenue)} of revenue. ` +
+        `Fixed costs are ${toCompact(fixed)} a quarter and staffing is ${toCompact(blocks)}; ` +
+        `\`lines\` shows what \`fire\` can reach, and only the second of those is reachable.`,
+    );
+  }
+
+  // Interest alone, which is the floor on what debt costs every quarter and is
+  // the number that makes "borrow more" stop being a plan.
+  if (is.interestExpense > 0n && is.ebitda < is.interestExpense) {
+    out.push(
+      `Interest alone is ${toCompact(is.interestExpense)} a quarter against ${toCompact(is.ebitda)} ` +
+        `of EBITDA. Borrowing more raises that number rather than solving it.`,
+    );
+  }
+
+  if (out.length === 0) {
+    out.push(
+      `Nothing is obviously binding this quarter. \`price\`, \`marketing\`, \`hire\` and ` +
+        `\`expand\` are the levers; \`skip 4\` runs a year if you want to see the trend first.`,
+    );
+  }
+  return out;
+}
+
+/**
+ * Input that is a question rather than a command.
+ *
+ * Kept broad on purpose. The cost of treating a mistyped verb as a question is
+ * one paragraph of genuinely relevant state; the cost of the reverse is what
+ * this session did three times in a row.
+ */
+const LOOKS_LIKE_A_QUESTION = /\?|^\s*(what|how|why|which|who|when|where|can|could|should|do|does|is|are|tell|help me|i )/i;
+
+function parseCommand(line: string, business: Business, result: TickResult): ParseResult {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
   const streamId = business.streams[0]?.id ?? 's1';
   const none: ParseResult = { actions: [] };
@@ -353,7 +453,14 @@ function parseCommand(line: string, business: Business): ParseResult {
     }
 
     default:
-      return fail(`Unknown command "${verb}". Try \`help\`.`);
+      if (LOOKS_LIKE_A_QUESTION.test(line)) {
+        for (const line of advise(business, result)) {
+          console.log(`  ${DIM}${line}${RESET}`);
+        }
+        console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
+        return none;
+      }
+      return fail(`Unknown command "${verb}". Try \`help\`, or ask what to do in plain English.`);
   }
 }
 
@@ -436,7 +543,7 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business);
+        const parsed = parseCommand(line, business, last);
         if (parsed.message) console.log(parsed.message);
         if (parsed.quit) {
           quit = true;
