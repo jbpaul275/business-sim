@@ -92,14 +92,29 @@ export function injectOmissionGuardLines(
     accruable: false,
   });
 
-  // Maintenance has exactly one mechanism: the asset field is the SOURCE of the
-  // rate, and this is the only place it becomes a cost. Expensing the asset
-  // field separately as well would double-count maintenance in the P&L.
+  /**
+   * Maintenance has exactly one mechanism — and for years it had two. The
+   * asset-based reserve below AND a revenue-based "Repairs & maintenance" line
+   * were both injected for any business with a location and assets, which is
+   * nearly every business: a vending operator was paying a $4.3k/quarter
+   * reserve on 40 machines and 2% of revenue on top of it, two names for the
+   * upkeep of the same equipment. The comment on this block claimed one
+   * mechanism the whole time.
+   *
+   * The rule now: assets are the preferred source, because the rate is per
+   * asset class and scales with what the player actually owns rather than
+   * with what they happen to sell. The revenue-based line exists only as the
+   * fallback for a business with premises but no owned assets to derive a
+   * charge from. Never both.
+   *
+   * "Reserve" is a label, not fund accounting — the charge is expensed as
+   * cash every quarter and no reserve balance exists anywhere in the model.
+   */
   const maintenance = sum(
     input.assets.map((a) => mulRate(a.grossCost, a.maintenancePctOfGrossPerYear / 4)),
   );
   if (maintenance > 0n) {
-    addFixed('og_maintenance', 'Maintenance reserve', maintenance, 'G&A');
+    addFixed('og_maintenance', 'Repairs & maintenance (of owned assets)', maintenance, 'G&A');
   }
 
   addFixed(
@@ -119,7 +134,11 @@ export function injectOmissionGuardLines(
       { isPrepaidExpense: true },
     );
     addFixed('og_utilities', 'Utilities', t.utilitiesPerQuarter, 'OCCUPANCY');
-    addVariable('og_repairs', 'Repairs & maintenance', t.repairsPctOfRevenue, 'OCCUPANCY');
+    // The fallback half of the one-mechanism rule above: a revenue-based
+    // repairs charge only where there is no asset base to derive one from.
+    if (maintenance === 0n) {
+      addVariable('og_repairs', 'Repairs & maintenance', t.repairsPctOfRevenue, 'OCCUPANCY');
+    }
   }
 
   addFixed(
