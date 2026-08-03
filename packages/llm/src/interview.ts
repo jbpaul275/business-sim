@@ -2,6 +2,8 @@ import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import {
+  CancelledError,
+  isCancellation,
   EMPTY_USAGE,
   TransientError,
   isTransient,
@@ -202,6 +204,34 @@ export class ConceptInterview {
     return draft;
   }
 
+  /**
+   * Take back the last exchange.
+   *
+   * Someone pasted half a sentence from somewhere else — "re Blend it out and
+   * a" — and watched the model spend fifty-three seconds producing "One or two
+   * sentences that stay onme's mind." The conversation was then carrying a
+   * question nobody asked and an answer to it, and every later turn was
+   * reasoning against both.
+   *
+   * Dropping the pair is the whole fix. The transcript is the conversation, so
+   * removing the last two entries makes it as if the message was never sent —
+   * which is exactly what the player means by "I didn't mean to send that".
+   */
+  undo(): boolean {
+    if (this.transcript.length === 0) return false;
+    if (this.transcript[this.transcript.length - 1]?.role === 'assistant') {
+      this.transcript.pop();
+    }
+    if (this.transcript[this.transcript.length - 1]?.role === 'user') {
+      this.transcript.pop();
+      // The turn is un-taken as well, or a player who fixes three typos runs
+      // out of interview for having corrected himself.
+      this.turnsTaken = Math.max(0, this.turnsTaken - 1);
+      return true;
+    }
+    return false;
+  }
+
   /** Feed the player's latest message and get the model's next move. */
   async send(playerMessage: string): Promise<InterviewState> {
     // Same invariant on the way in. An empty player line would be rejected by
@@ -243,6 +273,10 @@ export class ConceptInterview {
       // retry of the same message sends it twice, and the model answers a
       // conversation that did not happen.
       this.transcript.pop();
+      // Cancellation unwinds through the same path a transport failure does,
+      // which is what makes it safe: the player's message is already back out
+      // of the transcript by the time anyone sees the error.
+      if (isCancellation(error)) throw new CancelledError();
       throw isTransient(error) ? new TransientError(error) : error;
     }
     this.lastTurn = {

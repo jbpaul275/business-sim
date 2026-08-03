@@ -112,6 +112,11 @@ export interface TurnResult {
 }
 
 export interface ConceptTransport {
+  /**
+   * Stop the call in flight, if there is one. Optional because a scripted
+   * transport has nothing to stop.
+   */
+  cancel?(): void;
   /** One conversational turn: a question, or a signal that it can now draft. */
   turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult>;
   /**
@@ -262,6 +267,26 @@ function isGrammarTooLarge(error: unknown): boolean {
  * factory, and the player was told to start over, which is the one response
  * that is definitely wrong.
  */
+/**
+ * The player pressed Ctrl-C while a call was in flight.
+ *
+ * A separate class from every other failure because it needs the opposite
+ * handling: nothing retries it, nothing apologises for it, and the transcript
+ * rolls back exactly as it does for a transport error. Someone who paste-fumbled
+ * a line and watched a model spend fifty-three seconds on it should get their
+ * prompt back, not three attempts at the same mistake.
+ */
+export class CancelledError extends Error {
+  constructor() {
+    super('Cancelled.');
+    this.name = 'CancelledError';
+  }
+}
+
+export const isCancellation = (error: unknown): boolean =>
+  error instanceof CancelledError ||
+  (error instanceof Error && (error.name === 'AbortError' || error.name === 'APIUserAbortError'));
+
 export class TransientError extends Error {
   constructor(
     override readonly cause: unknown,
@@ -283,6 +308,9 @@ export class TransientError extends Error {
 
 /** Overloaded, rate-limited, or a server fault — none of them the player's doing. */
 export function isTransient(error: unknown): boolean {
+  // A cancellation is not a capacity signal and must never be retried: the
+  // whole point of stopping is that the call does not happen again.
+  if (isCancellation(error)) return false;
   if (error instanceof Anthropic.APIConnectionError) return true;
   if (error instanceof Anthropic.APIError) {
     const status = error.status ?? 0;
@@ -320,6 +348,20 @@ export class AnthropicConceptTransport implements ConceptTransport {
   usage: UsageTotal = EMPTY_USAGE;
   /** How often a draft had to be retried with more room. Surfaced, not hidden. */
   budgetRetries = 0;
+  private inFlight: AbortController | undefined;
+
+  /**
+   * Stop whatever is running. Safe to call when nothing is.
+   *
+   * The SDK rejects the in-flight request, which unwinds through the same catch
+   * that handles a transport failure — and `send` already rolls the player's
+   * message back out of the transcript there, so a cancelled turn leaves the
+   * conversation exactly as it was before they typed.
+   */
+  cancel(): void {
+    this.inFlight?.abort();
+    this.inFlight = undefined;
+  }
 
   constructor(options: AnthropicTransportOptions = {}) {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
@@ -391,6 +433,12 @@ export class AnthropicConceptTransport implements ConceptTransport {
      * changes. Nothing is rendered incrementally: the turn is JSON and half a
      * JSON object on screen is worse than a spinner.
      */
+    /**
+     * One controller per call, so Ctrl-C reaches the request that is actually
+     * running. Kept on the transport because the thing the player interrupts is
+     * "the model", not a promise they have a reference to.
+     */
+    this.inFlight = new AbortController();
     const response = await this.client.messages.stream({
       model,
       max_tokens: maxTokens,
@@ -404,7 +452,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
         effort,
       },
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    }).finalMessage();
+    }, { signal: this.inFlight.signal }).finalMessage();
 
     // Recorded before anything can throw. A call that ran out of budget still
     // generated — and still billed — every token it produced, and a meter that

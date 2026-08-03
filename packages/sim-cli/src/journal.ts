@@ -60,6 +60,9 @@ export type JournalEvent =
       monthZero: string;
     }
   | { kind: 'abandoned'; reason: string }
+  /** The player stopped a call mid-flight. Worth counting: a rate that climbs
+   *  means turns are taking long enough that people give up on them. */
+  | { kind: 'cancelled' }
   /**
    * The one number that makes a run's market reproducible. Without it a
    * journal can replay every decision and still disagree about what the index

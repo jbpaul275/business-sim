@@ -4,6 +4,7 @@ import {
   BudgetExhaustedError,
   ConceptRefusedError,
   TransientError,
+  isCancellation,
   MalformedDraftError,
   UnusableResponseError,
   draftIssues,
@@ -125,12 +126,45 @@ export async function runConceptInterview(
     ),
   );
   console.log(
-    `${DIM}  \`why\` after any answer shows the reasoning behind it. Ctrl-C to abandon setup.${RESET}\n`,
+    `${DIM}  \`why\` shows the reasoning · \`undo\` takes back your last message ·` +
+      ` Ctrl-C stops a reply${RESET}\n`,
   );
 
   let spinner = { stop: () => {}, label: (_: string) => {} };
+  const live = transport ?? new AnthropicConceptTransport();
+
+  /**
+   * Ctrl-C while the model is thinking stops the model, not the session.
+   *
+   * Someone pasted a fragment by accident and then had no way to take it back:
+   * the only key that does anything during a call killed the whole setup, so
+   * the choice was fifty-three seconds of a wrong answer or losing ten minutes
+   * of conversation. Neither is a choice anyone should be offered.
+   *
+   * The handler is installed only around the call. Outside one, Ctrl-C keeps
+   * its usual meaning — readline owns it, and abandoning setup is still one
+   * keystroke away.
+   */
+  const whileCalling = async <T>(work: () => Promise<T>): Promise<T> => {
+    let stopped = false;
+    const onSigint = (): void => {
+      if (stopped) {
+        // Twice means they mean the session, not the call.
+        process.exit(130);
+      }
+      stopped = true;
+      live.cancel?.();
+    };
+    process.on('SIGINT', onSigint);
+    try {
+      return await work();
+    } finally {
+      process.off('SIGINT', onSigint);
+    }
+  };
+
   const interview = new ConceptInterview({
-    transport: transport ?? new AnthropicConceptTransport(),
+    transport: live,
     onDrafting: () => spinner.label('building the model'),
     // The templates are offered as a convenience, not a menu: the model uses
     // one only when its cost structure genuinely fits, and otherwise emits its
@@ -214,10 +248,28 @@ export async function runConceptInterview(
       continue;
     }
 
+    /**
+     * "I didn't mean to send that."
+     *
+     * A pasted fragment — "re Blend it out and a" — cost fifty-three seconds
+     * and put a question nobody asked into the transcript, with an answer to it
+     * underneath. Every turn after that was reasoning against both. Taking the
+     * pair back out is the whole fix.
+     */
+    if (/^(undo|back|oops|scratch that)\b/i.test(reply)) {
+      console.log(
+        interview.undo()
+          ? `  ${DIM}Taken back. The conversation is where it was before that message.${RESET}`
+          : `  ${DIM}Nothing to take back yet.${RESET}`,
+      );
+      reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
+      continue;
+    }
+
     let state;
-    spinner = waiting('thinking');
+    spinner = waiting(process.stdout.isTTY ? 'thinking · Ctrl-C to stop' : 'thinking');
     try {
-      state = await interview.send(reply);
+      state = await whileCalling(() => interview.send(reply));
     } catch (error) {
       spinner.stop();
       /**
@@ -230,6 +282,21 @@ export async function runConceptInterview(
        * memory and `send` rolls the unanswered message back out of it, so the
        * same reply can simply go again.
        */
+      /**
+       * Ctrl-C during a call stops the call, not the session.
+       *
+       * `send` has already rolled the message back out of the transcript by the
+       * time this runs, so the conversation is exactly as it was — which means
+       * the right thing to do is hand back the prompt and say nothing else.
+       * Retrying a cancellation would be the opposite of what was asked for.
+       */
+      if (isCancellation(error)) {
+        console.log(`  ${DIM}Stopped. Nothing was sent — your last message is not in the conversation.${RESET}`);
+        journal?.write({ kind: 'cancelled' });
+        reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
+        continue;
+      }
+
       if (error instanceof TransientError) {
         transientFailures += 1;
         if (transientFailures <= MAX_TRANSIENT) {
