@@ -58,27 +58,43 @@ transport inside `packages/llm` does not touch that edge.
 
 ## 3. Model mapping
 
-**Decided: `kimi-k3` for all four calls.** The economy comes from `reasoning_effort` rather than from a
-second, cheaper model — see below.
+**Decided: the split.** K2.6 for the conversational volume, K3 where the stakes are — the two caveats that
+blocked K2.6 were resolved when Moonshot's K2.6 parameter docs were supplied (2026-08-03).
 
-| Call | What it does | Anthropic before | Kimi | Effort |
-|---|---|---|---|---|
-| `draft` | One shot, several thousand tokens of schema-constrained JSON, minutes of thinking | `claude-opus-5` | `kimi-k3` | `high` |
-| `adjudicate` | Rules on a player's challenge to an assumption | `claude-opus-5` | `kimi-k3` | `low` |
-| `turn` | Interview reply: ~50 words and a CTA | `claude-opus-5` | `kimi-k3` | `low` |
-| `advise` | Turn-loop advisor, 4k budget | `claude-opus-5` | `kimi-k3` | `low` |
+| Call | What it does | Model | Reasoning |
+|---|---|---|---|
+| `turn` | Interview reply: ~50 words and a CTA | `kimi-k2.6` | `thinking: enabled` |
+| `advise` | Turn-loop advisor, 4k budget | `kimi-k2.6` | `thinking: disabled` |
+| `narrate` | §11.5, one per quarter — the volume leader | `kimi-k2.6` | `thinking: disabled` |
+| `adjudicate` | Rules on a player's challenge | `kimi-k3` | `reasoning_effort: low` |
+| `draft` | Schema-constrained synthesis, the hardest call | `kimi-k3` | `reasoning_effort: high` |
 
-**Why not K2.6 for the turns.** It is three to four times cheaper on output and it is the obvious next
-economy. Two things stop it being the default today. It offers JSON *mode* rather than schema-constrained
-decoding (§4.1), and its thinking toggle is a Kimi-specific parameter passed through the SDK's `extra_body`
-whose exact shape this repo has not verified against live documentation — and guessing a request shape is
-how you ship a transport that silently reasons at the wrong tier on every call. `BIZSIM_TURN_MODEL=kimi-k2.6`
-is one variable away once someone checks it, and the transport already degrades to the prompt-carried schema
-if the model refuses `response_format.json_schema`.
+**The two dialects.** K3 takes `reasoning_effort` (`low | high | max`, default `max` — never omitted) and
+always thinks. K2.6/K2.5 take `thinking: {type: enabled | disabled}` and nothing else: their docs fix
+`temperature`, `top_p`, `n` and both penalties, and **error on any other value** — which is why the
+transport sends no sampling parameter to anyone. The dial is resolved per *model*, not per vendor, because
+Moonshot ships both spellings at once.
 
-**`reasoning_effort` is the dial that matters.** K3 always thinks and its default is `max` — the most
-expensive setting on the most expensive dial. The transport never omits it, and there is a test asserting
-that, because omitting it would have quietly undone the whole migration.
+**The effort collapse on K2.6 is binary and lands on `low`.** Our `low` tier is the answers-a-sentence tier
+(advice, narration); thinking there is latency billed at the output rate, and the money guard catches the
+failure that matters. `medium` and up think — the interview turn's judgement is the product.
+
+**Adjudication deliberately did not move.** This file's own risk register says the ruling is the call most
+likely to regress into sycophancy — "do not cheapen it first" — so it now rides the *draft* model on both
+transports, and the turn default moving cheap cannot drag it down silently.
+
+**The schema fallback moved into `complete()`.** It lived in `draft()` alone, survivable while K3 — the only
+default — enforces schemas. K2.6's documented surface is JSON *mode*; if it refuses
+`response_format.json_schema`, every call now degrades to the prompt-carried schema, and a latch stops the
+session paying a doomed request per call to rediscover the refusal. Zod still validates everything
+downstream: the guarantee weakens from "cannot be malformed" to "cannot pass unnoticed", never further.
+
+**`BIZSIM_MODEL` still means everything.** The cheap-turn split is a default for the undecided; someone who
+names a model gets it for every call.
+
+Still unverified live, same as everything here: whether K2.6 honours `json_schema` or refuses it is exactly
+what the latch exists to absorb, and the narration fabrication counter will say whether no-thinking K2.6 is
+good enough — that is now a measured question, not an argued one.
 
 ### Rates
 

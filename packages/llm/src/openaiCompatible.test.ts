@@ -162,16 +162,70 @@ describe('choosing a provider', () => {
 describe('the Kimi transport', () => {
   const transport = (): KimiConceptTransport => new KimiConceptTransport({ apiKey: 'sk-test' });
 
-  it('never omits reasoning_effort, because the API default is the dearest tier', () => {
-    // K3 defaults `reasoning_effort` to `max`. Leaving it unset would put the
-    // most expensive setting on the most expensive dial on every call made by
-    // a migration whose entire purpose was cost.
+  it('speaks each Kimi generation in its own reasoning dialect', async () => {
+    /**
+     * Moonshot ships both spellings at once. K3 takes `reasoning_effort` and
+     * defaults it to `max` — omitting it puts the dearest setting on the
+     * dearest dial. K2.6 takes `thinking: {type}` and, per its docs, errors on
+     * `reasoning_effort`'s companions (temperature, top_p, the penalties), so
+     * a per-vendor flag was the wrong shape: it has to be per model.
+     */
     const t = transport();
+    const ADVICE = JSON.stringify({ reply: 'Hold the price.', suggestedCommands: [] });
+    const seen = stub(t, (req, call) =>
+      req['model'] === KIMI_DEFAULT_MODEL
+        ? textChunks(JSON.stringify(MINIMAL_DRAFT))
+        : textChunks(call === 2 ? ADVICE : TURN),
+    );
+    await t.turn('system', [{ role: 'user', content: 'A telescope rental.' }]);
+    // The turn rides the cheap model, thinking on: judgement is the product.
+    expect(seen[0]!['model']).toBe('kimi-k2.6');
+    expect(seen[0]!['thinking']).toEqual({ type: 'enabled' });
+    expect(seen[0]!['reasoning_effort']).toBeUndefined();
+    // And no sampling parameter anywhere — K2.6 fixes them and 400s otherwise.
+    expect(seen[0]!['temperature']).toBeUndefined();
+    expect(seen[0]!['top_p']).toBeUndefined();
+
+    await t.advise('system', [{ role: 'user', content: 'should I raise price?' }]);
+    // `low` is the answers-a-sentence tier; thinking there is latency billed
+    // at the output rate, and the money guard catches what matters.
+    expect(seen[1]!['thinking']).toEqual({ type: 'disabled' });
+
+    await t.draft('system', [{ role: 'user', content: 'x' }]);
+    expect(seen[2]!['model']).toBe(KIMI_DEFAULT_MODEL);
+    expect(seen[2]!['reasoning_effort']).toBeDefined();
+    expect(seen[2]!['thinking']).toBeUndefined();
+  });
+
+  it('keeps the adjudication on the draft-grade model', async () => {
+    // The risk register's own words: the ruling is the call most likely to
+    // regress into sycophancy — do not cheapen it first. Moving the turn
+    // default to K2.6 must not drag the ruling down with it silently.
+    const t = transport();
+    const seen = stub(t, () =>
+      textChunks(
+        JSON.stringify({
+          ruling: 'DEFEND',
+          newValue: null,
+          newProvenance: 'UNCHANGED',
+          reasoning: 'A preference is not evidence.',
+          clarifyingQuestion: null,
+          secondOrderEffect: null,
+        }),
+      ),
+    );
+    await t.adjudicate('system', 'the freezer should be cheaper');
+    expect(seen[0]!['model']).toBe(KIMI_DEFAULT_MODEL);
+  });
+
+  it('routes everything to one model when BIZSIM_MODEL names it', async () => {
+    // "Everything on this" means exactly that. The cheap-turn split is a
+    // default for the undecided, not an override of a decision.
+    process.env['BIZSIM_MODEL'] = 'kimi-k2.5';
+    const t = new KimiConceptTransport({ apiKey: 'sk-test' });
     const seen = stub(t, () => textChunks(TURN));
-    return t.turn('system', [{ role: 'user', content: 'A telescope rental.' }]).then(() => {
-      expect(seen[0]!['reasoning_effort']).toBeDefined();
-      expect(seen[0]!['model']).toBe(KIMI_DEFAULT_MODEL);
-    });
+    await t.turn('system', [{ role: 'user', content: 'x' }]);
+    expect(seen[0]!['model']).toBe('kimi-k2.5');
   });
 
   it('names the provider and model it resolved, for the screen to print', () => {
@@ -185,21 +239,23 @@ describe('the Kimi transport', () => {
      * BIZSIM_MODEL → vendor default. A second copy of that ladder would drift,
      * and a screen naming the wrong model is worse than one naming none.
      */
-    expect(transport().describe()).toBe('kimi · kimi-k3');
-    // And it says so when the two calls are routed differently, which is the
-    // configuration the whole cost argument is heading toward.
-    const split = new OpenAICompatibleTransport({
-      apiKey: 'x',
-      turnModel: 'kimi-k2.6',
-      draftModel: 'kimi-k3',
-    });
-    expect(split.describe()).toBe('kimi · kimi-k2.6 (turns), kimi-k3 (draft)');
+    // The split IS the default now — the header has to say so, because a
+    // session bills at two prices and the player is entitled to know which.
+    expect(transport().describe()).toBe('kimi · kimi-k2.6 (turns), kimi-k3 (draft)');
+    const single = new OpenAICompatibleTransport({ apiKey: 'x', model: 'kimi-k3' });
+    expect(single.describe()).toBe('kimi · kimi-k3');
   });
 
   it('collapses five effort tiers onto K3s three, downward', async () => {
     // `medium` is the interview turn's setting and it goes to `low`, because
     // K3's floor is not Anthropic's floor: the model reasons at every tier.
-    const t = new KimiConceptTransport({ apiKey: 'sk-test', turnEffort: 'medium' });
+    // Pinned to K3 here — the collapse under test is K3's, not the default
+    // routing's.
+    const t = new KimiConceptTransport({
+      apiKey: 'sk-test',
+      turnEffort: 'medium',
+      turnModel: 'kimi-k3',
+    });
     const seen = stub(t, () => textChunks(TURN));
     await t.turn('system', [{ role: 'user', content: 'x' }]);
     expect(seen[0]!['reasoning_effort']).toBe('low');
@@ -359,7 +415,43 @@ describe('the Kimi transport', () => {
     // The schema still went, in the only place left to put it.
     expect(seen[1]!['messages']).toBeDefined();
     const system = (seen[1]!['messages'] as { content: string }[])[0]!.content;
-    expect(system).toContain('Draft schema');
+    expect(system).toContain('Response schema');
+  });
+
+  it('lets every call survive a schema refusal, and stops paying for it', async () => {
+    /**
+     * The fallback lived in `draft()` alone, which was survivable while K3 —
+     * the only default — enforces schemas. With turns on K2.6, whose
+     * documented surface is JSON *mode*, a refusal would have killed the
+     * session at the first conversational call. And the latch matters as much
+     * as the fallback: without it, every one of a session's twenty-plus calls
+     * would pay a doomed request before its real one.
+     */
+    const t = transport();
+    let refusals = 0;
+    const seen = stub(t, (req) => {
+      if (req['response_format'] !== undefined) {
+        refusals += 1;
+        return new OpenAI.BadRequestError(
+          400,
+          undefined,
+          'response_format.json_schema is not supported by this model',
+          new Headers(),
+        );
+      }
+      return textChunks(TURN);
+    });
+
+    const first = await t.turn('system', [{ role: 'user', content: 'x' }]);
+    expect(first.turn.cta).toBe('How many scopes?');
+    await t.turn('system', [{ role: 'user', content: 'y' }]);
+
+    // One refusal total: the second turn went straight to the prompt-carried
+    // schema instead of re-discovering the rejection at full price.
+    expect(refusals).toBe(1);
+    expect(seen).toHaveLength(3);
+    const system = (seen[2]!['messages'] as { content: string }[])[0]!.content;
+    expect(system).toContain('Response schema');
   });
 
   it('does not treat every 400 as a schema problem', async () => {

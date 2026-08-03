@@ -73,6 +73,14 @@ export interface VendorSpec {
    */
   defaultModel: string;
   /**
+   * Default for the conversational calls — turn, advise, narrate — when the
+   * caller named no model at all. The split is where the economy lives: those
+   * are twenty-plus calls a session against the draft's one or two. Applies
+   * only when nothing explicit was given; a player who sets BIZSIM_MODEL has
+   * said "everything on this" and is not overridden.
+   */
+  defaultTurnModel?: string;
+  /**
    * Whether this vendor takes `reasoning_effort`.
    *
    * Sending it where it is not understood is a 400, and omitting it where it is
@@ -95,6 +103,10 @@ export const VENDORS: Record<string, VendorSpec> = {
     baseURL: 'https://api.moonshot.ai/v1',
     apiKeyVar: 'MOONSHOT_API_KEY',
     defaultModel: 'kimi-k3',
+    // K2.6 is 3-4x cheaper on output than K3 and the turns are the call
+    // volume. The draft and the adjudication stay on K3 — see the routing in
+    // the constructor and docs/plan/05 §3.
+    defaultTurnModel: 'kimi-k2.6',
     reasoningEffort: true,
   },
   deepseek: {
@@ -156,6 +168,40 @@ const REASONING_EFFORT: Record<Effort, 'low' | 'high' | 'max'> = {
   xhigh: 'high',
   max: 'max',
 };
+
+/**
+ * The reasoning dial, spelled the way the model on this request spells it.
+ *
+ * Per model rather than per vendor, because Moonshot ships both spellings at
+ * once: K3 takes `reasoning_effort` (low | high | max) and always thinks;
+ * K2.6/K2.5 take `thinking: {type: enabled | disabled}` and nothing else —
+ * their docs also fix temperature, top_p and the penalties, and error on any
+ * other value, which is why this transport sends none of them.
+ *
+ * The effort collapse for K2.x is binary and lands on `low`: our `low` tier is
+ * the answers-a-sentence tier (advice, narration), where the money guard
+ * catches the failure that matters and thinking would just be latency billed at
+ * the output rate. `medium` and up think — the interview turn's judgement is
+ * the product.
+ */
+function reasoningParams(
+  model: string,
+  effort: Effort,
+  spec: VendorSpec,
+): { params: Record<string, unknown>; label: string } {
+  if (/^kimi-k2\./.test(model)) {
+    const enabled = effort !== 'low';
+    return {
+      params: { thinking: { type: enabled ? 'enabled' : 'disabled' } },
+      label: enabled ? 'thinking' : 'no-thinking',
+    };
+  }
+  if (spec.reasoningEffort) {
+    const tier = REASONING_EFFORT[effort];
+    return { params: { reasoning_effort: tier }, label: tier };
+  }
+  return { params: {}, label: 'n/a' };
+}
 
 export interface OpenAICompatibleOptions {
   /** Which row of `VENDORS` to use. Defaults to Kimi. */
@@ -252,14 +298,22 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       maxRetries,
     });
 
-    const model = options.model ?? process.env['BIZSIM_MODEL'] ?? spec.defaultModel;
+    const explicit = options.model ?? process.env['BIZSIM_MODEL'];
+    const model = explicit ?? spec.defaultModel;
     if (!model) {
       throw new Error(
         `No model set for vendor "${this.vendor}", and it has no default. ` +
           `Set BIZSIM_MODEL — a default here would be a guess at a catalogue that changes monthly.`,
       );
     }
-    this.turnModel = options.turnModel ?? process.env['BIZSIM_TURN_MODEL'] ?? model;
+    // `defaultTurnModel` applies only when nothing was named at all: someone
+    // who set BIZSIM_MODEL said "everything on this" and gets exactly that.
+    this.turnModel =
+      options.turnModel ??
+      process.env['BIZSIM_TURN_MODEL'] ??
+      explicit ??
+      spec.defaultTurnModel ??
+      model;
     this.draftModel = options.draftModel ?? process.env['BIZSIM_DRAFT_MODEL'] ?? model;
     this.turnMaxTokens = options.turnMaxTokens ?? budget('BIZSIM_TURN_MAX_TOKENS', 8_000);
     this.draftMaxTokens =
@@ -277,7 +331,54 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       : `${this.vendor} · ${this.turnModel} (turns), ${this.draftModel} (draft)`;
   }
 
+  /**
+   * True once a model on this transport has refused `response_format.json_schema`.
+   *
+   * The fallback used to live in `draft()` alone, which was survivable while K3
+   * — the only default — enforces schemas. With turns on K2.6, whose documented
+   * surface is JSON *mode*, a refusal would have killed every conversational
+   * call at the first turn. Latched so the second call goes straight to the
+   * prompt-carried schema instead of paying a doomed request each time.
+   */
+  private schemaRefused = false;
+
   private async complete(
+    kind: CallKind,
+    attempt: number,
+    system: string,
+    messages: readonly InterviewMessage[],
+    schema: Record<string, unknown> | undefined,
+    effort: Effort,
+    model: string,
+    maxTokens: number,
+  ): Promise<{ text: string; reasoning?: string; usage: TurnUsage }> {
+    if (schema && this.schemaRefused) {
+      return this.attempt(kind, attempt, withSchemaInPrompt(system, schema), messages, undefined, effort, model, maxTokens);
+    }
+    try {
+      return await this.attempt(kind, attempt, system, messages, schema, effort, model, maxTokens);
+    } catch (error) {
+      if (!schema || !isSchemaUnsupported(error)) throw error;
+      /**
+       * Degrading weakens the guarantee from "cannot be malformed" to "cannot
+       * pass unnoticed": the schema goes into the prompt, and every parser
+       * downstream still runs the same Zod definitions.
+       */
+      this.schemaRefused = true;
+      return this.attempt(
+        kind,
+        attempt + 1,
+        withSchemaInPrompt(system, schema),
+        messages,
+        undefined,
+        effort,
+        model,
+        maxTokens,
+      );
+    }
+  }
+
+  private async attempt(
     kind: CallKind,
     attempt: number,
     system: string,
@@ -321,7 +422,9 @@ export class OpenAICompatibleTransport implements ConceptTransport {
         attempt,
         provider: this.vendor,
         model,
-        effort: this.spec.reasoningEffort ? REASONING_EFFORT[effort] : 'n/a',
+        // The dial as this model spells it — `thinking`/`no-thinking` on K2.x,
+        // the tier on K3 — so the journal records what was actually asked for.
+        effort: reasoningParams(model, effort, this.spec).label,
         ms: Date.now() - startedAt,
         usage,
         ...(failure ? { failure } : {}),
@@ -349,12 +452,14 @@ export class OpenAICompatibleTransport implements ConceptTransport {
         {
           model,
           max_tokens: maxTokens,
-          // Omitted entirely where the vendor does not understand it: an
-          // unrecognised parameter is a 400 on some of these and silently
-          // ignored on others, and neither is a thing to find out live.
-          ...(this.spec.reasoningEffort
-            ? { reasoning_effort: REASONING_EFFORT[effort] }
-            : {}),
+          // The reasoning dial as THIS model spells it — `reasoning_effort` on
+          // K3, `thinking: {type}` on K2.x, nothing on vendors that take
+          // neither. Sending the wrong spelling is a 400 on some models and
+          // silently the dearest default on others; neither is a thing to
+          // discover live. K2.x also fixes temperature, top_p and the
+          // penalties and errors on any other value, which is why no sampling
+          // parameter appears anywhere in this request.
+          ...reasoningParams(model, effort, this.spec).params,
           messages: [
             // A system role rather than a top-level `system` field. Moonshot
             // caches on the request prefix automatically, and the ~5,100-token
@@ -507,6 +612,11 @@ export class OpenAICompatibleTransport implements ConceptTransport {
    * that could accidentally supply the thread.
    */
   async adjudicate(system: string, input: string): Promise<Adjudication> {
+    // On the DRAFT model, deliberately. The turn model's default moved to the
+    // cheap tier, and the plan's own risk register says the ruling is the call
+    // most likely to regress into sycophancy — "do not cheapen it first." A
+    // player who wins an argument they should have lost takes a wrong number
+    // to a lender; a slow ruling is just slow.
     const attempt = await this.complete(
       'adjudicate',
       1,
@@ -514,7 +624,7 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       [{ role: 'user', content: input }],
       ADJUDICATION_SCHEMA,
       this.turnEffort,
-      this.turnModel,
+      this.draftModel,
       this.turnMaxTokens,
     );
     return zAdjudication.parse(JSON.parse(stripFence(attempt.text)));
@@ -579,30 +689,9 @@ export class OpenAICompatibleTransport implements ConceptTransport {
           )
         ).text;
       } else {
-        /**
-         * The schema was refused, so ask for it in the prompt instead.
-         *
-         * The Anthropic transport has the same shape for the same reason — its
-         * trigger is "compiled grammar is too large" — but here it covers a
-         * wider case: a Kimi model that offers JSON *mode* and not schema
-         * enforcement rejects `response_format.json_schema` outright. Degrading
-         * keeps the feature working, and weakens the guarantee from "cannot be
-         * malformed" to "cannot pass unnoticed": the schema is still in the
-         * prompt, and `assertDraftShape` and `draftIssues` still run.
-         */
-        if (!isSchemaUnsupported(error)) throw error;
-        text = (
-          await this.complete(
-            'draft',
-            2,
-            `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
-            asked,
-            undefined,
-            this.draftEffort,
-            this.draftModel,
-            this.draftMaxTokens,
-          )
-        ).text;
+        // Schema refusal is handled inside `complete()` now, for every call
+        // kind at once — turns on K2.6 need it as much as the draft ever did.
+        throw error;
       }
     }
 
@@ -635,6 +724,11 @@ export class KimiConceptTransport extends OpenAICompatibleTransport {
   constructor(options: Omit<OpenAICompatibleOptions, 'vendor'> = {}) {
     super({ ...options, vendor: 'kimi' });
   }
+}
+
+/** The degrade path: the same schema, carried as instruction rather than grammar. */
+function withSchemaInPrompt(system: string, schema: Record<string, unknown>): string {
+  return `${system}\n\n## Response schema\n\nAnswer with a single JSON object matching exactly:\n${JSON.stringify(schema)}`;
 }
 
 /** A 400 that means "this model will not take a schema", not "your schema is wrong". */

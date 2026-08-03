@@ -611,6 +611,9 @@ export class AnthropicConceptTransport implements ConceptTransport {
    * supply it, so the transport is where the isolation is enforced.
    */
   async adjudicate(system: string, input: string): Promise<Adjudication> {
+    // On the draft model, matching the OpenAI-compatible transport: the ruling
+    // is the call the risk register says not to cheapen, and "which model
+    // adjudicates" should not change meaning across providers.
     const attempt = await this.complete(
       'adjudicate',
       1,
@@ -618,7 +621,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
       [{ role: 'user', content: input }],
       ADJUDICATION_SCHEMA,
       this.turnEffort,
-      this.turnModel,
+      this.draftModel,
       this.turnMaxTokens,
     );
     return zAdjudication.parse(JSON.parse(attempt.text));
