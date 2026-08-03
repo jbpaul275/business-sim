@@ -142,6 +142,17 @@ export interface StreamMetrics {
   demandVolume: number;
   realizedVolume: number;
   lostDemand: number;
+  /**
+   * The binding ceiling on volume this period — the lower of physical capacity
+   * and staffed capacity — or undefined when nothing caps the stream.
+   *
+   * Without this, "demand 31,197 · served 31,197" is the only thing the player
+   * ever sees, and it says nothing: served equals demand by construction until
+   * the day it does not. The useful number is the headroom, which is the
+   * difference between a business that is about to hit a wall and one that has
+   * years of room.
+   */
+  capacityVolume?: number;
   revenue: Money;
   contributionMarginPct: number;
   /** UTILIZATION */

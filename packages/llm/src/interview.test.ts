@@ -35,6 +35,7 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
       ],
       seasonality: [0.55, 1.15, 1.55, 0.75],
       marketingSpendPerQuarter: 6_000,
+      expectedAnnualRevenue: 900_000,
     },
   ],
   costLines: [

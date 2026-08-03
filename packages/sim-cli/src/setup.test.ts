@@ -49,6 +49,7 @@ const draft: ConceptDraft = {
       ],
       seasonality: [0.9, 1.0, 1.2, 0.9],
       marketingSpendPerQuarter: 4_000,
+      expectedAnnualRevenue: 480_000,
     },
   ],
   costLines: [
@@ -252,6 +253,7 @@ describe('the concept path reaches the same gate as the picker', () => {
           ],
           seasonality: [1.0, 1.05, 0.9, 1.05],
           marketingSpendPerQuarter: 18_000,
+          expectedAnnualRevenue: 2_600_000,
         },
       ],
       costLines: [

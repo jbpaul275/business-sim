@@ -23,6 +23,20 @@ const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';
 const RED = '\x1b[31m';
 const YELLOW = '\x1b[33m';
+
+/**
+ * What a unit of volume is called, per archetype (§3.8 gives each exactly one
+ * binding volume unit). "31,197" alone is a number; "31,197 transactions" is a
+ * fact about a restaurant.
+ */
+const VOLUME_UNIT: Record<string, string> = {
+  TRAFFIC: 'transactions',
+  UTILIZATION: 'billable hours',
+  UNITS_CAC: 'orders',
+  SUBSCRIPTION: 'subscribers',
+  OCCUPANCY: 'units occupied',
+  PROJECT_BACKLOG: 'contracts delivered',
+};
 const GREEN = '\x1b[32m';
 const RESET = '\x1b[0m';
 
@@ -80,14 +94,34 @@ function renderTurn(result: TickResult, business: Business): void {
     `${DIM}${row('Peak cash need', toCompact(m.peakCashNeed), '', 'Household', toCompact(result.statements.household.endingCash))}${RESET}`,
   );
 
-  // Demand vs. what was actually served. lostDemand is the single most
-  // actionable output the TRAFFIC archetype produces (§3.1).
+  /**
+   * Volume, and how close it is to the ceiling.
+   *
+   * This used to print "demand 31,197 · served 31,197" every quarter, which is
+   * two numbers saying one thing: served equals demand by construction right up
+   * until the period it does not. The player learns nothing from the equality
+   * and cannot see the wall coming.
+   *
+   * What is actually worth knowing is the headroom — 71% of capacity is a
+   * different business from 98% — so the two numbers collapse to one whenever
+   * they agree, and the ceiling takes the space they were wasting.
+   */
   for (const s of m.streamMetrics) {
-    const lost = s.lostDemand > 0.5 ? `${YELLOW} · turned away ${Math.round(s.lostDemand).toLocaleString()}${RESET}` : '';
-    console.log(
-      `\n  ${DIM}${s.label}${RESET}  demand ${Math.round(s.demandVolume).toLocaleString()}` +
-        ` · served ${Math.round(s.realizedVolume).toLocaleString()}${lost}`,
-    );
+    const volume = `${Math.round(s.realizedVolume).toLocaleString()} ${VOLUME_UNIT[s.archetype] ?? 'units'}`;
+    let detail: string;
+    if (s.lostDemand > 0.5) {
+      detail =
+        `${YELLOW}at capacity · turned away ` +
+        `${Math.round(s.lostDemand).toLocaleString()} of ${Math.round(s.demandVolume).toLocaleString()}${RESET}`;
+    } else if (s.capacityVolume !== undefined && s.capacityVolume > 0) {
+      const used = ratio(fromDisplay(s.realizedVolume), fromDisplay(s.capacityVolume));
+      detail = `${DIM}${pct(used)} of capacity (${Math.round(s.capacityVolume).toLocaleString()})${RESET}`;
+    } else {
+      // Not a hedge: several archetypes genuinely have no ceiling, and saying
+      // so is more honest than implying an unstated one.
+      detail = `${DIM}nothing capping volume${RESET}`;
+    }
+    console.log(`\n  ${DIM}${s.label}${RESET}  ${volume} · ${detail}`);
     if (s.occupancy !== undefined) console.log(`  ${DIM}occupancy ${pct(s.occupancy)}${RESET}`);
     if (s.realizedUtilization !== undefined) {
       console.log(`  ${DIM}utilisation ${pct(s.realizedUtilization)} · bench ${Math.round(s.benchStress ?? 0)}h${RESET}`);

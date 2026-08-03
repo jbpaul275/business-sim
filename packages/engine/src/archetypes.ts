@@ -324,6 +324,11 @@ export function realize(
     demandVolume: demand.demandVolume,
     realizedVolume: realized,
     lostDemand: lost,
+    // Only when something actually binds. An archetype with no ceiling reports
+    // nothing rather than reporting Infinity, because "capacity ∞" and "no
+    // capacity model" are different statements and the player deserves the
+    // second one.
+    ...(Number.isFinite(capacity) ? { capacityVolume: capacity } : {}),
     revenue: 0n,
     contributionMarginPct,
   };

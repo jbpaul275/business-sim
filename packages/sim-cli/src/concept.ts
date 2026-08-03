@@ -12,6 +12,7 @@ import {
 import { listSeedTemplates } from '@bizsim/seeds';
 import { ask, type LineSource } from './input.js';
 import { waiting } from './waiting.js';
+import { revenueRealityIssues } from './plausibility.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -104,6 +105,17 @@ export async function runConceptInterview(
   const MAX_BLANKS = 2;
 
   /**
+   * Repair rounds spent sending a faulty draft back to the model.
+   *
+   * Bounded, because the loop that feeds issues back had no limit at all: a
+   * model that keeps reproducing the same fault would be asked to fix it
+   * forever, burning a call each time, with the player watching a spinner.
+   * Two attempts is enough for a slip and short of an argument.
+   */
+  let repairs = 0;
+  const MAX_REPAIRS = 2;
+
+  /**
    * `why` shows the reasoning behind the last turn.
    *
    * It costs nothing. Thinking is billed whether or not the summary is
@@ -188,14 +200,37 @@ export async function runConceptInterview(
     // A draft can be well-formed and still be incoherent as data. These are
     // structural faults only — nothing here has an opinion about whether the
     // business is a good idea (D-5).
-    const issues = draftIssues(state.draft);
-    if (issues.length > 0) {
+    //
+    // Plus one check the LLM package cannot make, because making it requires
+    // the engine: does the drafted volume actually produce the revenue the
+    // draft says this business does? A model that states $3.5M and builds
+    // $1.4M has contradicted itself, and the costs it wrote are sized for the
+    // first number.
+    const issues = [
+      ...draftIssues(state.draft),
+      ...(repairs < MAX_REPAIRS ? revenueRealityIssues(state.draft) : []),
+    ];
+    if (issues.length > 0 && repairs < MAX_REPAIRS) {
+      repairs += 1;
       console.log(`  ${YELLOW}The draft has problems I need to fix:${RESET}`);
-      for (const issue of issues) console.log(`    - ${issue}`);
+      for (const issue of issues) console.log(`    - ${wrap(issue, 70, '      ').trimStart()}`);
       reply =
         `That draft has structural problems: ${issues.join(' ')} ` +
         `Please correct them and emit the draft again.`;
       continue;
+    }
+    // Out of repair attempts and still faulty. A structural fault cannot be
+    // built at all; a revenue contradiction can, and the player is better off
+    // seeing the numbers and arguing with them than losing the conversation.
+    const structural = draftIssues(state.draft);
+    if (structural.length > 0) {
+      console.log(`\n  ${RED}The model could not produce a buildable draft:${RESET}`);
+      for (const issue of structural) console.log(`    ${RED}- ${issue}${RESET}`);
+      console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
+      return undefined;
+    }
+    for (const issue of revenueRealityIssues(state.draft)) {
+      console.log(`\n  ${YELLOW}⚠ ${wrap(issue, 70, '    ').trimStart()}${RESET}`);
     }
 
     return { mapped: draftToTemplate(state.draft), draft: state.draft };

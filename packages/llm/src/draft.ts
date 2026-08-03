@@ -63,6 +63,24 @@ export const zDraftStream = z.object({
   params: z.array(zDraftParam),
   seasonality: z.array(z.number()),
   marketingSpendPerQuarter: z.number(),
+  /**
+   * What a mature year of this stream should produce, in dollars — the anchor
+   * the parameters were reasoned from, stated separately so it can be checked
+   * against them.
+   *
+   * This exists because a live draft said, in its own open notes, "revenue is
+   * anchored to a national average unit volume near $3.5-3.9M" and then emitted
+   * traffic and capture figures that produce $1.4M. The cost structure was
+   * sized for the store it described; the volume was not. The player saw a
+   * McDonald's losing 30% of revenue every quarter and no way to tell that the
+   * arithmetic, not the business, was wrong.
+   *
+   * It is a weak constraint, exactly as intended: a 256-flavour ice cream shop
+   * may earn many times what Ben & Jerry's does, but a single location cannot
+   * bill a billion dollars, and a model that states one figure and builds
+   * another has made an error rather than a bold claim.
+   */
+  expectedAnnualRevenue: z.number(),
 });
 export type DraftStream = z.infer<typeof zDraftStream>;
 

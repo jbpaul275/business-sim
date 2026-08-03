@@ -150,6 +150,16 @@ The engine reads each archetype's parameters under specific names, listed below.
 
 {{ARCHETYPE_PARAMS}}
 
+### State the revenue, then build it
+
+\`expectedAnnualRevenue\` is what a mature year of this stream takes, in dollars. State it from what you know about the business — a McDonald's franchise does around $3.5M, a single-chair barbershop does around $120,000 — and then choose volume parameters that **actually multiply out to it**.
+
+This is checked. The engine runs your draft forward and compares. It is a wide band, because ramp and seasonality move the number around and nobody is asking you to hit it exactly — but a draft that says $3.5M and builds $1.4M gets handed back to you, and rightly so. That failure is not cosmetic: you will have sized the royalty, the percentage rent and the management payroll for the store you described, so the model shows a healthy business losing thirty percent of revenue a quarter, and the person has no way to see that the arithmetic was wrong rather than the business.
+
+Do the multiplication before you emit it. For TRAFFIC that is \`addressableTrafficPerQuarter × captureRate × avgTicket × 4\`. If it does not reach the figure you stated, one of them is wrong — usually the traffic, because it is the one nobody has a feel for.
+
+If the honest answer is that this business really does earn far less than the comparable you have in mind, say that in \`expectedAnnualRevenue\` and let the numbers stand. The check is for self-contradiction, not for ambition.
+
 ## Templates
 
 If a seed template's cost structure genuinely fits the business, name it and the engine will use it. If none fits, set \`seedTemplateId\` to null and emit the cost lines yourself.
