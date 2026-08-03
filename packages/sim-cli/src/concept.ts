@@ -3,6 +3,7 @@ import {
   ConceptInterview,
   BudgetExhaustedError,
   ConceptRefusedError,
+  TransientError,
   MalformedDraftError,
   UnusableResponseError,
   draftIssues,
@@ -155,6 +156,17 @@ export async function runConceptInterview(
   const MAX_REPAIRS = 2;
 
   /**
+   * Consecutive "the model is busy" failures before asking the player.
+   *
+   * The SDK already backs off and retries inside a single call; this is the
+   * layer above, for when that whole sequence exhausts. Three more attempts is
+   * a minute or so of patience against the alternative of describing the
+   * business again from scratch.
+   */
+  let transientFailures = 0;
+  const MAX_TRANSIENT = 3;
+
+  /**
    * `why` shows the reasoning behind the last turn.
    *
    * It costs nothing. Thinking is billed whether or not the summary is
@@ -200,6 +212,37 @@ export async function runConceptInterview(
       state = await interview.send(reply);
     } catch (error) {
       spinner.stop();
+      /**
+       * A busy model must not cost the conversation.
+       *
+       * A plastics factory died two turns in on `overloaded_error` — a
+       * transient capacity signal that says nothing about the conversation —
+       * and the player was told to start over and describe it again. That is
+       * the one response that is definitely wrong. The transcript is intact in
+       * memory and `send` rolls the unanswered message back out of it, so the
+       * same reply can simply go again.
+       */
+      if (error instanceof TransientError) {
+        transientFailures += 1;
+        if (transientFailures <= MAX_TRANSIENT) {
+          console.log(
+            `${DIM}  the model is busy — trying that again (${transientFailures} of ${MAX_TRANSIENT})${RESET}`,
+          );
+          continue;
+        }
+        console.log(`\n  ${YELLOW}The model has been busy for several attempts running.${RESET}`);
+        console.log(
+          note(
+            'Nothing is lost — press enter to try the same message again, or type something' +
+              ' else to carry on from here.',
+          ),
+        );
+        transientFailures = 0;
+        const again = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
+        if (!again.trim()) continue;
+        reply = again;
+        continue;
+      }
       if (error instanceof ConceptRefusedError) {
         console.log(`\n  ${RED}${error.message}${RESET}`);
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);

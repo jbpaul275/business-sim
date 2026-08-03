@@ -1,7 +1,14 @@
 import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
-import { EMPTY_USAGE, type ConceptTransport, type InterviewMessage, type UsageTotal } from './client.js';
+import {
+  EMPTY_USAGE,
+  TransientError,
+  isTransient,
+  type ConceptTransport,
+  type InterviewMessage,
+  type UsageTotal,
+} from './client.js';
 
 /**
  * The concept interview — §9.1 Phases 1-2, with the LLM as the input method
@@ -187,7 +194,17 @@ export class ConceptInterview {
     // successful one would report half the wait.
     const startedAt = Date.now();
     const callsBefore = this.transport.usage?.calls ?? 0;
-    const { turn, reasoning, usage } = await this.transport.turn(this.system, this.transcript);
+    let turn, reasoning, usage;
+    try {
+      ({ turn, reasoning, usage } = await this.transport.turn(this.system, this.transcript));
+    } catch (error) {
+      // Roll the player's message back out of the transcript before rethrowing.
+      // It was pushed above so the call could see it; leaving it there means a
+      // retry of the same message sends it twice, and the model answers a
+      // conversation that did not happen.
+      this.transcript.pop();
+      throw isTransient(error) ? new TransientError(error) : error;
+    }
     this.lastTurn = {
       ms: Date.now() - startedAt,
       thinkingTokens: usage?.thinkingTokens ?? 0,
@@ -248,7 +265,12 @@ export class ConceptInterview {
     // happens in a session.
     const draftStartedAt = Date.now();
     const before = this.transport.usage?.thinkingTokens ?? 0;
-    const draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
+    let draft;
+    try {
+      draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
+    } catch (error) {
+      throw isTransient(error) ? new TransientError(error) : error;
+    }
     this.lastDraft = {
       ms: Date.now() - draftStartedAt,
       thinkingTokens: (this.transport.usage?.thinkingTokens ?? 0) - before,

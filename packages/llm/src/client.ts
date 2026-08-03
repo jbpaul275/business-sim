@@ -228,6 +228,32 @@ function isGrammarTooLarge(error: unknown): boolean {
  * Typed so the draft path can do the obvious thing instead: try again with
  * more room and one step less reasoning to fill it with.
  */
+/**
+ * The model was momentarily unavailable — overloaded, rate-limited, a 5xx.
+ *
+ * Separated from every other failure because it is the one that says nothing
+ * about the conversation: the same message sent again a moment later usually
+ * works. A live session ended on `overloaded_error` two turns into a plastics
+ * factory, and the player was told to start over, which is the one response
+ * that is definitely wrong.
+ */
+export class TransientError extends Error {
+  constructor(override readonly cause: unknown) {
+    super('The model is busy right now.');
+    this.name = 'TransientError';
+  }
+}
+
+/** Overloaded, rate-limited, or a server fault — none of them the player's doing. */
+export function isTransient(error: unknown): boolean {
+  if (error instanceof Anthropic.APIConnectionError) return true;
+  if (error instanceof Anthropic.APIError) {
+    const status = error.status ?? 0;
+    if (status === 429 || status === 529 || status >= 500) return true;
+  }
+  return /overloaded_error|rate_limit|api_error|\b(429|502|503|529)\b/i.test(String(error));
+}
+
 export class BudgetExhaustedError extends Error {
   constructor(
     readonly budget: number,
@@ -260,9 +286,21 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
     // which is where it should live — never in the repo, never in a committed
     // config file.
+    /**
+     * More retries than the SDK's default of two.
+     *
+     * A live session died on `overloaded_error` two turns in — a transient
+     * capacity signal, retried twice, exhausted, and the whole conversation
+     * went with it. Retrying is free when it works and the alternative is
+     * asking someone to describe their plastics factory again from the top.
+     * The SDK backs off between attempts, so five is seconds of waiting rather
+     * than a hammer.
+     */
+    const retries = Number(process.env['BIZSIM_MAX_RETRIES']);
+    const maxRetries = Number.isFinite(retries) && retries >= 0 ? retries : 5;
     this.client = options.apiKey
-      ? new Anthropic({ apiKey: options.apiKey })
-      : new Anthropic();
+      ? new Anthropic({ apiKey: options.apiKey, maxRetries })
+      : new Anthropic({ maxRetries });
     const model = options.model ?? process.env['BIZSIM_MODEL'] ?? 'claude-opus-5';
     this.turnModel = options.turnModel ?? process.env['BIZSIM_TURN_MODEL'] ?? model;
     this.draftModel = options.draftModel ?? process.env['BIZSIM_DRAFT_MODEL'] ?? model;
