@@ -159,6 +159,65 @@ describe('the concept path reaches the same gate as the picker', () => {
     expect(model.assumptions.length).toBeGreaterThan(20);
   });
 
+  it('says where every number came from, and does not claim a benchmark', () => {
+    // A Detroit ice rink invented over five turns registered BENCHMARK 49,
+    // LLM_ESTIMATE 0. Nothing about it had ever been benchmarked — the engine
+    // simply defaulted every assumption, which is right for a seed template and
+    // a fabrication for a synthetic one. The register asserting published
+    // support for numbers that have none is the failure §10 exists to prevent,
+    // and it is worse than having no register at all.
+    const mapped = draftToTemplate(draft);
+    const model = buildModelFromTemplate({
+      businessName: mapped.businessName,
+      template: mapped.template,
+      archetype: mapped.archetype,
+      scale: mapped.scale,
+      equityInjection: 500_000_00n,
+      provenanceFor: mapped.provenanceFor,
+    });
+
+    const at = (path: string) => model.assumptions.find((a) => a.path === path)?.provenance;
+
+    expect(model.assumptions.filter((a) => a.provenance === 'BENCHMARK')).toEqual([]);
+
+    // The model's own guesses.
+    expect(at('streams.s1.params.captureRate')).toBe('LLM_ESTIMATE');
+    expect(at('costs.llm_0_consumables_breakage.pctOfRevenue')).toBe('LLM_ESTIMATE');
+
+    // What the player actually told it, which outranks an estimate (§10.3).
+    expect(at('streams.s1.params.capacityModel.seats')).toBe('PLAYER_SOURCED');
+    expect(at('streams.s1.params.addressableTrafficPerQuarter')).toBe('PLAYER_SOURCED');
+    expect(at('costs.llm_2_rent.amountPerQuarter')).toBe('PLAYER_SOURCED');
+
+    // Statutory and spec constants stay CATALOG regardless of who assembled
+    // the template: the model is not consulted about FICA or the §3.7 curves.
+    expect(at('costs.payrollLoadPct')).toBe('CATALOG');
+    expect(at('costs.llm_2_rent.annualEscalatorPct')).toBe('CATALOG');
+    expect(at('streams.s1.modifiers.priceElasticity')).toBe('CATALOG');
+    expect(at('streams.s1.params.referencePrice')).toBe('CATALOG');
+
+    // Omission-guard lines arrive from the engine, but on a synthetic template
+    // it computes them off this draft's own overheads — so they are the
+    // model's figures by another route, not comparables.
+    expect(at('costs.og_owner_comp.amountPerQuarter')).toBe('LLM_ESTIMATE');
+    expect(at('costs.og_utilities.amountPerQuarter')).toBe('LLM_ESTIMATE');
+  });
+
+  it('leaves the seed-template default alone when nobody supplies provenance', () => {
+    // The guard on the guard. A hand-authored template's figures really are
+    // benchmarked, so BENCHMARK stays the default and the override has to be
+    // opt-in — otherwise this fix would relabel the seeds as guesses.
+    const mapped = draftToTemplate(draft);
+    const model = buildModelFromTemplate({
+      businessName: mapped.businessName,
+      template: mapped.template,
+      archetype: mapped.archetype,
+      scale: mapped.scale,
+      equityInjection: 500_000_00n,
+    });
+    expect(model.assumptions.some((a) => a.provenance === 'BENCHMARK')).toBe(true);
+  });
+
   it('is deterministic — the same draft maps to the same template', () => {
     expect(draftToTemplate(draft).template.id).toBe(draftToTemplate(draft).template.id);
     expect(draftToTemplate(draft).template.id).toBe('llm_telescope_rental_by_the_hour');
@@ -274,6 +333,113 @@ describe('the concept path reaches the same gate as the picker', () => {
       // Whether they committed depends on the seeded answers; what matters is
       // that setup completed rather than throwing.
       expect(result === undefined || typeof result.committed === 'boolean').toBe(true);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('lets an underfunded business re-finance instead of throwing the concept away', async () => {
+    // The gate used to end the run: five turns of conversation, a drafted
+    // business, and then "run `pnpm sim --new` again" over a number the player
+    // would happily have changed. Nothing upstream of financing depends on it,
+    // so the shortfall is information, not a verdict.
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Press enter.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A place that rents telescopes by the hour on a dark-sky ridge.',
+      '24 scopes, about 1400 square feet.',
+      '', // marketing
+      '0', // no loan
+      '', // revolver
+      '1000', // equity — nowhere near month zero
+      'y', // yes, try different financing
+      '900000', // an SBA loan that actually covers it
+      '', // revolver
+      '', // equity — the suggestion, now zero
+      'y', // commit
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+
+      expect(printed).toContain('Not funded yet');
+      expect(printed).toContain('The concept is intact');
+      // The interview is not re-run, and the concept is not discarded.
+      expect(printed.match(/How many scopes/g)?.length).toBe(1);
+      expect(result?.committed).toBe(true);
+      expect(result?.world.businesses[0]?.cash).toBeGreaterThan(0n);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('warns before the player empties the household into the business', async () => {
+    // A live run put $1,000,000 of a $1,000,000 household into the buildout and
+    // printed "Household keeps $0.00" as though it were a line item.
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Press enter.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '',
+      '0',
+      '',
+      '900000', // everything
+      'y',
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('leaves your household');
+      expect(printed).toContain('bankrupt owner');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('stops asking when the player says the financing is not going to work', async () => {
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Press enter.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '3',
+      '900000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '',
+      '0',
+      '',
+      '1000',
+      'n', // no — leave it
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(await runSetup(input, { transport })).toBeUndefined();
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toContain('Nothing committed');
     } finally {
       log.mockRestore();
     }

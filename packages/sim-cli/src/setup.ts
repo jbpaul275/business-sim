@@ -378,130 +378,199 @@ export async function runSetup(
       : { startMode: capital.mode },
   );
 
-  // Debt is arranged BEFORE equity, because the equity suggestion has to know
-  // about it. Sized off a debt-free probe, the suggestion missed the
-  // origination fees that only exist once a loan does — so accepting every
-  // default landed the player exactly one origination fee short of opening,
-  // and the gate refused a business the setup had just recommended.
-  const loan = await ask(input, `  ${pad('SBA 7(a) loan', 42)}[$0]: `, 0n, parseMoney);
-  const revolver = await ask(
-    input,
-    `  ${pad('Revolver limit', 42)}[$100,000]: `,
-    fromDisplay(100_000),
-    parseMoney,
-  );
-  const debt = [
-    ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
-    ...(revolver > 0n ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }] : []),
-  ];
+  /**
+   * Financing is asked in a loop, and the loop is the point.
+   *
+   * The gate below used to end the run: five turns of conversation, a drafted
+   * business, and then "you are short by $60,000 — run `pnpm sim --new`
+   * again", which throws the whole concept away over a number the player would
+   * happily have changed. Nothing upstream of this depends on the financing, so
+   * there was never a reason to discard it; the shortfall is information, not a
+   * verdict.
+   *
+   * Bounded rather than open, because `ask` returns its default at end of
+   * input: a piped transcript that runs out mid-gate would otherwise re-ask
+   * itself, take the same defaults, and fail identically until the process died.
+   */
+  const MAX_FINANCING_ATTEMPTS = 4;
+  let model: BusinessModel | undefined;
+  let world: WorldState | undefined;
 
-  const probe = buildModelFromTemplate({
-    businessName,
-    template,
-    archetype,
-    scale,
-    marketingSpendPerQuarter: marketing,
-    equityInjection: 0n,
-    debt,
-  });
-  // A revolver is a limit, not cash at close; only term debt funds month zero.
-  const monthZero = computeMonthZeroOutlays(probe).total;
-  // Month zero alone is a knife edge: the first quarter's fixed costs land
-  // before any revenue does, so a business funded to exactly its opening
-  // outlay begins on the crisis ladder. Suggest one quarter of fixed operating
-  // cost on top — the buffer a lender would expect to see anyway.
-  const quarterOfFixed = probe.costs.fixedPeriod.reduce<Money>(
-    (a, c) => a + c.amountPerQuarter,
-    0n,
-  );
-  const needed = monthZero + quarterOfFixed;
-  const fundedByDebt = loan;
-  const equityNeeded = needed > fundedByDebt ? needed - fundedByDebt : 0n;
-  // Never suggest emptying the household. §2.3 draws living expenses from
-  // household cash every quarter and a founder who put every dollar into the
-  // buildout is personally insolvent by the second one.
-  const livingReserve = fromDisplay(60_000);
-  const investable =
-    config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
-  const suggestedEquity = equityNeeded < investable ? equityNeeded : investable;
+  for (let attempt = 1; ; attempt++) {
+    // Debt is arranged BEFORE equity, because the equity suggestion has to know
+    // about it. Sized off a debt-free probe, the suggestion missed the
+    // origination fees that only exist once a loan does — so accepting every
+    // default landed the player exactly one origination fee short of opening,
+    // and the gate refused a business the setup had just recommended.
+    const loan = await ask(input, `  ${pad('SBA 7(a) loan', 42)}[$0]: `, 0n, parseMoney);
+    const revolver = await ask(
+      input,
+      `  ${pad('Revolver limit', 42)}[$100,000]: `,
+      fromDisplay(100_000),
+      parseMoney,
+    );
+    const debt = [
+      ...(loan > 0n ? [{ kind: 'SBA_7A' as const, principal: loan, termQuarters: 40 }] : []),
+      ...(revolver > 0n
+        ? [{ kind: 'REVOLVER' as const, principal: revolver, termQuarters: 40 }]
+        : []),
+    ];
 
-  const equity = await ask(
-    input,
-    `  ${pad('Your own capital into the business', 42)}[${toDisplay(suggestedEquity, { showCents: false })}]: `,
-    suggestedEquity,
-    parseMoney,
-  );
+    const probe = buildModelFromTemplate({
+      businessName,
+      template,
+      archetype,
+      scale,
+      marketingSpendPerQuarter: marketing,
+      equityInjection: 0n,
+      debt,
+      ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+    });
+    // A revolver is a limit, not cash at close; only term debt funds month zero.
+    const monthZero = computeMonthZeroOutlays(probe).total;
+    // Month zero alone is a knife edge: the first quarter's fixed costs land
+    // before any revenue does, so a business funded to exactly its opening
+    // outlay begins on the crisis ladder. Suggest one quarter of fixed operating
+    // cost on top — the buffer a lender would expect to see anyway.
+    const quarterOfFixed = probe.costs.fixedPeriod.reduce<Money>(
+      (a, c) => a + c.amountPerQuarter,
+      0n,
+    );
+    const needed = monthZero + quarterOfFixed;
+    const fundedByDebt = loan;
+    const equityNeeded = needed > fundedByDebt ? needed - fundedByDebt : 0n;
+    // Never suggest emptying the household. §2.3 draws living expenses from
+    // household cash every quarter and a founder who put every dollar into the
+    // buildout is personally insolvent by the second one.
+    const livingReserve = fromDisplay(60_000);
+    const investable =
+      config.startCapital > livingReserve ? config.startCapital - livingReserve : 0n;
+    const suggestedEquity = equityNeeded < investable ? equityNeeded : investable;
+    // The suggestion capping out at the household's investable cash is itself
+    // the answer to "how much more do I need" — say so rather than letting the
+    // player discover it by being refused.
+    if (equityNeeded > investable) {
+      console.log(
+        `${DIM}  Opening needs about ${toDisplay(needed, { showCents: false })}. Your own` +
+          ` cash covers ${toDisplay(investable, { showCents: false })} of it after leaving` +
+          ` ${toDisplay(livingReserve, { showCents: false })} to live on — the rest has to be` +
+          ` borrowed, or the business has to get smaller.${RESET}`,
+      );
+    }
 
-  const model = buildModelFromTemplate({
-    businessName,
-    template,
-    archetype,
-    scale,
-    marketingSpendPerQuarter: marketing,
-    equityInjection: equity,
-    debt,
-  });
+    const equity = await ask(
+      input,
+      `  ${pad('Your own capital into the business', 42)}[${toDisplay(suggestedEquity, { showCents: false })}]: `,
+      suggestedEquity,
+      parseMoney,
+    );
 
-  // The completeness invariant is a hard gate: a model with a hole in its
-  // register cannot be committed (§10.2).
-  const validation = validateBusinessModel(model);
-  const errors = validation.issues.filter((i) => i.severity === 'ERROR');
-  if (errors.length > 0) {
-    console.log(`\n${RED}This model cannot be committed:${RESET}`);
-    for (const e of errors) console.log(`  ${RED}${e.code}  ${e.message}${RESET}`);
-    return undefined;
-  }
-  for (const w of validation.issues.filter((i) => i.severity === 'WARNING')) {
-    console.log(`\n${YELLOW}⚠ ${w.message}${RESET}`);
-  }
+    // Putting the whole household in is allowed and sometimes correct, but it
+    // has to be a decision rather than a side effect of typing a round number.
+    // §2.3 draws living expenses from household cash every quarter, so a
+    // founder who kept nothing is personally insolvent long before the business
+    // has had time to work — and the setup screen said nothing about it.
+    const householdLeft = config.startCapital > equity ? config.startCapital - equity : 0n;
+    if (householdLeft < livingReserve) {
+      console.log(
+        `\n${YELLOW}⚠ That leaves your household ${toDisplay(householdLeft)}.${RESET}` +
+          `${DIM} Living expenses come out of it every quarter whether or not the` +
+          ` business pays you. Going in this deep is a real strategy; going in this` +
+          ` deep by accident is how a solvent business ends up with a bankrupt owner.${RESET}`,
+      );
+    }
 
-  const world = createWorld({
-    id: 'player-run',
-    playerId: 'player',
-    config,
-    models: [model],
-  });
+    const candidate = buildModelFromTemplate({
+      businessName,
+      template,
+      archetype,
+      scale,
+      marketingSpendPerQuarter: marketing,
+      equityInjection: equity,
+      debt,
+      ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+    });
 
-  console.log(`\n${BOLD}═══ BEFORE YOU COMMIT ═══${RESET}`);
-  renderOpening(model, world);
-  renderRegister(model);
+    // The completeness invariant is a hard gate: a model with a hole in its
+    // register cannot be committed (§10.2). No amount of money fixes a missing
+    // assumption, so this one really does end the run.
+    const validation = validateBusinessModel(candidate);
+    const errors = validation.issues.filter((i) => i.severity === 'ERROR');
+    if (errors.length > 0) {
+      console.log(`\n${RED}This model cannot be committed:${RESET}`);
+      for (const e of errors) console.log(`  ${RED}${e.code}  ${e.message}${RESET}`);
+      return undefined;
+    }
+    for (const w of validation.issues.filter((i) => i.severity === 'WARNING')) {
+      console.log(`\n${YELLOW}⚠ ${w.message}${RESET}`);
+    }
 
-  // Phase 4 is a gate, not a formality. A business that cannot fund its own
-  // month zero has not been financed; letting it open would start the run with
-  // negative cash, which the engine would immediately have to resolve as a
-  // crisis on turn one — teaching the player nothing except that the setup
-  // screen does not mean what it says.
-  if (world.businesses[0]!.cash < 0n) {
+    const candidateWorld = createWorld({
+      id: 'player-run',
+      playerId: 'player',
+      config,
+      models: [candidate],
+    });
+
+    console.log(`\n${BOLD}═══ BEFORE YOU COMMIT ═══${RESET}`);
+    renderOpening(candidate, candidateWorld);
+
+    // Phase 4 is a gate, not a formality. A business that cannot fund its own
+    // month zero has not been financed; letting it open would start the run with
+    // negative cash, which the engine would immediately have to resolve as a
+    // crisis on turn one — teaching the player nothing except that the setup
+    // screen does not mean what it says.
+    if (candidateWorld.businesses[0]!.cash >= 0n) {
+      model = candidate;
+      world = candidateWorld;
+      break;
+    }
+
     // A revolver is a LIMIT, not a drawdown — `openBusiness` sets its
     // outstanding principal to zero. Counting it as money raised produced a
     // message that contradicted itself: "you raised $317k" directly above
     // "you cannot afford $217k". Only term debt actually funds month zero.
-    const termDebt = model.financingPlan.debtRequests
-      .filter((d) => d.kind !== 'REVOLVER')
-      .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
-    const revolverLimit = model.financingPlan.debtRequests
-      .filter((d) => d.kind === 'REVOLVER')
-      .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
-    const raised = model.financingPlan.equityInjection + termDebt;
-    const shortfall = -world.businesses[0]!.cash;
+    const raised = candidate.financingPlan.equityInjection + loan;
+    const shortfall = -candidateWorld.businesses[0]!.cash;
 
     console.log(
-      `\n${RED}${BOLD}Cannot commit.${RESET} ${RED}Month zero costs ` +
-        `${toDisplay(computeMonthZeroOutlays(model).total)} and you have funded ` +
+      `\n${RED}${BOLD}Not funded yet.${RESET} ${RED}Month zero costs ` +
+        `${toDisplay(computeMonthZeroOutlays(candidate).total)} and you have funded ` +
         `${toDisplay(raised)} — short by ${toDisplay(shortfall)}.${RESET}`,
     );
-    if (revolverLimit > 0n) {
+    if (revolver > 0n) {
       console.log(
-        `${DIM}The ${toDisplay(revolverLimit, { showCents: false })} revolver is a limit, not cash:` +
+        `${DIM}The ${toDisplay(revolver, { showCents: false })} revolver is a limit, not cash:` +
           ` it costs its origination fee at close and draws only when you are short later.${RESET}`,
       );
     }
+
+    if (attempt >= MAX_FINANCING_ATTEMPTS) {
+      console.log(
+        `${DIM}The gap has not closed in ${MAX_FINANCING_ATTEMPTS} tries, so the business` +
+          ` is probably too big for the money rather than badly financed. Run` +
+          ` \`pnpm sim --new\` and describe something smaller.${RESET}`,
+      );
+      return undefined;
+    }
+
     console.log(
-      `${DIM}Raise more, or build something smaller — fewer seats, a cheaper buildout,` +
-        ` a smaller location. Run \`pnpm sim --new\` again.${RESET}`,
+      `${DIM}The concept is intact — only the financing needs to change. An SBA loan of` +
+        ` at least ${toDisplay(shortfall, { showCents: false })} would close it.${RESET}`,
     );
-    return undefined;
+    const raw = await input.next('\nTry different financing? (Y/n) ');
+    // End of input is not consent to keep looping. A scripted run that stops
+    // here has said everything it is going to say.
+    if (raw === undefined) return undefined;
+    const again = raw.trim().toLowerCase();
+    if (again === 'n' || again === 'no') {
+      console.log(`${DIM}Nothing committed.${RESET}`);
+      return undefined;
+    }
+    console.log(`\n${BOLD}MARKETING & FINANCING${RESET} ${DIM}— attempt ${attempt + 1}${RESET}`);
   }
+
+  renderRegister(model);
 
   console.log(
     `\n${DIM}Committing freezes the model. After this it changes only through the` +
