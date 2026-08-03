@@ -286,6 +286,22 @@ describe('the prompt carries D-5', () => {
   it('forbids dressing an estimate as a source', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('An invented citation is worse than an admitted guess');
   });
+
+  it('treats a recalled figure as an estimate, not a citation', () => {
+    // First live run: the model offered a franchise's royalty and ad-fund rates
+    // as "documented rather than guessed". It has read no FDD. The numbers may
+    // be right; "documented" is the part that is not.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain(
+      'A figure you remember is not a figure you looked up',
+    );
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('grounded rather than guessed');
+  });
+
+  it('spells out that one question means one', () => {
+    // Same run: it asked about site format and trade area in one turn, with the
+    // second question in a trailing paragraph. The rule needed an example.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('One question means one');
+  });
 });
 
 describe('the wire schema', () => {
