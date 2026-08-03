@@ -112,6 +112,22 @@ export class ConceptInterview {
    * this — no second call, no second turn, no second bill.
    */
   lastReasoning: string | undefined;
+
+  /**
+   * How hard the last turn worked, in both currencies.
+   *
+   * Wall-clock and thinking tokens measure different things and the gap
+   * between them is the interesting part: seconds are what the player waits
+   * and are hostage to load and network, tokens are what was actually spent
+   * reasoning and are what `effort` controls. Shown per turn because the
+   * failure worth catching is per turn — a minute of thinking on "where is
+   * it?", or three seconds on a question about capital structure.
+   */
+  lastTurn: { ms: number; thinkingTokens: number; outputTokens: number } | undefined;
+
+  /** The same, for the draft call, which is much the slower of the two. */
+  lastDraft: { ms: number; thinkingTokens: number } | undefined;
+
   readonly transcript: InterviewMessage[] = [];
 
   /**
@@ -163,7 +179,17 @@ export class ConceptInterview {
       };
     }
 
-    const { turn, reasoning } = await this.transport.turn(this.system, this.transcript);
+    // Wall clock is measured here rather than in the CLI so it covers the
+    // transport's own retry after a garbled or empty reply — that retry is a
+    // second full call and the player waits for both, so timing only the
+    // successful one would report half the wait.
+    const startedAt = Date.now();
+    const { turn, reasoning, usage } = await this.transport.turn(this.system, this.transcript);
+    this.lastTurn = {
+      ms: Date.now() - startedAt,
+      thinkingTokens: usage?.thinkingTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+    };
     this.lastReasoning = reasoning;
     this.turnsTaken += 1;
     // Never let a whitespace-only turn into the transcript. The API rejects a
@@ -208,7 +234,18 @@ export class ConceptInterview {
     // keeps each request's decoding grammar inside the API's size limit, and it
     // also stops the model juggling seventeen overhead fields while asking
     // where the shop is.
+    // `draft()` returns a draft, not a usage record, so the cost is read as a
+    // delta on the transport's running total. That also picks up the
+    // unconstrained retry when the draft grammar will not compile, which is a
+    // second full call at draft effort and the most expensive thing that
+    // happens in a session.
+    const draftStartedAt = Date.now();
+    const before = this.transport.usage?.thinkingTokens ?? 0;
     const draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
+    this.lastDraft = {
+      ms: Date.now() - draftStartedAt,
+      thinkingTokens: (this.transport.usage?.thinkingTokens ?? 0) - before,
+    };
     return {
       status: 'DRAFTED',
       message: turn.message,

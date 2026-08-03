@@ -69,6 +69,30 @@ function wrap(text: string, width = 76, indent = '  '): string {
 export const conceptPathAvailable = (): boolean =>
   Boolean(process.env['ANTHROPIC_API_KEY'] ?? process.env['ANTHROPIC_AUTH_TOKEN']);
 
+/**
+ * How hard the last turn worked, for the line under the model's answer.
+ *
+ * Both currencies, because they measure different things and the gap between
+ * them is the point: seconds are what the player waits and are hostage to load
+ * and network; thinking tokens are what was actually spent reasoning and are
+ * what `effort` controls. A turn that takes 30s and thought for 400 tokens was
+ * slow for reasons the prompt cannot fix. One that thought 9,000 tokens on
+ * "which town?" is the prompt's problem.
+ *
+ * This is QA data as much as player-facing: it travels in a pasted transcript,
+ * which is how the effort settings actually get tuned.
+ */
+const seconds = (ms: number): string =>
+  ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 1000)}s`;
+
+const tokens = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+function effortLine(turn: { ms: number; thinkingTokens: number } | undefined): string {
+  if (!turn) return '';
+  const thought = turn.thinkingTokens > 0 ? `, ${tokens(turn.thinkingTokens)} thinking` : '';
+  return `thought ${seconds(turn.ms)}${thought}`;
+}
+
 export async function runConceptInterview(
   input: LineSource,
   transport?: ConceptTransport,
@@ -198,9 +222,10 @@ export async function runConceptInterview(
     // the ledger. They should not look alike.
     if (state.message.trim()) console.log(`\n${speech(wrap(state.message, 70, ''))}`);
     console.log(`\n${speech(BOLD + wrap(state.cta, 70, '') + RESET)}`);
-    if (state.message.trim() && interview.lastReasoning) {
-      console.log(`${accent('▏')} ${DIM}\`why\` to see how it got there${RESET}`);
-    }
+    const effort = effortLine(interview.lastTurn);
+    const why = state.message.trim() && interview.lastReasoning ? '`why` to see how it got there' : '';
+    const footer = [why, effort].filter(Boolean).join(' · ');
+    if (footer) console.log(`${accent('▏')} ${DIM}${footer}${RESET}`);
     console.log('');
 
     if (state.status === 'ASKING') {
@@ -255,6 +280,14 @@ export async function runConceptInterview(
     }
     for (const issue of revenueRealityIssues(state.draft)) {
       console.log(`\n  ${YELLOW}⚠ ${wrap(issue, 70, '    ').trimStart()}${RESET}`);
+    }
+
+    // The draft is much the slower call — 85 seconds in one live run — and the
+    // spinner that showed it disappears the moment it lands. Say what it cost.
+    if (interview.lastDraft) {
+      const d = interview.lastDraft;
+      const thought = d.thinkingTokens > 0 ? `, ${tokens(d.thinkingTokens)} thinking` : '';
+      console.log(`${DIM}  built the model in ${seconds(d.ms)}${thought}${RESET}`);
     }
 
     renderConceptNotes(state.draft);

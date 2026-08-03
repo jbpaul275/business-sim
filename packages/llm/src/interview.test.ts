@@ -514,6 +514,84 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
   });
 });
 
+describe('how hard the turn worked', () => {
+  it('records wall clock and thinking tokens for the last turn', async () => {
+    // Two currencies because they measure different things, and the gap
+    // between them is the point: 30 seconds with 400 thinking tokens is slow
+    // for reasons the prompt cannot fix; 9,000 thinking tokens on "which
+    // town?" is the prompt's problem.
+    const transport: ConceptTransport = {
+      turn: async () => ({
+        turn: asks('A ridge changes the draw.', 'How many scopes?'),
+        usage: {
+          inputTokens: 5_200,
+          cachedInputTokens: 0,
+          outputTokens: 2_140,
+          thinkingTokens: 2_060,
+        },
+      }),
+      draft: async () => draft(),
+      usage: EMPTY_USAGE,
+    };
+    const interview = new ConceptInterview({ transport });
+
+    await interview.send('Telescope rental on a dark-sky ridge.');
+    expect(interview.lastTurn?.thinkingTokens).toBe(2_060);
+    expect(interview.lastTurn?.outputTokens).toBe(2_140);
+    expect(interview.lastTurn?.ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it('times the retry too, because the player waits for both', async () => {
+    // The transport retries a garbled or empty reply itself. Timing only the
+    // successful call would report half the wait.
+    let calls = 0;
+    const transport: ConceptTransport = {
+      turn: async () => {
+        calls += 1;
+        await new Promise((r) => setTimeout(r, 12));
+        return { turn: asks('Right.', 'How many scopes?') };
+      },
+      draft: async () => draft(),
+      usage: EMPTY_USAGE,
+    };
+    const interview = new ConceptInterview({ transport });
+    await interview.send('Telescope rental.');
+    expect(calls).toBe(1);
+    expect(interview.lastTurn?.ms).toBeGreaterThanOrEqual(10);
+  });
+
+  it('times the draft separately from the turn that triggered it', async () => {
+    let usage = EMPTY_USAGE;
+    const transport: ConceptTransport = {
+      turn: async () => ({ turn: ready('Enough to build against.', 'Here it is.') }),
+      draft: async () => {
+        await new Promise((r) => setTimeout(r, 15));
+        // What the draft call spent, as the real transport would record it.
+        usage = { ...usage, calls: 1, thinkingTokens: 9_400, outputTokens: 12_000 };
+        return draft();
+      },
+      get usage() {
+        return usage;
+      },
+    };
+    const interview = new ConceptInterview({ transport });
+    expect((await interview.send('24 scopes, 1400 sq ft.')).status).toBe('DRAFTED');
+    expect(interview.lastDraft?.ms).toBeGreaterThanOrEqual(12);
+    // Read as a delta on the transport's running total, so it also picks up
+    // the unconstrained retry when the draft grammar will not compile.
+    expect(interview.lastDraft?.thinkingTokens).toBe(9_400);
+    // The turn itself was instant; the wait was the draft, and they are not
+    // conflated.
+    expect(interview.lastTurn!.ms).toBeLessThan(interview.lastDraft!.ms);
+  });
+
+  it('reports nothing before a turn has been taken', () => {
+    const interview = new ConceptInterview({ transport: new ScriptedTransport([]) });
+    expect(interview.lastTurn).toBeUndefined();
+    expect(interview.lastDraft).toBeUndefined();
+  });
+});
+
 describe('permission that is not waited for', () => {
   it('holds when the model asks to be told to go', async () => {
     // Live, on a lunar tourism base: "Say go and I'll draft the full model —
