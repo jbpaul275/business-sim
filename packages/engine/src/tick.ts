@@ -15,7 +15,7 @@ import {
   type WorldState,
 } from '@bizsim/schemas';
 import { computeDemand, realize, type DemandResult, type RealizeResult } from './archetypes.js';
-import { applyAction, schedule, type FlowsByBusiness } from './actions.js';
+import { applyAction, schedule, wasRefused, type FlowsByBusiness } from './actions.js';
 import { failures, runAssertions } from './assertions.js';
 import { LINE, createContext, type ComputationTrace, type TickContext } from './context.js';
 import {
@@ -132,7 +132,13 @@ export function tick(
 
   // ── 2a. Apply immediate-effect actions submitted this turn ──────────────
   for (const action of actions) {
-    events.push(...applyAction(applyCtx, action, 'IMMEDIATE'));
+    const immediate = applyAction(applyCtx, action, 'IMMEDIATE');
+    events.push(...immediate);
+    // A refusal at submission has to stop the delayed half too. It did not:
+    // an SBA loan the lender declined was still scheduled, and two quarters
+    // later the MATURED branch booked the facility anyway — re-underwriting it
+    // only to read the rate off a decision it then ignored.
+    if (wasRefused(immediate)) continue;
     const scheduled = schedule(action, period);
     if (scheduled) next.pendingActions.push(scheduled);
   }

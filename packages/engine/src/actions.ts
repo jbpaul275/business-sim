@@ -50,6 +50,53 @@ const reject = (period: PeriodIndex, action: Action, reason: string): EngineEven
 /** Actions whose full implementation lands in M7 (multi-business, §9.5–9.6). */
 const DEFERRED_TO_M7 = new Set<Action['kind']>(['START_BUSINESS', 'SELL_BUSINESS']);
 
+/**
+ * Money that runs backwards.
+ *
+ * A player asked how to pay off his SBA loan, was told how to borrow, and
+ * reasoned his way to `debt -$400k`. It was accepted. The ledger grew a
+ * facility with -$400,000 outstanding, drawn on the cash flow statement as a
+ * $400k outflow, accruing interest against a negative balance — and every
+ * articulation assertion still passed, because a balance sheet ties just as
+ * happily around a liability with the wrong sign.
+ *
+ * The command layer should never send this, and the engine is what makes that
+ * true rather than what hopes it. Sign is not a matter of taste: there is no
+ * reading of "raise -$400,000 of debt" that the rest of the engine models.
+ */
+function signIssue(action: Action): string | undefined {
+  switch (action.kind) {
+    case 'SET_PRICE':
+      return action.newPrice <= 0n ? 'A price has to be more than zero.' : undefined;
+    case 'SET_MARKETING_SPEND':
+      return action.amountPerQuarter < 0n ? 'Marketing spend cannot be negative.' : undefined;
+    case 'RAISE_DEBT':
+      return action.spec.requestedPrincipal <= 0n
+        ? 'Borrowing a negative amount is not a repayment — use REPAY_DEBT.'
+        : undefined;
+    case 'REPAY_DEBT':
+      return action.amount < 0n
+        ? 'Repaying a negative amount is not a drawdown — use RAISE_DEBT or DRAW_REVOLVER.'
+        : undefined;
+    case 'DRAW_REVOLVER':
+      return action.amount < 0n ? 'Drawing a negative amount is not a repayment.' : undefined;
+    case 'INJECT_CAPITAL':
+      return action.amount < 0n ? 'Injecting a negative amount is not a distribution.' : undefined;
+    case 'DISTRIBUTE':
+      return action.amount < 0n ? 'Distributing a negative amount is not an injection.' : undefined;
+    case 'EXPAND_CAPACITY':
+      return action.spec.buildoutCost < 0n ? 'A buildout cannot cost less than nothing.' : undefined;
+    case 'DISPOSE_ASSET':
+      return action.salePrice < 0n ? 'A sale price cannot be negative.' : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** Whether an action's own submission was refused, and so should not be scheduled. */
+export const wasRefused = (events: readonly EngineEvent[]): boolean =>
+  events.some((e) => e.kind === 'ACTION_REJECTED' || e.kind === 'UNDERWRITING_DECLINED');
+
 export interface ApplyContext {
   state: WorldState;
   flows: FlowsByBusiness;
@@ -79,6 +126,9 @@ export function applyAction(
   if (DEFERRED_TO_M7.has(action.kind)) {
     return [reject(period, action, 'Not implemented until M7 (multi-business).')];
   }
+
+  const sign = signIssue(action);
+  if (sign) return [reject(period, action, sign)];
 
   switch (action.kind) {
     case 'SET_PRICE': {

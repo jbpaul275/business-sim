@@ -78,6 +78,8 @@ function describeAction(a: Action): string {
       return `fire ${a.blocks} × ${a.costId}`;
     case 'RAISE_DEBT':
       return `borrow ${toDisplay(a.spec.requestedPrincipal, { showCents: false })}`;
+    case 'REPAY_DEBT':
+      return `repay ${toDisplay(a.amount, { showCents: false })} of principal`;
     case 'DRAW_REVOLVER':
       return `draw ${toDisplay(a.amount, { showCents: false })} on the revolver`;
     case 'INJECT_CAPITAL':
@@ -238,6 +240,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}hire${RESET} <line> [n]       add step blocks  ${DIM}— cost lands NOW, capacity NEXT quarter${RESET}
   ${BOLD}fire${RESET} <line> [n]       remove blocks    ${DIM}— severance lands now${RESET}
   ${BOLD}debt${RESET} 200k [quarters]  raise an SBA 7(a) ${DIM}— fee now, proceeds next quarter${RESET}
+  ${BOLD}repay${RESET} 100k [facility]  pay principal down early ${DIM}— \`repay all\` clears it${RESET}
   ${BOLD}draw${RESET} 50k              draw on the revolver
   ${BOLD}inject${RESET} 50k            household → business
   ${BOLD}distribute${RESET} 20k        business → household
@@ -335,7 +338,10 @@ const TOPIC_PATTERNS: [Topic, RegExp][] = [
   ['marketing', /\b(marketing|advertis\w*|promote|promotion|campaign|ads?|awareness)\b/],
   ['capacity', /\b(expand|more sites|more seats|more rooms|capacity|bigger|quadruple|double|scale)\b/],
   ['staff', /\b(staff\w*|labou?r|payroll|hire|fire|crew|employee|headcount|cut costs|costs)\b/],
-  ['debt', /\b(debt|borrow|loan|revolver|financ\w*|raise money|invest)\b/],
+  [
+    'debt',
+    /\b(debt|borrow|loan|revolver|financ\w*|raise money|invest|pay off|payoff|pay down|paydown|repay|principal|amorti[sz]\w*)\b/,
+  ],
   ['seasonality', /\b(season\w*|swing|winter|summer)\b/],
 ];
 
@@ -693,15 +699,46 @@ function advise(
     }
   }
 
+  /**
+   * "how do I pay off my SBA loan?" — answered with how to borrow.
+   *
+   * Owing and borrowing are opposite intentions that share every keyword, so
+   * the question has to be read before the answer is chosen. The player who
+   * asked this went on to type `debt -$400k`, which is the correct instinct
+   * about arithmetic and the wrong thing to do to a ledger.
+   */
   if (topic === 'debt') {
-    out.push(
-      is.ebitda < 0n
-        ? `Borrowing funds losses, it does not end them: at ${toCompact(is.ebitda)} of EBITDA every ` +
-            `quarter, more debt buys time and raises the interest you pay for it. ` +
-            `\`debt <amount>\` and \`draw <amount>\` both work; neither changes the trajectory.`
-        : `\`debt <amount>\` raises a term loan, \`draw\` uses the revolver. At ` +
-            `${toCompact(is.ebitda)} of EBITDA you can service some of it.`,
-    );
+    const owed = business.debts.filter((d) => d.outstandingPrincipal > 0n);
+    const totalOwed = owed.reduce<Money>((a, d) => a + d.outstandingPrincipal, 0n);
+
+    if (/\b(pay off|payoff|pay down|paydown|repay|retire|get rid of|clear)\b/.test(question.toLowerCase())) {
+      out.push(
+        owed.length === 0
+          ? 'Nothing is outstanding — there is no principal left to pay down.'
+          : `\`repay <amount>\` pays principal down early, and \`repay all\` clears a facility. ` +
+              `You owe ${toCompact(totalOwed)}: ` +
+              `${owed.map((d) => `${d.label} ${toCompact(d.outstandingPrincipal)} at ${(d.annualRate * 100).toFixed(1)}%`).join(', ')}.`,
+      );
+      if (owed.length > 0) {
+        // The rate is the return. Nothing else in this game reliably pays 10.5%
+        // risk-free, and that is the whole case for early repayment.
+        const dearest = [...owed].sort((a, b) => b.annualRate - a.annualRate)[0]!;
+        out.push(
+          `Paying it down early earns you its rate — ${(dearest.annualRate * 100).toFixed(1)}% on ` +
+            `${dearest.label} — with no risk attached. Against ${toCompact(business.cash)} of cash, ` +
+            `the question is only how much you want to keep for the next bad quarter.`,
+        );
+      }
+    } else {
+      out.push(
+        is.ebitda < 0n
+          ? `Borrowing funds losses, it does not end them: at ${toCompact(is.ebitda)} of EBITDA every ` +
+              `quarter, more debt buys time and raises the interest you pay for it. ` +
+              `\`debt <amount>\` and \`draw <amount>\` both work; neither changes the trajectory.`
+          : `\`debt <amount>\` raises a term loan, \`draw\` uses the revolver, \`repay\` pays one ` +
+              `down early. At ${toCompact(is.ebitda)} of EBITDA you can service some of it.`,
+      );
+    }
   }
 
   // Seasonality, which explains most of what looks like chaos on the screen.
@@ -838,7 +875,7 @@ function remember(
  */
 const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
-  'hire', 'fire', 'debt', 'draw', 'inject', 'distribute', 'expand', 'market', 'policy',
+  'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market', 'policy',
 ]);
 
 /**
@@ -942,6 +979,19 @@ function parseCommand(
           (c) => c.id === token || c.label.toLowerCase().startsWith(token.toLowerCase()),
         )?.id;
 
+  /**
+   * A negative amount is a different verb, not a smaller number.
+   *
+   * `debt -$400k` was read as "raise minus four hundred thousand of debt",
+   * queued, and booked — a facility with a negative balance accruing interest.
+   * The engine refuses it now; this refuses it at the point where the player
+   * can still be told what they actually meant.
+   */
+  const positive = (amount: Money | undefined, verb: string, instead: string): string | undefined =>
+    amount !== undefined && amount <= 0n
+      ? `A negative \`${verb}\` is not the opposite of ${verb} — ${instead}`
+      : undefined;
+
   switch (verb.toLowerCase()) {
     case '':
       return none;
@@ -973,12 +1023,15 @@ function parseCommand(
     case 'price': {
       const value = parseMoney(rest[0] ?? '');
       if (value === undefined) return fail('price needs an amount, e.g. `price 45`.');
+      if (value <= 0n) return fail('A price has to be more than zero.');
       return { actions: [{ kind: 'SET_PRICE', streamId, newPrice: value }] };
     }
 
     case 'marketing': {
       const value = parseMoney(rest[0] ?? '');
       if (value === undefined) return fail('marketing needs an amount, e.g. `marketing 12k`.');
+      // Zero is a real and sometimes correct choice; below zero is not a choice.
+      if (value < 0n) return fail('Marketing spend cannot be negative. `marketing 0` turns it off.');
       return { actions: [{ kind: 'SET_MARKETING_SPEND', streamId, amountPerQuarter: value }] };
     }
 
@@ -1083,6 +1136,8 @@ function parseCommand(
     case 'debt': {
       const principal = parseMoney(rest[0] ?? '');
       if (principal === undefined) return fail('debt needs an amount, e.g. `debt 200k`.');
+      const sign = positive(principal, 'debt', 'to pay a loan down, use `repay <amount>`.');
+      if (sign) return fail(sign);
       const termQuarters = Number(rest[1] ?? 40);
       if (!Number.isInteger(termQuarters) || termQuarters < 1) return fail('Term must be a whole number of quarters.');
       return {
@@ -1099,20 +1154,104 @@ function parseCommand(
     case 'draw': {
       const amount = parseMoney(rest[0] ?? '');
       if (amount === undefined) return fail('draw needs an amount.');
+      const sign = positive(amount, 'draw', 'to pay the revolver back, use `repay <amount> revolver`.');
+      if (sign) return fail(sign);
       const revolver = business.debts.find((d) => d.kind === 'REVOLVER');
       if (!revolver) return fail('This business has no revolver.');
       return { actions: [{ kind: 'DRAW_REVOLVER', debtId: revolver.id, amount }] };
     }
 
+    /**
+     * "how do I pay off my SBA loan?"
+     *
+     * REPAY_DEBT has existed in the engine since M1 and had no command, so the
+     * answer was `debt <amount> raises a term loan` — how to borrow, to someone
+     * asking how to stop owing. He worked out the rest himself and typed
+     * `debt -$400k`.
+     *
+     * Paying early is one of the few genuinely good decisions a profitable
+     * business has left, and at 10.5% on an SBA facility it is a better return
+     * than most things this game will offer.
+     */
+    case 'repay': {
+      const outstanding = business.debts.filter((d) => d.outstandingPrincipal > 0n);
+      if (outstanding.length === 0) return fail('Nothing is outstanding to repay.');
+
+      // `repay 100k sba` and `repay sba 100k` are the same intent typed two
+      // ways, and refusing one of them teaches nothing.
+      const tokens = rest.filter((t) => t.trim() !== '');
+      const named = tokens
+        .map((t) =>
+          outstanding.find(
+            (d) =>
+              d.id === t ||
+              d.kind.toLowerCase().startsWith(t.toLowerCase()) ||
+              d.label.toLowerCase().startsWith(t.toLowerCase()),
+          ),
+        )
+        .find((d) => d !== undefined);
+      const wantsAll = tokens.some((t) => t.toLowerCase() === 'all');
+      const amountToken = tokens.find((t) => parseMoney(t) !== undefined);
+      const requested = wantsAll ? undefined : parseMoney(amountToken ?? '');
+
+      if (!wantsAll && requested === undefined) {
+        return fail(
+          `repay needs an amount: \`repay 100k\`, or \`repay all\`. Outstanding: ` +
+            `${outstanding.map((d) => `${d.label} ${toCompact(d.outstandingPrincipal)}`).join(', ')}.`,
+        );
+      }
+      const sign = positive(requested, 'repay', 'to borrow more, use `debt <amount>`.');
+      if (sign) return fail(sign);
+
+      // Largest balance by default: it is the one carrying the most interest,
+      // and with one loan on the books there is nothing to disambiguate.
+      const target =
+        named ??
+        [...outstanding].sort((a, b) =>
+          a.outstandingPrincipal > b.outstandingPrincipal ? -1 : 1,
+        )[0]!;
+      if (!named && outstanding.length > 1 && tokens.length < 2) {
+        console.log(
+          `  ${DIM}Paying down ${target.label}, the largest balance. Name another to change that: ` +
+            `${outstanding.map((d) => d.kind.toLowerCase()).join(', ')}.${RESET}`,
+        );
+      }
+
+      const amount =
+        requested === undefined || requested > target.outstandingPrincipal
+          ? target.outstandingPrincipal
+          : requested;
+      if (requested !== undefined && requested > target.outstandingPrincipal) {
+        console.log(
+          `  ${DIM}${toCompact(requested)} is more than the ${toCompact(target.outstandingPrincipal)} ` +
+            `outstanding on ${target.label}; paying it off instead.${RESET}`,
+        );
+      }
+      // A warning, not a refusal: paying down debt into a cash shortfall is a
+      // real decision with a real consequence, and the crisis ladder is what
+      // the consequence looks like.
+      if (amount > business.cash) {
+        console.log(
+          `  ${YELLOW}That is more cash than you have (${toCompact(business.cash)}). ` +
+            `It will go through and the shortfall will hit the crisis ladder.${RESET}`,
+        );
+      }
+      return { actions: [{ kind: 'REPAY_DEBT', debtId: target.id, amount }] };
+    }
+
     case 'inject': {
       const amount = parseMoney(rest[0] ?? '');
       if (amount === undefined) return fail('inject needs an amount.');
+      const sign = positive(amount, 'inject', 'to take money out, use `distribute <amount>`.');
+      if (sign) return fail(sign);
       return { actions: [{ kind: 'INJECT_CAPITAL', businessId: business.id, amount }] };
     }
 
     case 'distribute': {
       const amount = parseMoney(rest[0] ?? '');
       if (amount === undefined) return fail('distribute needs an amount.');
+      const sign = positive(amount, 'distribute', 'to put money in, use `inject <amount>`.');
+      if (sign) return fail(sign);
       return { actions: [{ kind: 'DISTRIBUTE', businessId: business.id, amount }] };
     }
 

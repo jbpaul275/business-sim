@@ -321,6 +321,53 @@ describe('asking what to do', () => {
     expect(printed).toMatch(/Same answer as last time/);
   });
 
+  it('answers "how do I pay off my loan?" with how to pay it off', async () => {
+    // Answered with `debt <amount> raises a term loan` — how to borrow, to
+    // someone asking how to stop owing. He worked out the rest himself and
+    // typed `debt -$400k`.
+    const printed = await transcript(['how do I pay off my SBA loan?', 'quit'], 'storage');
+    expect(printed).toMatch(/`repay <amount>`/);
+    expect(printed).toMatch(/outstanding|You owe/);
+    expect(printed).not.toMatch(/raises a term loan/);
+  });
+
+  it('pays principal down when told to', async () => {
+    const printed = await transcript(['repay 300k', '', 'quit'], 'storage');
+    expect(printed).toContain('queued: repay $300,000');
+    expect(printed).not.toContain('Unknown command');
+  });
+
+  it('clears a facility on `repay all`', async () => {
+    const printed = await transcript(['repay all', 'quit'], 'storage');
+    expect(printed).toMatch(/queued: repay \$2,/);
+  });
+
+  it('refuses a negative amount instead of booking a mirror-image of the action', async () => {
+    // `debt -$400k` was accepted, and the ledger grew a facility with -$400,000
+    // outstanding, drawn as a $400k outflow, accruing interest on a negative
+    // balance — while every articulation assertion still passed.
+    const printed = await transcript(['debt -400k', 'quit'], 'storage');
+    expect(printed).not.toContain('queued');
+    expect(printed).toMatch(/negative `debt` is not the opposite/);
+    // And it names the verb he was reaching for.
+    expect(printed).toMatch(/`repay <amount>`/);
+  });
+
+  it('refuses the same trick on every other money command', async () => {
+    for (const [command, expected] of [
+      ['draw -50k', /`repay <amount> revolver`/],
+      ['inject -50k', /`distribute <amount>`/],
+      ['distribute -50k', /`inject <amount>`/],
+      ['repay -50k', /`debt <amount>`/],
+      ['marketing -5k', /cannot be negative/],
+      ['price -20', /more than zero/],
+    ] as const) {
+      const printed = await transcript([command, 'quit'], 'storage');
+      expect(printed, command).toMatch(expected);
+      expect(printed, command).not.toContain('queued');
+    }
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);
