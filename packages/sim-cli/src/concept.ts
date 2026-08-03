@@ -12,6 +12,7 @@ import {
   draftIssues,
   draftToTemplate,
   type ConceptDraft,
+  type CallRecord,
   type ConceptTransport,
   type MappedConcept,
 } from '@bizsim/llm';
@@ -139,7 +140,22 @@ export async function runConceptInterview(
   );
 
   let spinner = { stop: () => {}, label: (_: string) => {} };
-  const live = transport ?? createConceptTransport();
+  /**
+   * Every model call, on disk as it happens.
+   *
+   * Kept in memory too, because the end-of-interview spend line prices the same
+   * records — one source, so the number on screen and the number in the corpus
+   * cannot disagree about what a session cost.
+   */
+  const calls: CallRecord[] = [];
+  const live =
+    transport ??
+    createConceptTransport({
+      onCall: (record) => {
+        calls.push(record);
+        journal?.write({ kind: 'call', ...record });
+      },
+    });
 
   /**
    * Ctrl-C while the model is thinking stops the model, not the session.
@@ -553,7 +569,7 @@ export async function runConceptInterview(
     // number ticking up while someone decides what to build changes what they
     // build, and this is a design tool before it is a budget.
     journal?.write({ kind: 'spend', ...interview.usage });
-    const spent = spendLine(interview.usage);
+    const spent = spendLine(calls);
     if (spent) console.log(`\n${note(spent)}`);
 
     return { mapped: draftToTemplate(state.draft), draft: state.draft };

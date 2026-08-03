@@ -200,7 +200,45 @@ migration two models bill at different rates inside one session.
 
 ---
 
-## 7. Standing risk
+## 7. Routing and instrumentation
+
+**Any OpenAI-compatible vendor is two environment variables.** `OpenAICompatibleTransport` reads a row out
+of `VENDORS` — base URL, key variable, default model, whether `reasoning_effort` is understood — so trying a
+new one is a row, not a transport:
+
+```sh
+export BIZSIM_LLM_PROVIDER=deepseek
+export DEEPSEEK_API_KEY=sk-...
+export BIZSIM_MODEL=deepseek-chat        # vendors with churning catalogues get no default
+pnpm sim --new
+```
+
+Shipped rows: `kimi`, `deepseek`, `openrouter`, `groq`, `together`, `gemini`, `openai`, plus `anthropic` on
+its own transport. `BIZSIM_BASE_URL` overrides any of them for a proxy or a region. With no
+`BIZSIM_LLM_PROVIDER`, resolution walks a cheapest-first preference list and takes the first key it finds.
+
+Routing is already per call type: `BIZSIM_TURN_MODEL` and `BIZSIM_DRAFT_MODEL` split the two jobs, which is
+where the real economy is — `draft` is one call and `turn`/`advise` are twenty.
+
+**Every call is recorded.** One `{"kind":"call"}` row per attempt in the session journal:
+
+| Field | |
+|---|---|
+| `call` | `turn` / `draft` / `advise` / `adjudicate` |
+| `provider`, `model`, `effort` | what answered, and at what reasoning tier |
+| `ms` | wall clock — the half of a routing decision a price list cannot price |
+| `inputTokens`, `cachedInputTokens`, `outputTokens`, `thinkingTokens` | |
+| `costUsd`, `ratesKnown` | priced at the call against `MODEL_RATES`; `false` when the model is unpriced |
+| `attempt`, `ok`, `failure` | so the failed attempts, which were billed, are counted |
+
+Priced at the call, by model, because a session that drafts on one model and answers turns on another has
+two prices in it. `pnpm sim --sessions` reports **cost per committed session by model** — not cost per
+session, because a cheap model that gets abandoned half the time is not cheap, it just fails earlier.
+
+Sessions recorded before this carry no call rows and report no cost, rather than being priced against
+today's rates as if the model were known.
+
+## 8. Standing risk
 
 `04-risks-and-decisions.md` already lists **adjudication sycophancy** as "model behavior, not code; can
 regress on any provider/model change", with "pinned model version" as the mitigation. This migration is the

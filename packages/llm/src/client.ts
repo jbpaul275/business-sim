@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { type TurnAdvice, zTurnAdvice } from './advice.js';
 import { type Adjudication, zAdjudication } from './challenge.js';
+import { ZERO_TOKENS, emitCall, type CallKind, type CallSink } from './telemetry.js';
 import {
   ADJUDICATION_SCHEMA,
   ADVICE_SCHEMA,
@@ -190,6 +191,15 @@ export interface AnthropicTransportOptions {
   adviceMaxTokens?: number;
   /** Effort for synthesis, where the reasoning genuinely is hard. */
   draftEffort?: Effort;
+  /**
+   * Called once per model call, including retries and fallbacks.
+   *
+   * Every attempt, not every logical call: a draft that exhausts its budget and
+   * retries is two records, because the first one was billed. A meter that
+   * counts only the attempt that worked understates exactly the failures worth
+   * knowing about.
+   */
+  onCall?: CallSink;
 }
 
 const envEffort = (name: string, fallback: Effort): Effort => {
@@ -315,6 +325,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
   private readonly draftEffort: Effort;
   private readonly adviceEffort: Effort;
   private readonly adviceMaxTokens: number;
+  private readonly onCall: CallSink | undefined;
   /** How often a response came back empty or corrupted. Surfaced, not swallowed. */
   unusableRetries = 0;
   /** Every call this transport has made, including retries and fallbacks. */
@@ -376,9 +387,12 @@ export class AnthropicConceptTransport implements ConceptTransport {
     this.adviceEffort = options.adviceEffort ?? envEffort('BIZSIM_ADVICE_EFFORT', 'low');
     this.adviceMaxTokens = options.adviceMaxTokens ?? budget('BIZSIM_ADVICE_MAX_TOKENS', 4_000);
     this.draftEffort = options.draftEffort ?? envEffort('BIZSIM_DRAFT_EFFORT', 'high');
+    this.onCall = options.onCall;
   }
 
   private async complete(
+    kind: CallKind,
+    attempt: number,
     system: string,
     messages: readonly InterviewMessage[],
     schema: Record<string, unknown> | undefined,
@@ -412,62 +426,90 @@ export class AnthropicConceptTransport implements ConceptTransport {
      * "the model", not a promise they have a reference to.
      */
     this.inFlight = new AbortController();
-    const response = await this.client.messages.stream({
-      model,
-      max_tokens: maxTokens,
-      system,
-      // Thinking is on by default on this model and billed either way; the
-      // default `display` of "omitted" just discards the summary. Asking for it
-      // is free and it is what makes `why` possible without a second call.
-      thinking: { type: 'adaptive', display: 'summarized' },
-      output_config: {
-        ...(schema ? { format: { type: 'json_schema' as const, schema } } : {}),
+    /**
+     * Timed and priced whatever happens, including when it throws.
+     *
+     * A refusal, a truncated draft and a rate limit all cost wall-clock the
+     * player waited through, and the first two cost tokens as well. Emitting
+     * only on the success path would make the journal's per-call latencies
+     * systematically optimistic, because the failures are the slow ones.
+     */
+    const startedAt = Date.now();
+    let spent: TurnUsage = { ...ZERO_TOKENS };
+    let failure: string | undefined;
+    try {
+      const response = await this.client.messages.stream({
+        model,
+        max_tokens: maxTokens,
+        system,
+        // Thinking is on by default on this model and billed either way; the
+        // default `display` of "omitted" just discards the summary. Asking for
+        // it is free and it is what makes `why` possible without a second call.
+        thinking: { type: 'adaptive', display: 'summarized' },
+        output_config: {
+          ...(schema ? { format: { type: 'json_schema' as const, schema } } : {}),
+          effort,
+        },
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      }, { signal: this.inFlight.signal }).finalMessage();
+
+      // Recorded before anything can throw. A call that ran out of budget still
+      // generated — and still billed — every token it produced, and a meter
+      // that only counts successful calls understates the expensive failures by
+      // exactly the amount that makes them worth knowing about.
+      spent = {
+        inputTokens: response.usage.input_tokens,
+        cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
+        outputTokens: response.usage.output_tokens,
+        thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
+      };
+      this.usage = addUsage(this.usage, spent);
+
+      // A refusal is a successful HTTP response with an empty content array, so
+      // reading the result without checking would surface as a confusing null
+      // rather than as what it is.
+      if (response.stop_reason === 'refusal') {
+        throw new ConceptRefusedError(response.stop_details?.explanation ?? undefined);
+      }
+      if (response.stop_reason === 'max_tokens') {
+        throw new BudgetExhaustedError(maxTokens, spent.thinkingTokens);
+      }
+      const text = response.content.find((block) => block.type === 'text')?.text;
+      if (!text) {
+        throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
+      }
+
+      const reasoning = response.content
+        .filter((block) => block.type === 'thinking')
+        .map((block) => block.thinking)
+        .filter((t) => t.trim().length > 0)
+        .join('\n\n');
+
+      return {
+        text,
+        ...(reasoning ? { reasoning } : {}),
+        usage: spent,
+      };
+    } catch (error) {
+      failure = error instanceof Error ? error.name : 'Error';
+      throw error;
+    } finally {
+      emitCall(this.onCall, {
+        call: kind,
+        attempt,
+        provider: 'anthropic',
+        model,
         effort,
-      },
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    }, { signal: this.inFlight.signal }).finalMessage();
-
-    // Recorded before anything can throw. A call that ran out of budget still
-    // generated — and still billed — every token it produced, and a meter that
-    // only counts successful calls understates the expensive failures by
-    // exactly the amount that makes them worth knowing about.
-    const spent: TurnUsage = {
-      inputTokens: response.usage.input_tokens,
-      cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
-      outputTokens: response.usage.output_tokens,
-      thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
-    };
-    this.usage = addUsage(this.usage, spent);
-
-    // A refusal is a successful HTTP response with an empty content array, so
-    // reading the result without checking would surface as a confusing null
-    // rather than as what it is.
-    if (response.stop_reason === 'refusal') {
-      throw new ConceptRefusedError(response.stop_details?.explanation ?? undefined);
+        ms: Date.now() - startedAt,
+        usage: spent,
+        ...(failure ? { failure } : {}),
+      });
     }
-    if (response.stop_reason === 'max_tokens') {
-      throw new BudgetExhaustedError(maxTokens, spent.thinkingTokens);
-    }
-    const text = response.content.find((block) => block.type === 'text')?.text;
-    if (!text) {
-      throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
-    }
-
-    const reasoning = response.content
-      .filter((block) => block.type === 'thinking')
-      .map((block) => block.thinking)
-      .filter((t) => t.trim().length > 0)
-      .join('\n\n');
-
-    return {
-      text,
-      ...(reasoning ? { reasoning } : {}),
-      usage: spent,
-    };
   }
 
+
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
-    let attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
+    let attempt = await this.complete('turn', 1, system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
     // Structured outputs constrain generation against the schema, so this
     // should always hold — but "should" is doing load-bearing work in a
     // sentence about generated JSON.
@@ -479,7 +521,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // question ready in the thinking summary and just failed to emit it.
     if (isUnusable(turn)) {
       this.unusableRetries += 1;
-      attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
+      attempt = await this.complete('turn', 2, system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
       turn = zInterviewTurn.parse(JSON.parse(attempt.text));
       if (isUnusable(turn)) {
         throw new UnusableResponseError(turn.message.trim().length === 0 ? 'empty' : 'garbled');
@@ -520,6 +562,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
    */
   async advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult> {
     const attempt = await this.complete(
+      'advise',
+      1,
       system,
       messages,
       ADVICE_SCHEMA,
@@ -541,6 +585,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
    */
   async adjudicate(system: string, input: string): Promise<Adjudication> {
     const attempt = await this.complete(
+      'adjudicate',
+      1,
       system,
       [{ role: 'user', content: input }],
       ADJUDICATION_SCHEMA,
@@ -555,7 +601,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
     try {
-      text = (await this.complete(system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel, this.draftMaxTokens)).text;
+      text = (await this.complete('draft', 1, system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel, this.draftMaxTokens)).text;
     } catch (error) {
       if (error instanceof BudgetExhaustedError) {
         // Thinking is billed against the output ceiling, so a draft that
@@ -566,6 +612,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
         this.budgetRetries += 1;
         text = (
           await this.complete(
+            'draft',
+            2,
             system,
             asked,
             DRAFT_SCHEMA,
@@ -584,6 +632,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
         // pass unnoticed".
         text = (
           await this.complete(
+            'draft',
+            2,
             `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
             asked,
             undefined,

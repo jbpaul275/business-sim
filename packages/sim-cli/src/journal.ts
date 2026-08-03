@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import type { CallRecord } from '@bizsim/llm';
 
 /**
  * Every session, on disk, one line at a time.
@@ -28,6 +29,20 @@ import { join } from 'node:path';
 
 export type JournalEvent =
   | { kind: 'session'; build: string; startedAt: string; startCapital: string }
+  /**
+   * One row per model call — the corpus this whole directory exists to build.
+   *
+   * `call` carries the provider, the model id, the effort tier, wall-clock ms,
+   * all four token counts and the cost. Everything else about a session is
+   * downstream of those: which model produced this run, what it cost, how long
+   * the player waited, and — once there are enough of them — whether a cheaper
+   * model reaches the same outcome.
+   *
+   * Emitted per *attempt*, so a draft that truncated and retried is two rows.
+   * The first one was billed, and a corpus that drops it prices the failures at
+   * zero, which is exactly backwards: the failures are the expensive ones.
+   */
+  | ({ kind: 'call' } & CallRecord)
   | {
       kind: 'turn';
       index: number;
@@ -150,6 +165,12 @@ export interface SessionSummary {
   faults: string[];
   transientRetries: number;
   costUsd: number | undefined;
+  /** Every model that answered in this session, in first-seen order. */
+  models: string[];
+  /** Model calls made, including the attempts that failed. */
+  calls: number;
+  /** Seconds of wall clock the player spent waiting on a model. */
+  waitedSeconds: number;
   outcome: 'committed' | 'abandoned' | 'unfinished';
   quarters: number;
   /** Why it ended, when it ended badly. */
@@ -174,7 +195,23 @@ export function readSession(file: string): SessionSummary {
   const draft = events.find((e) => e.kind === 'draft');
   const commit = events.find((e) => e.kind === 'commit');
   const abandoned = events.find((e) => e.kind === 'abandoned');
-  const spend = events.find((e) => e.kind === 'spend');
+  /**
+   * Priced from the per-call records, which carry the model that produced them.
+   *
+   * The previous version multiplied a session token total by $15 and $75 —
+   * hardcoded Opus 4.x list rates, duplicated here on purpose so a script
+   * reading the journal needed nothing else. The duplication was the point and
+   * it was also the bug: those rates went stale, nothing noticed, and every
+   * cost figure `--sessions` has ever printed was roughly threefold high.
+   *
+   * Now the price is computed once, at the call, against the model that
+   * actually answered — and written into the record. Reading it back is
+   * addition. Sessions recorded before this carry no call records and report
+   * no cost, which is the honest answer for a run whose model was never noted.
+   */
+  const calls = events.filter((e) => e.kind === 'call');
+  const models: string[] = [];
+  for (const c of calls) if (!models.includes(c.model)) models.push(c.model);
 
   return {
     file,
@@ -184,17 +221,14 @@ export function readSession(file: string): SessionSummary {
     turns: events.filter((e) => e.kind === 'turn').length,
     faults: events.filter((e) => e.kind === 'fault').flatMap((e) => e.issues),
     transientRetries: events.filter((e) => e.kind === 'transient').length,
-    costUsd: spend ? estimateCost(spend) : undefined,
+    costUsd: calls.length > 0 ? calls.reduce((sum, c) => sum + c.costUsd, 0) : undefined,
+    models,
+    calls: calls.length,
+    waitedSeconds: Math.round(calls.reduce((sum, c) => sum + c.ms, 0) / 1000),
     outcome: commit?.committed ? 'committed' : abandoned ? 'abandoned' : 'unfinished',
     quarters: events.filter((e) => e.kind === 'quarter').length,
     reason: abandoned?.reason,
   };
-}
-
-/** Deliberately duplicated from `spend.ts` rather than imported: the journal
- * must stay readable by a script that knows nothing about the rest of this. */
-function estimateCost(s: { inputTokens: number; outputTokens: number }): number {
-  return (s.inputTokens * 15) / 1_000_000 + (s.outputTokens * 75) / 1_000_000;
 }
 
 export function listSessions(dir = journalDir()): SessionSummary[] {

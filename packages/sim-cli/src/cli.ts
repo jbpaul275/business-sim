@@ -9,7 +9,7 @@ import { conceptPathAvailable } from './concept.js';
 import { benchmarkLines } from './portfolio.js';
 import { runSetup } from './setup.js';
 import { openInput } from './input.js';
-import { journalDir, listSessions } from './journal.js';
+import { journalDir, listSessions, type Journal } from './journal.js';
 import { summariseFaults } from './faults.js';
 
 /**
@@ -38,15 +38,23 @@ function reportSessions(): void {
   const pad = (s: string, n: number): string =>
     s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n);
 
-  console.log(`\n${BOLD}${pad('WHEN', 18)}${pad('BUILD', 9)}${pad('BUSINESS', 30)}${pad('OUTCOME', 12)}${pad('TURNS', 6)}${pad('QTRS', 6)}COST${RESET}`);
+  // The model is a column, not a footnote. Every other number here is only
+  // interpretable against it: a $0.04 session and a $0.31 session say nothing
+  // about which is better value until you know what answered them.
+  console.log(
+    `\n${BOLD}${pad('WHEN', 18)}${pad('BUILD', 9)}${pad('BUSINESS', 26)}${pad('MODEL', 18)}` +
+      `${pad('OUTCOME', 12)}${pad('TURNS', 6)}${pad('QTRS', 6)}${pad('WAIT', 7)}COST${RESET}`,
+  );
   for (const s of sessions) {
     console.log(
       pad(s.startedAt.slice(0, 16).replace('T', ' '), 18) +
         pad(s.build, 9) +
-        pad(s.businessName ?? '—', 30) +
+        pad(s.businessName ?? '—', 26) +
+        pad(s.models.join('+') || '—', 18) +
         pad(s.outcome, 12) +
         pad(String(s.turns), 6) +
         pad(String(s.quarters), 6) +
+        pad(s.calls > 0 ? `${s.waitedSeconds}s` : '—', 7) +
         (s.costUsd !== undefined ? `$${s.costUsd.toFixed(2)}` : '—'),
     );
   }
@@ -59,6 +67,37 @@ function reportSessions(): void {
       `${turns} turns · $${spent.toFixed(2)} · ` +
       `${sessions.reduce((a, s) => a + s.transientRetries, 0)} retries after an overload${RESET}`,
   );
+
+  /**
+   * Cost per *committed* session, by model — the number a routing decision is
+   * actually made on.
+   *
+   * Not cost per session. A cheap model that gets abandoned half the time is
+   * not cheap, it just fails earlier; averaging its abandonments in with its
+   * successes is how a worse model wins a spreadsheet. This divides total spend
+   * by the runs that reached a business, so a model pays for its own failures.
+   */
+  const byModel = new Map<string, { runs: number; committed: number; cost: number; wait: number }>();
+  for (const s of sessions) {
+    if (s.models.length === 0) continue;
+    const key = s.models.join('+');
+    const row = byModel.get(key) ?? { runs: 0, committed: 0, cost: 0, wait: 0 };
+    row.runs += 1;
+    if (s.outcome === 'committed') row.committed += 1;
+    row.cost += s.costUsd ?? 0;
+    row.wait += s.waitedSeconds;
+    byModel.set(key, row);
+  }
+  if (byModel.size > 0) {
+    console.log(`\n${BOLD}COST PER COMMITTED SESSION, BY MODEL${RESET}`);
+    for (const [model, r] of [...byModel].sort((a, b) => b[1].runs - a[1].runs)) {
+      const per = r.committed > 0 ? `$${(r.cost / r.committed).toFixed(2)}` : 'never committed';
+      console.log(
+        `  ${pad(model, 20)}${pad(`${r.committed}/${r.runs} committed`, 20)}` +
+          `${pad(per, 16)}${DIM}${Math.round(r.wait / r.runs)}s of waiting per run${RESET}`,
+      );
+    }
+  }
 
   // The faults, ranked. This is the number that says which check is
   // miscalibrated, and it is invisible one session at a time.
@@ -308,7 +347,7 @@ async function main(): Promise<void> {
         await play(setup.world, {
           input,
           ...(setup.journal ? { journal: setup.journal } : {}),
-          ...(turnAdvisor() ? { advisor: turnAdvisor()! } : {}),
+          ...(turnAdvisor(setup.journal) ? { advisor: turnAdvisor(setup.journal)! } : {}),
         });
       }
       if (setup?.journal?.path) {
@@ -424,12 +463,22 @@ async function main(): Promise<void> {
  */
 let advisorInstance: AdviceTransport | undefined;
 let advisorResolved = false;
-function turnAdvisor(): AdviceTransport | undefined {
+/**
+ * The journal arrives after setup, so it is handed in rather than closed over.
+ *
+ * Advisor calls are the highest-volume call type in a long run — one per
+ * question, every quarter — and until now they recorded nothing at all. They
+ * are also the best candidate for a cheaper model, which is precisely the
+ * decision that needs the numbers.
+ */
+function turnAdvisor(journal?: Journal): AdviceTransport | undefined {
   if (!advisorResolved) {
     advisorResolved = true;
     advisorInstance =
       conceptPathAvailable() && !process.env['BIZSIM_NO_TURN_AI']
-        ? createConceptTransport()
+        ? createConceptTransport({
+            onCall: (record) => journal?.write({ kind: 'call', ...record }),
+          })
         : undefined;
   }
   return advisorInstance;

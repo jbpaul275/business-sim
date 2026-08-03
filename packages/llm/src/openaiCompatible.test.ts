@@ -7,7 +7,12 @@ import {
   isCancellation,
   isTransient,
 } from './client.js';
-import { KIMI_DEFAULT_MODEL, KimiConceptTransport } from './kimi.js';
+import {
+  KIMI_DEFAULT_MODEL,
+  KimiConceptTransport,
+  OpenAICompatibleTransport,
+  VENDORS,
+} from './openaiCompatible.js';
 import { createConceptTransport, providerKeyVar, providerName } from './provider.js';
 import { MINIMAL_DRAFT } from './fixtures.js';
 
@@ -87,7 +92,7 @@ describe('choosing a provider', () => {
     delete process.env['BIZSIM_LLM_PROVIDER'];
     expect(providerName()).toBe('kimi');
     expect(providerKeyVar()).toBe('MOONSHOT_API_KEY');
-    expect(createConceptTransport()).toBeInstanceOf(KimiConceptTransport);
+    expect(createConceptTransport()).toBeInstanceOf(OpenAICompatibleTransport);
   });
 
   it('falls back to Anthropic when only that key is set, rather than failing', () => {
@@ -99,6 +104,47 @@ describe('choosing a provider', () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant';
     expect(providerName()).toBe('anthropic');
     expect(providerKeyVar()).toBe('ANTHROPIC_API_KEY');
+  });
+
+  it('reaches any vendor in the table, not a hardcoded two', () => {
+    /**
+     * The infrastructure claim. Model cost is the binding constraint on what
+     * this can be sold for, and the cheapest model that can do a job is not
+     * something anyone reasons their way to — it has to be measured, one vendor
+     * at a time. A transport per vendor would have made that a week of work
+     * each and it would never have happened.
+     */
+    delete process.env['MOONSHOT_API_KEY'];
+    process.env['BIZSIM_LLM_PROVIDER'] = 'deepseek';
+    process.env['DEEPSEEK_API_KEY'] = 'sk-ds';
+    process.env['BIZSIM_MODEL'] = 'deepseek-chat';
+    expect(providerName()).toBe('deepseek');
+    expect(providerKeyVar()).toBe('DEEPSEEK_API_KEY');
+    const t = createConceptTransport() as unknown as { vendor: string; client: { baseURL: string } };
+    expect(t.vendor).toBe('deepseek');
+    expect(t.client.baseURL).toBe(VENDORS['deepseek']!.baseURL);
+  });
+
+  it('refuses a vendor with no default model rather than guessing one', () => {
+    // A catalogue that turns over monthly gets no default. A stale id baked in
+    // here is a 404 on a Tuesday, in front of a player, for no benefit.
+    delete process.env['BIZSIM_MODEL'];
+    expect(() => new OpenAICompatibleTransport({ vendor: 'groq', apiKey: 'x' })).toThrow(
+      /BIZSIM_MODEL/,
+    );
+  });
+
+  it('omits reasoning_effort for a vendor that does not take it', async () => {
+    // Sending an unrecognised parameter is a 400 on some of these and silently
+    // ignored on others, and neither is a thing to discover live.
+    const t = new OpenAICompatibleTransport({
+      vendor: 'groq',
+      apiKey: 'x',
+      model: 'some-groq-model',
+    });
+    const seen = stub(t, () => textChunks(TURN));
+    await t.turn('system', [{ role: 'user', content: 'x' }]);
+    expect(seen[0]!['reasoning_effort']).toBeUndefined();
   });
 
   it('honours a forced provider even when that key is missing', () => {
