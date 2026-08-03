@@ -403,10 +403,14 @@ describe('the concept path reaches the same gate as the picker', () => {
     // the one that did not, for no reason but that it failed a different check.
     const broken = { ...draft, stream: { label: 'Only a label' } };
     let asked = 0;
+    let turnsMade = 0;
     const transport = {
-      turn: async () => ({
-        turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
-      }),
+      turn: async () => {
+        turnsMade += 1;
+        return {
+          turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+        };
+      },
       advise: () => Promise.reject(new Error('no advice in this double')),
       adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => {
@@ -429,6 +433,10 @@ describe('the concept path reaches the same gate as the picker', () => {
       const result = await runSetup(input, { transport });
       const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
       expect(asked).toBe(2);
+      // The repair goes straight back to the drafting call. It used to travel
+      // as a player message, which paid a full conversational turn — the model
+      // saying "resending it now" at 8-15 seconds — before every re-draft.
+      expect(turnsMade).toBe(1);
       expect(result?.committed).toBe(true);
       // And the player is told something is being fixed, not what — the
       // schema paths are the model's homework.

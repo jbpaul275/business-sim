@@ -263,6 +263,18 @@ export async function runConceptInterview(
   let turns = 0;
 
   /**
+   * A correction for the drafting call, set by a repair round.
+   *
+   * When present, the next pass skips the conversational half entirely —
+   * `repairDraft` puts the correction in front of the drafting call and only
+   * the drafting call. Routing it through `send` (the old shape) paid a full
+   * turn call first, whose entire contribution was the model saying
+   * "resending it now" to the player, at 8-15 seconds and one billed call per
+   * repair round.
+   */
+  let pendingRepair: string | undefined;
+
+  /**
    * `why` shows the reasoning behind the last turn.
    *
    * It costs nothing. Thinking is billed whether or not the summary is
@@ -284,7 +296,9 @@ export async function runConceptInterview(
   };
 
   for (;;) {
-    if (!reply.trim()) {
+    // A repair pass carries no new player message, so the player-input
+    // handling below (blanks, `why`, `undo`) must not re-read the stale one.
+    if (pendingRepair === undefined && !reply.trim()) {
       blanks += 1;
       if (blanks > MAX_BLANKS) {
         console.log(`\n  ${DIM}No input — abandoning setup. Nothing was committed.${RESET}`);
@@ -296,7 +310,7 @@ export async function runConceptInterview(
     }
     blanks = 0;
 
-    if (/^(why|explain)\b/i.test(reply)) {
+    if (pendingRepair === undefined && /^(why|explain)\b/i.test(reply)) {
       showReasoning();
       reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
       continue;
@@ -310,7 +324,7 @@ export async function runConceptInterview(
      * underneath. Every turn after that was reasoning against both. Taking the
      * pair back out is the whole fix.
      */
-    if (/^(undo|back|oops|scratch that)\b/i.test(reply)) {
+    if (pendingRepair === undefined && /^(undo|back|oops|scratch that)\b/i.test(reply)) {
       console.log(
         interview.undo()
           ? `  ${DIM}Taken back. The conversation is where it was before that message.${RESET}`
@@ -321,9 +335,28 @@ export async function runConceptInterview(
     }
 
     let state;
-    spinner = waiting(process.stdout.isTTY ? 'thinking · Ctrl-C to stop' : 'thinking');
+    spinner = waiting(
+      pendingRepair !== undefined
+        ? 'asking for a corrected draft'
+        : process.stdout.isTTY
+          ? 'thinking · Ctrl-C to stop'
+          : 'thinking',
+    );
     try {
-      state = await whileCalling(() => interview.send(reply));
+      if (pendingRepair !== undefined) {
+        const correction = pendingRepair;
+        pendingRepair = undefined;
+        const repaired = await whileCalling(() => interview.repairDraft(correction));
+        state = {
+          status: 'DRAFTED' as const,
+          message: '',
+          cta: '',
+          draft: repaired,
+          transcript: interview.transcript,
+        };
+      } else {
+        state = await whileCalling(() => interview.send(reply));
+      }
     } catch (error) {
       spinner.stop();
       /**
@@ -423,7 +456,12 @@ export async function runConceptInterview(
         repairs += 1;
         console.log(`${DIM}  ${faultLine([error.detail], repairs)}${RESET}`);
         if (process.env['BIZSIM_DEBUG']) console.log(`    ${DIM}${error.message}${RESET}`);
-        reply =
+        // The paths go to the journal even though they are hidden from the
+        // player: which fields the model forgets, across sessions, is what
+        // decides whether the cure is a schema default, a prompt line, or a
+        // different draft model.
+        journal?.write({ kind: 'draft_rejected', round: repairs, detail: error.detail });
+        pendingRepair =
           `That draft did not match the schema — ${error.detail}. ` +
           `Emit the whole draft again, with every required field present.`;
         continue;
@@ -451,25 +489,33 @@ export async function runConceptInterview(
     // someone talking is distinguishable at a glance from the region that is
     // the ledger. They should not look alike.
     if (state.message.trim()) console.log(`\n${speech(wrap(state.message, 70, ''))}`);
-    console.log(`\n${speech(BOLD + wrap(state.cta, 70, '') + RESET)}`);
-    journal?.write({
-      kind: 'turn',
-      index: turns,
-      player: reply,
-      message: state.message,
-      cta: state.cta,
-      ...(interview.lastReasoning ? { reasoning: interview.lastReasoning } : {}),
-      ms: interview.lastTurn?.ms ?? 0,
-      thinkingTokens: interview.lastTurn?.thinkingTokens ?? 0,
-      calls: interview.lastTurn?.calls ?? 1,
-    });
-    turns += 1;
+    // A repair or draft-retry pass has no conversational half — printing its
+    // empty cta would draw a blank speech bubble between spinner and register.
+    if (state.cta.trim()) console.log(`\n${speech(BOLD + wrap(state.cta, 70, '') + RESET)}`);
+    // A repair or draft-retry pass made no conversational turn: journalling
+    // one would record the previous player message a second time with a blank
+    // answer, and the footer would print the timing of a turn that did not
+    // happen on this pass.
+    if (state.message.trim() || state.cta.trim()) {
+      journal?.write({
+        kind: 'turn',
+        index: turns,
+        player: reply,
+        message: state.message,
+        cta: state.cta,
+        ...(interview.lastReasoning ? { reasoning: interview.lastReasoning } : {}),
+        ms: interview.lastTurn?.ms ?? 0,
+        thinkingTokens: interview.lastTurn?.thinkingTokens ?? 0,
+        calls: interview.lastTurn?.calls ?? 1,
+      });
+      turns += 1;
 
-    const effort = effortLine(interview.lastTurn);
-    const why = state.message.trim() && interview.lastReasoning ? '`why` to see how it got there' : '';
-    const footer = [why, effort].filter(Boolean).join(' · ');
-    if (footer) console.log(`${accent('▏')} ${DIM}${footer}${RESET}`);
-    console.log('');
+      const effort = effortLine(interview.lastTurn);
+      const why = state.message.trim() && interview.lastReasoning ? '`why` to see how it got there' : '';
+      const footer = [why, effort].filter(Boolean).join(' · ');
+      if (footer) console.log(`${accent('▏')} ${DIM}${footer}${RESET}`);
+      console.log('');
+    }
 
     if (state.status === 'ASKING') {
       reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
@@ -527,7 +573,7 @@ export async function runConceptInterview(
       if (process.env['BIZSIM_DEBUG']) {
         for (const issue of issues) console.log(`    ${DIM}- ${wrap(issue, 70, '      ').trimStart()}${RESET}`);
       }
-      reply =
+      pendingRepair =
         `That draft has structural problems: ${issues.join(' ')} ` +
         `Please correct them and emit the draft again.`;
       continue;

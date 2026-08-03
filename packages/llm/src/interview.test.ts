@@ -407,6 +407,45 @@ describe('figures the model states become commitments', () => {
   });
 });
 
+describe('repairDraft', () => {
+  /**
+   * A schema-rejected draft used to go back to the model as a *player
+   * message*, which cost a full conversational turn — the model answering
+   * "resending it now" at 8-15 seconds and one billed call — before the
+   * re-draft. The correction is for the drafting call, so it goes to the
+   * drafting call.
+   */
+  it('re-drafts with the correction and without a conversational turn', async () => {
+    const transport = new ScriptedTransport([ready('Building it now.')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A soft-serve truck, go ahead.');
+    const callsBefore = transport.seen.length;
+
+    await interview.repairDraft('That draft did not match the schema — overheads.monthlyRent.');
+
+    // Exactly one more call reached the transport: the draft. No turn.
+    expect(transport.seen.length).toBe(callsBefore + 1);
+    const repairCall = transport.seen.at(-1)!;
+    expect(repairCall.messages.at(-1)?.content).toContain('overheads.monthlyRent');
+  });
+
+  it('replaces a previous correction rather than stacking user messages', async () => {
+    // Some providers reject non-alternating roles, and the newer correction
+    // supersedes the older one anyway.
+    const transport = new ScriptedTransport([ready('Building it now.')], [draft()]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A soft-serve truck, go ahead.');
+
+    await interview.repairDraft('First correction: fields were missing.');
+    await interview.repairDraft('Second correction: still missing.');
+
+    const lastCall = transport.seen.at(-1)!;
+    const userTail = lastCall.messages.filter((m) => m.content.includes('correction'));
+    expect(userTail).toHaveLength(1);
+    expect(userTail[0]!.content).toContain('Second correction');
+  });
+});
+
 describe('paramsToRecord', () => {
   it('folds the wire array into the record the engine expects', () => {
     const record = paramsToRecord(draft().stream.params);

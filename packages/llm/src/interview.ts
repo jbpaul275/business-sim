@@ -191,6 +191,30 @@ export class ConceptInterview {
     return this.runDraft();
   }
 
+  /**
+   * Re-draft after the schema or a structural check rejected one, carrying the
+   * correction — without a conversational turn.
+   *
+   * The repair used to be sent as a player message, which cost a full turn
+   * call before the re-draft: the model would reply "resending it now" (shown
+   * to the player as conversation), *then* draft. The turn added 8-15 seconds
+   * and one more billed call to every repair round and said nothing. The
+   * correction is for the drafting call, so it goes to the drafting call.
+   *
+   * A repeated repair replaces the previous correction rather than stacking a
+   * second consecutive user message — the new correction supersedes the old
+   * one, and some providers reject non-alternating roles.
+   */
+  async repairDraft(correction: string): Promise<ConceptDraft> {
+    const last = this.transcript[this.transcript.length - 1];
+    if (last?.role === 'user') {
+      this.transcript[this.transcript.length - 1] = { role: 'user', content: correction };
+    } else {
+      this.transcript.push({ role: 'user', content: correction });
+    }
+    return this.runDraft();
+  }
+
   private async runDraft(): Promise<ConceptDraft> {
     this.onDrafting?.();
     // A second call, with the draft schema this time. Splitting the two is what
