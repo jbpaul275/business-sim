@@ -174,6 +174,28 @@ describe('the Kimi transport', () => {
     });
   });
 
+  it('names the provider and model it resolved, for the screen to print', () => {
+    /**
+     * "How can I confirm it's using Kimi and not Anthropic?" — a fair question
+     * with no answer until the session ended and the spend line named the
+     * models, which is too late to be running the comparison you meant to run.
+     *
+     * Read off the transport rather than re-derived from the environment,
+     * because the transport has already resolved option → BIZSIM_TURN_MODEL →
+     * BIZSIM_MODEL → vendor default. A second copy of that ladder would drift,
+     * and a screen naming the wrong model is worse than one naming none.
+     */
+    expect(transport().describe()).toBe('kimi · kimi-k3');
+    // And it says so when the two calls are routed differently, which is the
+    // configuration the whole cost argument is heading toward.
+    const split = new OpenAICompatibleTransport({
+      apiKey: 'x',
+      turnModel: 'kimi-k2.6',
+      draftModel: 'kimi-k3',
+    });
+    expect(split.describe()).toBe('kimi · kimi-k2.6 (turns), kimi-k3 (draft)');
+  });
+
   it('collapses five effort tiers onto K3s three, downward', async () => {
     // `medium` is the interview turn's setting and it goes to `low`, because
     // K3's floor is not Anthropic's floor: the model reasons at every tier.

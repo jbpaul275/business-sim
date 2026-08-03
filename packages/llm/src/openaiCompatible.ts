@@ -269,6 +269,12 @@ export class OpenAICompatibleTransport implements ConceptTransport {
     this.onCall = options.onCall;
   }
 
+  describe(): string {
+    return this.turnModel === this.draftModel
+      ? `${this.vendor} · ${this.turnModel}`
+      : `${this.vendor} · ${this.turnModel} (turns), ${this.draftModel} (draft)`;
+  }
+
   private async complete(
     kind: CallKind,
     attempt: number,

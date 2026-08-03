@@ -125,6 +125,16 @@ export interface ConceptTransport {
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
   /**
+   * Who is answering, for the player — "kimi · kimi-k3".
+   *
+   * On the transport rather than derived from the environment, because the
+   * transport has already done the resolution: option, then `BIZSIM_TURN_MODEL`,
+   * then `BIZSIM_MODEL`, then the vendor default. A second copy of that ladder
+   * anywhere else would drift, and a screen that names the wrong model is worse
+   * than one that names none — it is the answer to the question being asked.
+   */
+  describe?(): string;
+  /**
    * Everything this transport has spent, running.
    *
    * On the transport rather than threaded through return types because the
@@ -388,6 +398,12 @@ export class AnthropicConceptTransport implements ConceptTransport {
     this.adviceMaxTokens = options.adviceMaxTokens ?? budget('BIZSIM_ADVICE_MAX_TOKENS', 4_000);
     this.draftEffort = options.draftEffort ?? envEffort('BIZSIM_DRAFT_EFFORT', 'high');
     this.onCall = options.onCall;
+  }
+
+  describe(): string {
+    return this.turnModel === this.draftModel
+      ? `anthropic · ${this.turnModel}`
+      : `anthropic · ${this.turnModel} (turns), ${this.draftModel} (draft)`;
   }
 
   private async complete(
@@ -709,6 +725,10 @@ export class ScriptedTransport implements ConceptTransport {
     private readonly advice: readonly TurnAdvice[] = [],
     private readonly rulings: readonly Adjudication[] = [],
   ) {}
+
+  describe(): string {
+    return 'a scripted transport — no model was called';
+  }
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
     this.seen.push({ system, messages: [...messages] });
