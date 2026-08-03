@@ -17,6 +17,7 @@ import { waiting } from './waiting.js';
 import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
 import { accent, note, rule, speech, youPrompt } from './ui.js';
 import { spendLine } from './spend.js';
+import { faultLine } from './faults.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -230,9 +231,7 @@ export async function runConceptInterview(
        */
       if (error instanceof MalformedDraftError && repairs < MAX_REPAIRS) {
         repairs += 1;
-        console.log(
-          `${DIM}  the first draft did not come out right — asking for a corrected one${RESET}`,
-        );
+        console.log(`${DIM}  ${faultLine([error.detail], repairs)}${RESET}`);
         if (process.env['BIZSIM_DEBUG']) console.log(`    ${DIM}${error.message}${RESET}`);
         reply =
           `That draft did not match the schema — ${error.detail}. ` +
@@ -308,9 +307,7 @@ export async function runConceptInterview(
        * It is the model's homework. That it is being redone is worth one line;
        * the schema vocabulary is not.
        */
-      console.log(
-        `${DIM}  the first draft did not come out right — asking for a corrected one${RESET}`,
-      );
+      console.log(`${DIM}  ${faultLine(issues, repairs)}${RESET}`);
       if (process.env['BIZSIM_DEBUG']) {
         for (const issue of issues) console.log(`    ${DIM}- ${wrap(issue, 70, '      ').trimStart()}${RESET}`);
       }

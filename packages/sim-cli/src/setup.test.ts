@@ -421,7 +421,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       expect(result?.committed).toBe(true);
       // And the player is told something is being fixed, not what — the
       // schema paths are the model's homework.
-      expect(printed).toContain('did not come out right');
+      expect(printed).toContain('came back incomplete');
       expect(printed).not.toContain('provenance');
     } finally {
       log.mockRestore();
