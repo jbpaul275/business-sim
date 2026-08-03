@@ -2,6 +2,7 @@ import { mulRate, type Money } from '@bizsim/money';
 import {
   DEFAULT_MAINTENANCE_PCT,
   LEAD_TIMES,
+  maxSeatsFor,
   type Action,
   type Business,
   type EngineEvent,
@@ -329,7 +330,15 @@ export function applyAction(
       capitalise();
       const params = stream.params;
       if (params.kind === 'TRAFFIC' && action.spec.deltaSeats && params.capacityModel.kind === 'SEAT_TURNS') {
-        params.capacityModel.seats += action.spec.deltaSeats;
+        // Validation bounds seats at concept lock; without the same bound here
+        // a player just buys their way past it one buildout at a time. Taking
+        // more space is allowed — it is the free seats that are not.
+        const capacity = params.capacityModel;
+        capacity.floorAreaSqFt += action.spec.deltaFloorAreaSqFt ?? 0;
+        capacity.seats = Math.min(
+          capacity.seats + action.spec.deltaSeats,
+          maxSeatsFor(capacity.floorAreaSqFt),
+        );
       } else if (params.kind === 'OCCUPANCY' && action.spec.deltaUnits) {
         params.units += action.spec.deltaUnits;
       } else if (params.kind === 'PROJECT_BACKLOG' && action.spec.deltaExecutionCapacity) {

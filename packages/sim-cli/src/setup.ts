@@ -10,6 +10,7 @@ import {
 import {
   START_CAPITAL,
   computeConfidenceScore,
+  deviationLabel,
   isWellSourced,
   type Archetype,
   type Assumption,
@@ -202,7 +203,12 @@ function renderRegister(model: BusinessModel): void {
   const counts: Partial<Record<Provenance, number>> = {};
   for (const a of assumptions) counts[a.provenance] = (counts[a.provenance] ?? 0) + 1;
 
-  const outOfBand = assumptions.filter((a) => a.outsideBenchmark);
+  // Ordered by how far out, not by where they happen to sit in the register:
+  // a rent 1.1x the top of its range and a ticket price 22x are both "out of
+  // band", and only one of them is worth a founder's attention first (D-5).
+  const outOfBand = assumptions
+    .filter((a) => a.outsideBenchmark)
+    .sort((a, b) => Math.abs(b.benchmarkDeviation ?? 0) - Math.abs(a.benchmarkDeviation ?? 0));
   const weak = assumptions.filter((a) => !isWellSourced(a.provenance));
 
   console.log(`\n${BOLD}ASSUMPTIONS${RESET}  ${assumptions.length} registered`);
@@ -227,13 +233,15 @@ function renderRegister(model: BusinessModel): void {
     for (const a of outOfBand.slice(0, 8)) {
       const value = a.isMoney ? toDisplay(a.value as bigint, { showCents: false }) : String(a.value);
       const band = a.benchmarkBand;
+      const magnitude = deviationLabel(a);
       console.log(
-        `    ${pad(a.label, 34)}${rpad(value, 12)}  ${YELLOW}band ${band?.low}–${band?.high}${RESET}` +
-          `  ${DIM}${band?.source ?? ''}${RESET}`,
+        `    ${pad(a.label, 34)}${rpad(value, 12)}  ${YELLOW}${rpad(magnitude ?? '', 26)}${RESET}` +
+          `${DIM}band ${band?.low}–${band?.high} · ${band?.source ?? ''}${RESET}`,
       );
     }
     console.log(
-      `\n  ${DIM}The sim will challenge these when the adjudication loop lands (§11.3.1).${RESET}`,
+      `\n  ${DIM}Out of band is not wrong — it is a number that has to be earned. The sim${RESET}\n` +
+        `  ${DIM}will ask what makes it true when the adjudication loop lands (§11.3.1).${RESET}`,
     );
   }
 

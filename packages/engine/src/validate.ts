@@ -3,7 +3,7 @@ import type {
   ValidationIssue,
   ValidationResult,
 } from '@bizsim/schemas';
-import { ARCHETYPE_DRIVER } from '@bizsim/schemas';
+import { ARCHETYPE_DRIVER, MIN_SQ_FT_PER_SEAT, maxSeatsFor } from '@bizsim/schemas';
 
 /**
  * `validateBusinessModel` — spec §10.2 and §11.2.
@@ -110,6 +110,28 @@ export function validateBusinessModel(model: BusinessModel): ValidationResult {
         path: `streams.${stream.id}.params.referencePrice`,
         message: 'referencePrice is the elasticity anchor and must be set at concept lock.',
       });
+    }
+
+    // D-5: the one thing the engine refuses is physical impossibility. Seats
+    // are the input every unbounded revenue claim runs through — capacity is
+    // seats × turns × days, so nothing else caps a concept that asserts a
+    // hundred thousand of them. This is a building code, not an opinion about
+    // the business, which is exactly why it is allowed to be a hard error.
+    if (stream.params.kind === 'TRAFFIC' && stream.params.capacityModel.kind === 'SEAT_TURNS') {
+      const { seats, floorAreaSqFt } = stream.params.capacityModel;
+      const capacity = maxSeatsFor(floorAreaSqFt);
+      if (seats > capacity) {
+        issues.push({
+          severity: 'ERROR',
+          code: 'CAPACITY_EXCEEDS_FOOTPRINT',
+          path: `streams.${stream.id}.params.capacityModel.seats`,
+          message:
+            `${seats} seats will not fit in ${floorAreaSqFt} sq ft. At ${MIN_SQ_FT_PER_SEAT} sq ft ` +
+            `per seat — the code minimum for standing assembly, so already generous — that space ` +
+            `holds ${capacity}. Either take ${Math.ceil(seats * MIN_SQ_FT_PER_SEAT)} sq ft ` +
+            `(and carry the rent) or seat ${capacity}.`,
+        });
+      }
     }
   }
 

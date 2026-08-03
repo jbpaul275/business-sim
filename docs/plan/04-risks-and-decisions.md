@@ -147,18 +147,29 @@ So there are three tiers, not two:
 | **Far outside any anchor** | A value many multiples from the nearest defensible reference — $200 a scoop, 40% capture of a metro trade area | **Challenge, and report the magnitude.** Never refuse. |
 | **In band, or modestly outside** | Everything else | **Register and move on.** |
 
-Two consequences for the build, both currently unimplemented:
+Two consequences for the build, both now implemented:
 
-1. **The register needs a deviation *magnitude*, not a boolean.** `outsideBenchmark: boolean` can only say
-   "outside," which is the same word for 1.2× and 22× and is therefore useless as a weak constraint. Replace
-   it with a signed ratio so the challenge loop can say *"this is 22× the nearest anchor — what makes that
-   true?"* rather than *"this is out of band."* The first is a question a founder can answer; the second
-   reads as a verdict, which is what D-5 exists to avoid.
-2. **The capacity model needs a footprint, and validation needs to check it.** Nothing today stops a concept
-   claiming 100,000 counter positions, which is exactly how a billion-dollar single-location scoop shop gets
-   modelled. That is not a taste judgement to argue about — it is 100,000 positions in 900 square feet, and
-   it is the *mechanism* that makes "no billion-dollar ice cream shop" arithmetic rather than opinion. The
-   engine's capacity model is already the hard constraint; it is just currently unbounded on the input side.
+1. **The register carries a deviation *magnitude*, not just a boolean.** `outsideBenchmark` can only say
+   "outside," which is the same word for 1.2× and 22× and is therefore useless as a weak constraint.
+   `Assumption.benchmarkDeviation` measures the miss in **band-widths** — signed, zero inside — and
+   `deviationLabel()` renders the founder-facing phrasing (*"17× the top of the range"*), falling back to
+   band-widths when the band straddles zero and a multiple would mislead. Band-widths rather than a raw
+   ratio because a seed-stage SaaS EBITDA band genuinely runs −15% to 30%, and `value / low` is meaningless
+   against a negative edge. The register review now sorts by magnitude, so the startling number is the one a
+   founder sees first. This is what lets M4 ask *"what makes 22× true?"* instead of announcing *"out of
+   band"* — the first is a question, the second is a verdict.
+2. **The capacity model carries a footprint, and validation checks it.** `floorAreaSqFt` is a **required**
+   field on `SEAT_TURNS`, not an optional one: a capacity claim with no box behind it is unfalsifiable, and
+   an optional field would simply be omitted by the concepts that most need it. `MIN_SQ_FT_PER_SEAT = 7`
+   comes from IBC Table 1004.5 (assembly standing space is 5 net sq ft per occupant; concentrated seating
+   is 7), applied against *gross* floor area — so it sits well under anything real and only catches
+   fabrications. Over-capacity is a hard `CAPACITY_EXCEEDS_FOOTPRINT` error, and the message says what would
+   have to be true rather than just refusing: *"Either take 700000 sq ft (and carry the rent) or seat 261."*
+
+   The same bound had to go into `EXPAND_CAPACITY`, which previously added seats with nothing checking them
+   — validation only ran at concept lock, so a player could reach any capacity by repeating the buildout.
+   The action now takes an optional `deltaFloorAreaSqFt`, applied *before* seats: take the space and the
+   seats are yours, along with the rent. That argument belongs on the player's P&L, not in a refusal.
 
 Note what neither of these does: nothing here refuses $200 a scoop. It is physically possible, so it gets
 modelled. What the engine already has is the honest consequence — price elasticity anchored at the price set

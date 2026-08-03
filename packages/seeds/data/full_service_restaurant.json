@@ -83,6 +83,7 @@
     "baselineSkuCount": 40,
     "skuCount": 40,
     "seats": 64,
+    "floorAreaSqFt": 2400,
     "addressableTrafficPerQuarter": 180000
   },
   "modifierDefaults": {

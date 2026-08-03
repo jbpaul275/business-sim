@@ -30,6 +30,12 @@ export type DebtSpec = z.infer<typeof zDebtSpec>;
 export const zCapacitySpec = z.object({
   streamId: z.string(),
   deltaSeats: zNonNegative.optional(),
+  /**
+   * Extra floor area taken in the same buildout. Added before seats, so a
+   * player who wants more seats than the current box holds has to take (and
+   * pay rent on) the space first — see `MIN_SQ_FT_PER_SEAT`.
+   */
+  deltaFloorAreaSqFt: zNonNegative.optional(),
   deltaUnits: zNonNegative.optional(),
   deltaExecutionCapacity: zMoney.optional(),
   buildoutCost: zMoney,

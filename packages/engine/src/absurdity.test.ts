@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fromDisplay, ratio, type Money } from '@bizsim/money';
 import {
   computeConfidenceScore,
+  maxSeatsFor,
   zSeedTemplate,
   type AssumptionRegister,
   type SeedTemplate,
@@ -12,6 +13,8 @@ import { buildModelFromTemplate } from './buildModel.js';
 import { createWorld, createWorldConfig } from './opening.js';
 import { serviceComplexityFactor } from './modifiers.js';
 import { validateBusinessModel } from './validate.js';
+import { applyAction } from './actions.js';
+import { emptyActionFlows } from './period.js';
 import { tick, type TickResult } from './tick.js';
 
 /**
@@ -138,6 +141,9 @@ function iceCreamTemplate(flavours: number, positions: number): SeedTemplate {
       // A counter position turns far faster than a dining seat.
       turnsPerDay: 12,
       seats: positions,
+      // The box everything has to fit in: 900 sq ft of shop, ~15 per dipping
+      // cabinet, ~20 per service position. Stated, so it can be checked.
+      floorAreaSqFt: 900 + cabinets * 15 + positions * 20,
       peakConcentration: 0.55,
       baselineSkuCount: 40,
       skuCount: flavours,
@@ -448,6 +454,107 @@ describe('what the engine does refuse (§11.3 rule 6)', () => {
     for (const r of results) {
       expect(r.statements.consolidated.balanceSheet.cash).toBeGreaterThanOrEqual(0n);
     }
+  });
+
+  /**
+   * The billion-dollar scoop shop, which is the case that shows where the line
+   * actually falls. Revenue is servable customers × price; both factors may run
+   * far outside any benchmark, but their product is bounded by a physical box.
+   * Take the box away and the concept is unfalsifiable — which is not the same
+   * as ambitious.
+   */
+  it('refuses more seats than the floor can physically hold', () => {
+    const model = shopModel({ flavours: 256, ticket: 13, captureRate: 0.085 });
+    const capacity = model.streams[0]!.params;
+    if (capacity.kind !== 'TRAFFIC' || capacity.capacityModel.kind !== 'SEAT_TURNS') {
+      throw new Error('expected a seat-turns TRAFFIC stream');
+    }
+
+    // As designed it fits, and validation has nothing to say.
+    expect(validateBusinessModel(model).valid).toBe(true);
+
+    // Now claim the throughput a billion-dollar single location would need.
+    capacity.capacityModel.seats = 100_000;
+    const result = validateBusinessModel(model);
+    expect(result.valid).toBe(false);
+
+    const issue = result.issues.find((i) => i.code === 'CAPACITY_EXCEEDS_FOOTPRINT');
+    expect(issue?.severity).toBe('ERROR');
+    // And it says what would have to be true, rather than just refusing.
+    expect(issue?.message).toContain('700000 sq ft');
+  });
+
+  it('lets the same concept have the seats if it takes the space', () => {
+    // Nothing here is an opinion about whether a 1,200-seat ice cream hall is
+    // a good idea. Take the square footage and the model is valid; the rent
+    // that comes with it is the player's problem, which is the correct place
+    // for that argument to happen.
+    const roomy = shopModel({
+      flavours: 256,
+      ticket: 13,
+      captureRate: 0.085,
+      positions: 1_200,
+    });
+    expect(validateBusinessModel(roomy).valid).toBe(true);
+
+    const params = roomy.streams[0]!.params;
+    if (params.kind !== 'TRAFFIC' || params.capacityModel.kind !== 'SEAT_TURNS') {
+      throw new Error('expected a seat-turns TRAFFIC stream');
+    }
+    expect(params.capacityModel.seats).toBe(1_200);
+    expect(maxSeatsFor(params.capacityModel.floorAreaSqFt)).toBeGreaterThanOrEqual(1_200);
+  });
+
+  it('cannot be bought around one buildout at a time', () => {
+    // The runtime half of the same rule. EXPAND_CAPACITY used to add seats with
+    // nothing bounding them, so a player could reach any capacity by repeating
+    // the action — the validation gate only ever ran at concept lock.
+    const state = iceCreamShop({ flavours: 256, ticket: 13, captureRate: 0.085 });
+    const business = state.businesses[0]!;
+    const params = business.streams[0]!.params;
+    if (params.kind !== 'TRAFFIC' || params.capacityModel.kind !== 'SEAT_TURNS') {
+      throw new Error('expected a seat-turns TRAFFIC stream');
+    }
+    const { floorAreaSqFt } = params.capacityModel;
+    const ceiling = maxSeatsFor(floorAreaSqFt);
+
+    const ctx = {
+      state,
+      flows: new Map([[business.id, emptyActionFlows()]]),
+      nextId: () => 'asset-1',
+    };
+    applyAction(
+      ctx,
+      {
+        kind: 'EXPAND_CAPACITY',
+        businessId: business.id,
+        spec: {
+          streamId: business.streams[0]!.id,
+          deltaSeats: 100_000,
+          buildoutCost: fromDisplay(50_000),
+        },
+      },
+      'MATURED',
+    );
+    expect(params.capacityModel.seats).toBe(ceiling);
+
+    // Buying the floor space first is a different matter, and is allowed.
+    applyAction(
+      ctx,
+      {
+        kind: 'EXPAND_CAPACITY',
+        businessId: business.id,
+        spec: {
+          streamId: business.streams[0]!.id,
+          deltaSeats: 40,
+          deltaFloorAreaSqFt: 2_000,
+          buildoutCost: fromDisplay(50_000),
+        },
+      },
+      'MATURED',
+    );
+    expect(params.capacityModel.seats).toBe(ceiling + 40);
+    expect(params.capacityModel.floorAreaSqFt).toBe(floorAreaSqFt + 2_000);
   });
 
   it('rejects a payroll load of zero — that is a contract, not a preference', () => {

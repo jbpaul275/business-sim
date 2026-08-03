@@ -57,6 +57,24 @@ export const DEFAULT_ELASTICITY = {
 // Archetype parameters — spec §3.1–3.6
 // ---------------------------------------------------------------------------
 
+/**
+ * Square feet per seat below which a floor plan is not a business decision but
+ * a building-code violation. IBC Table 1004.5 puts assembly standing space at
+ * 5 net sq ft per occupant and concentrated seating at 7; 7 against *gross*
+ * floor area (which includes back of house, so it is far more generous than it
+ * looks) sits under anything real and only catches fabrications.
+ *
+ * This is the line D-5 draws: the engine refuses physical impossibility and
+ * nothing else. A shop may seat more people than its benchmark suggests, price
+ * however it likes, and lose money doing it — but 100,000 seats in 900 square
+ * feet is arithmetic, not ambition.
+ */
+export const MIN_SQ_FT_PER_SEAT = 7;
+
+/** The most seats a footprint can physically hold. */
+export const maxSeatsFor = (floorAreaSqFt: number): number =>
+  Math.floor(floorAreaSqFt / MIN_SQ_FT_PER_SEAT);
+
 export const zTrafficParams = z.object({
   kind: z.literal('TRAFFIC'),
   addressableTrafficPerQuarter: zNonNegative,
@@ -69,6 +87,14 @@ export const zTrafficParams = z.object({
       kind: z.literal('SEAT_TURNS'),
       seats: zPositive,
       turnsPerDay: zPositive,
+      /**
+       * The box the seats have to fit in. Required, not optional: a capacity
+       * claim with no footprint behind it is unfalsifiable, and D-5 leans on
+       * this being checkable — "no single-location ice cream shop does a
+       * billion in revenue" is only arithmetic if something bounds the seat
+       * count. See `MIN_SQ_FT_PER_SEAT`.
+       */
+      floorAreaSqFt: zPositive,
     }),
     z.object({
       kind: z.literal('THROUGHPUT'),

@@ -5,6 +5,7 @@ import {
   type Archetype,
   type ArchetypeParams,
   type Assumption,
+  benchmarkDeviation,
   type BusinessModel,
   type CostStructure,
   type CostDefault,
@@ -39,6 +40,8 @@ export interface ScaleInput {
   /** Per-archetype scale knobs. Anything omitted falls back to the template. */
   seats?: number;
   turnsPerDay?: number;
+  /** The box the seats sit in. Bounds `seats` — see `MIN_SQ_FT_PER_SEAT`. */
+  floorAreaSqFt?: number;
   addressableTrafficPerQuarter?: number;
   captureRate?: number;
   skuCount?: number;
@@ -91,7 +94,7 @@ function assume(
     low: numeric >= 0 ? numeric * 0.7 : numeric * 1.3,
     high: numeric >= 0 ? numeric * 1.3 : numeric * 0.7,
   };
-  sink.out.push({
+  const assumption: Assumption = {
     id: `a${(sink.next += 1)}`,
     businessId: '',
     path,
@@ -108,7 +111,14 @@ function assume(
       : false,
     challengeHistory: [],
     ...(opts.benchmarkBand ? { benchmarkBand: opts.benchmarkBand } : {}),
-  });
+  };
+
+  // Derived, never supplied: the magnitude has to stay consistent with the
+  // value and band or the challenge loop argues from a stale number (D-5).
+  const deviation = benchmarkDeviation(assumption);
+  if (deviation !== undefined) assumption.benchmarkDeviation = deviation;
+
+  sink.out.push(assumption);
 }
 
 const humanise = (key: string): string =>
@@ -160,6 +170,7 @@ function streamParams(
           kind: 'SEAT_TURNS',
           seats: scale.seats ?? num('seats', 60),
           turnsPerDay: scale.turnsPerDay ?? num('turnsPerDay', 2),
+          floorAreaSqFt: scale.floorAreaSqFt ?? num('floorAreaSqFt', 2_000),
         },
         peakConcentration: num('peakConcentration', 0.45),
         skuCount: scale.skuCount ?? num('skuCount', 40),

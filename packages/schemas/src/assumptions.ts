@@ -59,6 +59,22 @@ export const zAssumption = z.object({
 
   benchmarkBand: z.object({ low: z.number(), high: z.number(), source: z.string() }).optional(),
   outsideBenchmark: z.boolean(),
+  /**
+   * How far outside the band, in band-widths. Zero inside; positive above the
+   * high edge, negative below the low edge. Absent when there is no band.
+   *
+   * `outsideBenchmark` alone cannot serve as the weak constraint D-5 asks for:
+   * it says the same word for 1.2x and 22x, so the challenge loop can only
+   * announce "out of band" — which reads as a verdict. With a magnitude it can
+   * ask "what makes 22x true?", which is a question a founder can answer.
+   *
+   * Band-widths rather than a ratio to the edge because bands may straddle
+   * zero (a seed SaaS EBITDA band runs -15% to 30%), and `value / low` is
+   * meaningless — or wrong-signed — when an edge is zero or negative.
+   * `deviationLabel` renders the founder-facing "22x the top of the range"
+   * where the band's signs permit it.
+   */
+  benchmarkDeviation: z.number().optional(),
 
   challengeHistory: z.array(zChallengeRecord),
   lockedAtPeriod: zPeriod.optional(),
@@ -94,6 +110,54 @@ export function isOutsideBenchmark(a: Assumption): boolean {
   if (!a.benchmarkBand) return false;
   const v = a.isMoney ? Number(a.value) / 100 : Number(a.value);
   return v < a.benchmarkBand.low || v > a.benchmarkBand.high;
+}
+
+/**
+ * How far outside the band, in band-widths — D-5's weak constraint, expressed
+ * as a number the challenge loop can reason about rather than a flag.
+ *
+ * Zero inside the band, positive above it, negative below. A degenerate band
+ * (`low === high`) has no width to measure against, so any miss reports as
+ * exactly one band-width in the direction of the miss; treating it as infinite
+ * would poison every downstream comparison.
+ */
+export function benchmarkDeviation(a: Assumption): number | undefined {
+  const band = a.benchmarkBand;
+  if (!band) return undefined;
+  const v = a.isMoney ? Number(a.value) / 100 : Number(a.value);
+  if (v >= band.low && v <= band.high) return 0;
+
+  const width = band.high - band.low;
+  const excess = v > band.high ? v - band.high : v - band.low;
+  if (width <= 0) return Math.sign(excess);
+  return excess / width;
+}
+
+/**
+ * Founder-facing phrasing for a deviation. Prefers the multiple of the nearest
+ * edge ("22x the top of the range") because that is how a person judges
+ * whether a number is startling, and falls back to band-widths when the band
+ * straddles or touches zero and a multiple would mislead.
+ *
+ * Returns undefined when there is nothing to say — no band, or in band. An
+ * assumption inside its range is not a finding.
+ */
+export function deviationLabel(a: Assumption): string | undefined {
+  const deviation = benchmarkDeviation(a);
+  if (deviation === undefined || deviation === 0) return undefined;
+
+  const band = a.benchmarkBand!;
+  const v = a.isMoney ? Number(a.value) / 100 : Number(a.value);
+  const above = deviation > 0;
+  const edge = above ? band.high : band.low;
+  const side = above ? 'the top' : 'the bottom';
+
+  if (edge > 0 && v > 0) {
+    const multiple = v / edge;
+    const rendered = multiple >= 10 ? multiple.toFixed(0) : multiple.toFixed(1);
+    return `${rendered}× ${side} of the range`;
+  }
+  return `${Math.abs(deviation).toFixed(1)} band-widths ${above ? 'above' : 'below'} ${side} of the range`;
 }
 
 /**

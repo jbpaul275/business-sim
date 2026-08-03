@@ -97,6 +97,19 @@ Nothing in the run flags out-of-band, because a 256-flavour shop has no publishe
 the template claims none. The §10.3 confidence score reports 0.23 instead — roughly a fifth of the 53
 registered assumptions are sourced at `PLAYER_SOURCED` or better. Uncertainty is reported, not hidden.
 
+**Benchmarks are weak constraints, and the line the engine does hold is physical.** An absent band means
+"nobody knows," not "any number goes." Two mechanisms carry that, both green:
+
+- `Assumption.benchmarkDeviation` measures a miss in band-widths rather than flagging it, so the register
+  can distinguish a rent 1.1× its range from a ticket price 17× its range — and sorts by magnitude, so the
+  startling one is seen first. `deviationLabel()` renders it the way a founder reads it.
+- `floorAreaSqFt` is required on the seat-turns capacity model, and `CAPACITY_EXCEEDS_FOOTPRINT` refuses a
+  seat count that will not physically fit at the building-code minimum. This is what makes "there is no
+  billion-dollar single-location ice cream shop" arithmetic rather than taste: revenue is servable customers
+  × price, and something has to bound the customers. `EXPAND_CAPACITY` is bounded by the same rule, so the
+  gate cannot be bought around one buildout at a time — but taking more floor area, and the rent with it, is
+  always allowed.
+
 ## Playing it
 
 ```
