@@ -460,8 +460,21 @@ function advise(business: Business, result: TickResult, question = ''): string[]
                 `${line.label}: volume needs ${needed} blocks and you have ${line.currentBlocks}, but ` +
                   `this line was drafted with a minimum of ${line.minimumBlocks} and cannot go lower. ` +
                   `That floor is part of the concept, not a rule of the game.`
-              : `${line.label}: ${line.currentBlocks} blocks is what this quarter's volume needs. ` +
-                  `Cutting here turns customers away rather than saving money.`,
+              : // Not a verdict. Cutting below demand is sometimes the right
+                // move for a business that is going broke at full staffing,
+                // and the only honest thing to do is price the trade.
+                (() => {
+                  const perUnit =
+                    stream.realizedVolume > 0 ? Number(is.revenue) / stream.realizedVolume : 0;
+                  const lostPerBlock = Math.min(per, stream.demandVolume);
+                  const revenueAtRisk = BigInt(Math.round(lostPerBlock * perUnit));
+                  return (
+                    `${line.label}: ${line.currentBlocks} blocks is what this quarter's volume ` +
+                    `needs. Each one you cut turns away about ${Math.round(lostPerBlock).toLocaleString()} ` +
+                    `customers — ${toCompact(revenueAtRisk)} of revenue against ` +
+                    `${toCompact(line.blockCostPerQuarter)} of pay.`
+                  );
+                })(),
         );
       }
     }
@@ -760,6 +773,51 @@ function parseCommand(
               : `${line.label} has ${line.currentBlocks} blocks and a minimum of ${floor}: ` +
                   `you can drop at most ${line.currentBlocks - floor}.`,
           );
+        }
+      }
+
+      /**
+       * What the cut costs, before it is made — and then make it anyway.
+       *
+       * "I'm fine with warnings: if you cut kitchen staff you'll need to cut
+       * the hours fresh food is available. Cutting staff should probably hurt
+       * revenues — but since I'm going broke at full staffing, that's what I
+       * gotta do."
+       *
+       * Exactly right, and the engine already models the consequence: a line
+       * cut below what demand needs becomes the binding constraint and the
+       * excess is turned away. What was missing is the price tag at the moment
+       * of the decision. This is not a refusal and must never become one — the
+       * whole point is that going broke slowly is a worse outcome than serving
+       * fewer customers, and only the player can weigh that.
+       */
+      if (firing) {
+        const line = lines.find((c) => c.id === costId)!;
+        const per = Number(line.capacity?.capacityPerBlock ?? 0);
+        const stream = result.statements.byBusiness[business.id]?.derivedMetrics.streamMetrics[0];
+        const is = result.statements.byBusiness[business.id]?.incomeStatement;
+        if (per > 0 && stream && is && stream.realizedVolume > 0) {
+          const after = (line.currentBlocks - blocks) * per;
+          const lost = Math.max(0, stream.demandVolume - after);
+          if (lost > 0.5) {
+            // Revenue per unit read off the ledger rather than the price
+            // parameter, so ancillary revenue and discounts are already in it.
+            const perUnit = Number(is.revenue) / stream.realizedVolume;
+            const saving = line.blockCostPerQuarter * BigInt(blocks);
+            console.log(
+              `  ${YELLOW}That takes ${line.label} below what demand needs: about ` +
+                `${Math.round(lost).toLocaleString()} customers a quarter turned away, ` +
+                `roughly ${toCompact(BigInt(Math.round(lost * perUnit)))} of revenue, to save ` +
+                `${toCompact(saving)} of pay.${RESET}`,
+            );
+            console.log(
+              `  ${DIM}${
+                BigInt(Math.round(lost * perUnit)) > saving
+                  ? 'That is more revenue than pay — it helps cash only if the margin on those customers is thin.'
+                  : 'That saves more pay than it loses in revenue.'
+              } Queued either way.${RESET}`,
+            );
+          }
         }
       }
 

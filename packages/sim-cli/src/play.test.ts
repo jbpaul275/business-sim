@@ -196,6 +196,41 @@ describe('asking what to do', () => {
     expect(printed).not.toMatch(/cutting staff you have already paid for does not/);
   });
 
+  it('prices a cut that goes below demand, and makes it anyway', async () => {
+    // "I'm fine with warnings: if you cut kitchen staff you'll need to cut the
+    // hours fresh food is available. Cutting staff should probably hurt
+    // revenues — but since I'm going broke at full staffing, that's what I
+    // gotta do."
+    //
+    // The engine already models the consequence: a line below what demand
+    // needs becomes the binding constraint. What was missing is the price tag
+    // at the moment of the decision — and it must stay a warning, because
+    // going broke slowly is the worse outcome and only the player can weigh
+    // that.
+    const printed = await transcript(['fire kitchen_labor 5', 'quit']);
+    expect(printed).toMatch(/below what demand needs/);
+    expect(printed).toMatch(/customers a quarter turned away/);
+    expect(printed).toMatch(/of revenue, to save .* of pay/);
+    // Warned, not refused.
+    expect(printed).toContain('queued: fire 5');
+  });
+
+  it('says nothing when the cut comes out of slack', async () => {
+    // A warning that fires on a cut with no consequence is noise, and teaches
+    // the player to skip the one that matters.
+    const printed = await transcript(['fire kitchen_labor 1', 'quit']);
+    expect(printed).toContain('queued: fire 1');
+    expect(printed).not.toMatch(/below what demand needs/);
+  });
+
+  it('prices the trade rather than delivering a verdict on it', async () => {
+    // "Cutting here turns customers away rather than saving money" was a
+    // judgement it had not checked. Both numbers, and the player decides.
+    const printed = await transcript(['how many can we fire?', 'quit'], 'understaffed');
+    expect(printed).toMatch(/Each one you cut turns away about [\d,]+ customers/);
+    expect(printed).toMatch(/of revenue against .* of pay/);
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
     const printed = await transcript(['hier', 'quit']);
