@@ -494,6 +494,78 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
+  it('does not offer a plan that leaves the build unfunded', async () => {
+    // A Nevada solar farm was offered "$1,000,000 of your own plus a
+    // $3,000,000 SBA 7(a)" against a $5.19M opening cost, chose it, and was
+    // refused one screen later — short by $1.192M. The proposal already
+    // respected the lending ceiling; it did not notice that the capped plan
+    // could not cover opening, and say so before the choice.
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Nevada is good solar.', cta: 'How big?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '1', // $100,000 against a build far larger than that
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '', // nothing to argue with
+      'n', // and do not try again
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toMatch(/still \$[\d,]+ short/);
+      // And it names the only two ways out, one of which the screen now asks for.
+      expect(printed).toMatch(/tax credit, a grant, a partner/);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('carries outside capital into the deal without charging the household', async () => {
+    // The line the solar farm had nowhere to put: its drafted stack was
+    // sponsor equity plus a transferred ITC plus debt, and only two of the
+    // three reached the funding screen.
+    const transport = new ScriptedTransport(
+      [
+        { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
+        { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
+      ],
+      [draft],
+    );
+    const input = scriptedInput([
+      '3',
+      '300000',
+      'A telescope rental place on a ridge.',
+      '24 scopes.',
+      '',
+      '2', // set the funding myself
+      '0', // no loan
+      '', // revolver
+      '300000', // everything I have
+      '400000', // and a grant on top
+      'y',
+    ]);
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const result = await runSetup(input, { transport });
+      const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toMatch(/comes from outside the deal/);
+      // It is somebody's money, and the screen says so.
+      expect(printed).toMatch(/dilutes what the business is worth to you/);
+      expect(result?.committed).toBe(true);
+      expect(result?.world.businesses[0]?.balances.contributedCapital).toBe(fromDisplay(700_000));
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('lets the lender decline, instead of granting whatever is asked for', async () => {
     // A live run answered a $203,902 shortfall with a $4M SBA and a $4M
     // revolver against $140,000 of equity, and got all of it. `underwrite` has
@@ -632,6 +704,7 @@ describe('the concept path reaches the same gate as the picker', () => {
       '0',
       '',
       '1000',
+      '', // no outside capital either
       'n', // no — leave it
     ]);
 

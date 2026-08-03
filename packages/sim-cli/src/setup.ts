@@ -338,11 +338,21 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
   const revolverLimit = model.financingPlan.debtRequests
     .filter((d) => d.kind === 'REVOLVER')
     .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n);
+  const outside = model.financingPlan.outsideCapital;
   console.log(
     termDebt > 0n
       ? `\n  You put in ${BOLD}${toDisplay(equity)}${RESET} and borrow ${BOLD}${toDisplay(termDebt)}${RESET}.`
       : `\n  You put in ${BOLD}${toDisplay(equity)}${RESET}, all of it your own.`,
   );
+  if (outside > 0n) {
+    console.log(
+      note(
+        `${toDisplay(outside, { showCents: false })} comes from outside the deal — a credit, a` +
+          ` grant or a partner. It is equity in the business and does not come out of your pocket,` +
+          ` but it is somebody's money and it dilutes what the business is worth to you.`,
+      ),
+    );
+  }
   if (revolverLimit > 0n) {
     console.log(
       note(
@@ -611,6 +621,7 @@ export async function runSetup(
     let loan: Money;
     let revolver: Money;
     let equity: Money;
+    let outside = 0n;
 
     /**
      * One choice instead of three numbers.
@@ -645,12 +656,36 @@ export async function runSetup(
         ? `${toDisplay(proposedEquity, { showCents: false })} of your own plus a ` +
           `${toDisplay(proposedLoan, { showCents: false })} SBA 7(a)`
         : `${toDisplay(proposedEquity, { showCents: false })} of your own, no debt needed`;
+    /**
+     * Never offer a plan that does not fund the build.
+     *
+     * A Nevada solar farm was offered "$1,000,000 of your own plus a
+     * $3,000,000 SBA 7(a)" against a $5.19M opening cost, chose it, and was
+     * refused one screen later — short by $1.192M. The proposal already
+     * respects the lending ceiling; what it did not do was notice that the
+     * capped plan cannot cover opening, and say so before the choice rather
+     * than after it.
+     */
+    const proposedTotal = proposedEquity + proposedLoan;
+    const shortBy = needed > proposedTotal ? needed - proposedTotal : 0n;
+
     console.log(
-      proposedRevolver > 0n
-        ? `  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`
-        : `  1  ${plan}`,
+      shortBy > 0n
+        ? `  1  ${plan} — ${RED}still ${toDisplay(shortBy, { showCents: false })} short${RESET}`
+        : proposedRevolver > 0n
+          ? `  1  ${plan}, and a ${toDisplay(proposedRevolver, { showCents: false })} revolver`
+          : `  1  ${plan}`,
     );
     console.log(`  2  ${DIM}Set the loan, revolver and equity myself${RESET}`);
+    if (shortBy > 0n) {
+      console.log(
+        note(
+          `That is everything a lender will write against this build plus everything you have.` +
+            ` Closing the gap takes money from outside the deal — a tax credit, a grant, a` +
+            ` partner — or a smaller project. Option 2 asks for outside capital as well.`,
+        ),
+      );
+    }
 
     const choice = await ask(input, '> ', 1, (raw) => {
       const n = parseNumber(raw);
@@ -680,6 +715,21 @@ export async function runSetup(
         proposedEquity,
         parseMoney,
       );
+      /**
+       * The line the solar farm had nowhere to put.
+       *
+       * Its drafted stack was $1.0M sponsor equity, ~$1.5M of transferred
+       * federal ITC and ~$3.2M of debt. The screen carried the first and the
+       * third, dropped the credit, and refused the project as unaffordable —
+       * having itself established that the credit was most of what made it
+       * financeable.
+       */
+      outside = await ask(
+        input,
+        `  ${pad('Grants, tax credits, outside equity', 42)}[$0]: `,
+        0n,
+        parseMoney,
+      );
     }
 
     const debt = [
@@ -696,6 +746,7 @@ export async function runSetup(
       scale,
       marketingSpendPerQuarter: marketing,
       equityInjection: equity,
+      outsideCapital: outside,
       debt,
       ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
     });
@@ -834,8 +885,9 @@ export async function runSetup(
             ` at least ${toDisplay(shortfall, { showCents: false })} would close it.${RESET}`
         : `${DIM}The concept is intact, but the money is not there: a lender will write at` +
             ` most ${toDisplay(ceiling, { showCents: false })} against this build and you have` +
-            ` ${toDisplay(investable, { showCents: false })} of your own. It needs to be a` +
-            ` smaller build — a cheaper fit-out, less equipment, a smaller space.${RESET}`,
+            ` ${toDisplay(investable, { showCents: false })} of your own. Either the gap comes` +
+            ` from outside the deal — a tax credit, a grant, a partner — or the build gets` +
+            ` smaller.${RESET}`,
     );
     const raw = await input.next('\nTry different financing? (Y/n) ');
     // End of input is not consent to keep looping. A scripted run that stops

@@ -52,6 +52,11 @@ export interface BuildModelOptions {
   /** Lines the player explicitly acknowledged and zeroed (§4.6). */
   acknowledgedZeroes?: ReadonlySet<string>;
   /**
+   * Money in the deal from neither the founder nor a lender — a tax credit, a
+   * grant, a partner's cheque. See `zFinancingPlan.outsideCapital`.
+   */
+  outsideCapital?: Money;
+  /**
    * Where a given assumption's value actually came from, by model path.
    *
    * Without this every registered assumption defaults to `BENCHMARK`, which is
@@ -592,6 +597,7 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
     capex,
     financingPlan: {
       equityInjection: options.equityInjection,
+      outsideCapital: options.outsideCapital ?? 0n,
       debtRequests: (options.debt ?? []).map((d) => ({
         kind: d.kind,
         requestedPrincipal: d.principal,

@@ -439,3 +439,57 @@ describe('growing the market rather than the building', () => {
     expect(units()).toBe(before);
   });
 });
+
+describe('money in the deal that is neither yours nor a loan', () => {
+  it('funds the business without touching the household', () => {
+    // A Nevada solar farm was drafted with $1.0M sponsor equity, ~$1.5M of
+    // transferred federal ITC and ~$3.2M of debt. The funding screen carried
+    // the equity and the debt, silently dropped the credit, and the project
+    // the model had costed at $5.7M of funding arrived at the gate with $4.0M
+    // and was refused as unaffordable. The credit was the single largest fact
+    // about whether the project was financeable.
+    const build = (outsideCapital: Money) =>
+      buildModelFromTemplate({
+        businessName: 'Solar',
+        template: getSeedTemplate('self_storage'),
+        archetype: 'OCCUPANCY',
+        scale: { units: 400, price: fromDisplay(330) },
+        equityInjection: fromDisplay(1_000_000),
+        outsideCapital,
+      });
+
+    const alone = createWorld({
+      id: 'a',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [build(0n)],
+    });
+    const backed = createWorld({
+      id: 'b',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [build(fromDisplay(1_500_000))],
+    });
+
+    // The money is in the business...
+    expect(backed.businesses[0]!.cash - alone.businesses[0]!.cash).toBe(fromDisplay(1_500_000));
+    // ...as contributed capital, because that is what it is...
+    expect(
+      backed.businesses[0]!.balances.contributedCapital -
+        alone.businesses[0]!.balances.contributedCapital,
+    ).toBe(fromDisplay(1_500_000));
+    // ...and the household did not pay for it.
+    expect(backed.household.cash).toBe(alone.household.cash);
+    expect(backed.household.cumulativeInjections).toBe(alone.household.cumulativeInjections);
+  });
+
+  it('defaults to nothing, so every existing model is unchanged', () => {
+    const model = buildModelFromTemplate({
+      businessName: 'Plain',
+      template: getSeedTemplate('full_service_restaurant'),
+      scale: { seats: 60, price: fromDisplay(30) },
+      equityInjection: fromDisplay(500_000),
+    });
+    expect(model.financingPlan.outsideCapital).toBe(0n);
+  });
+});

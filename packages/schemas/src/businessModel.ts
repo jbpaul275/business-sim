@@ -41,6 +41,24 @@ export type CapexSpec = z.infer<typeof zCapexSpec>;
 
 export const zFinancingPlan = z.object({
   equityInjection: zMoney,
+  /**
+   * Money in the deal that is neither the founder's nor a loan.
+   *
+   * A Nevada solar farm was drafted with a capital stack of $1.0M sponsor
+   * equity, ~$1.5M from a transferred federal ITC and ~$3.2M of term debt.
+   * The funding screen carried the equity and the debt and silently dropped
+   * the credit, so a project the model had costed at $5.7M of funding arrived
+   * at the gate with $4.0M and was refused as unaffordable. The tax credit was
+   * the single largest fact about the project's financeability and there was
+   * nowhere to put it.
+   *
+   * Investment tax credits, grants, an SBA microloan, a partner's cheque,
+   * friends and family — the accounting is the same in every case: contributed
+   * capital that does not come out of the household. Booked to equity because
+   * that is what it is, and kept separate from `equityInjection` because the
+   * household's balance must not move for money the household did not pay.
+   */
+  outsideCapital: zMoney.default(0n),
   debtRequests: z.array(zDebtSpec),
 });
 export type FinancingPlan = z.infer<typeof zFinancingPlan>;

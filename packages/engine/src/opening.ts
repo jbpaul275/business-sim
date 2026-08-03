@@ -201,6 +201,10 @@ function openBusiness(
 
   const debtProceeds = sum(model.financingPlan.debtRequests.map((d) => d.requestedPrincipal));
   const equity = model.financingPlan.equityInjection;
+  // Outside money — a tax credit, a grant, a partner — is contributed capital
+  // that the household never paid, so only the founder's own injection moves
+  // the household balance.
+  const outside = model.financingPlan.outsideCapital;
 
   household.cash -= equity;
   household.cumulativeInjections += equity;
@@ -245,7 +249,7 @@ function openBusiness(
   );
   const drawnDebt = debtProceeds - revolverLimits;
 
-  const openingCash = equity + drawnDebt - outlays.total;
+  const openingCash = equity + outside + drawnDebt - outlays.total;
 
   const securityDeposit = mulRate(model.monthlyRent, model.workingCapital.securityDepositMonths);
   const capitalisedCapex = sum(assets.map((a) => a.grossCost));
@@ -254,7 +258,7 @@ function openBusiness(
     ...emptyBalances(),
     inventory: outlays.initialInventory,
     prepaidExpenses: securityDeposit + outlays.prepaidInsurance,
-    contributedCapital: equity,
+    contributedCapital: equity + outside,
     // Pre-opening payroll, marketing, permits and origination fees are expensed
     // at inception rather than capitalised; they open the books at a deficit,
     // which is exactly what the founder's first balance sheet actually looks
