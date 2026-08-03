@@ -50,6 +50,9 @@ export {
   underwrite,
   DEBT_PRODUCTS,
   MIN_OWNER_INJECTION_PCT,
+  LEVERAGE_PRICING,
+  leverageSpread,
+  openingLoanRate,
 } from './debt.js';
 export { computeTax, SECTION_179_CAP, SE_TAX_WAGE_BASE } from './tax.js';
 export { quarterlyDepreciation } from './depreciation.js';

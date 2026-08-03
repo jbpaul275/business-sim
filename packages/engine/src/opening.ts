@@ -13,7 +13,7 @@ import {
   type WorldConfig,
   type WorldState,
 } from '@bizsim/schemas';
-import { DEBT_PRODUCTS } from './debt.js';
+import { DEBT_PRODUCTS, openingLoanRate } from './debt.js';
 import { totalMonthZero, type MonthZeroOutlays } from './workingCapital.js';
 
 /**
@@ -268,7 +268,14 @@ function openBusiness(
     kind: spec.kind,
     originalPrincipal: spec.requestedPrincipal,
     outstandingPrincipal: spec.kind === 'REVOLVER' ? 0n : spec.requestedPrincipal,
-    annualRate: 0.075 + DEBT_PRODUCTS[spec.kind].spreadOverPrime,
+    // Term facilities carry the leverage-priced rate the funding screen
+    // quoted — one source (`openingLoanRate`), so the number accepted is the
+    // number charged. Revolvers price flat: they lend against receivables,
+    // not the deal's capital structure.
+    annualRate:
+      spec.kind === 'REVOLVER'
+        ? 0.075 + DEBT_PRODUCTS.REVOLVER.spreadOverPrime
+        : openingLoanRate(0.075, spec.requestedPrincipal, equity + outside),
     termQuarters: spec.termQuarters,
     originatedPeriod: -1,
     originationFeePct: DEBT_PRODUCTS[spec.kind].originationFeePct,

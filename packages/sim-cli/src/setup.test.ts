@@ -350,11 +350,12 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
-  it('lets an underfunded business re-finance instead of throwing the concept away', async () => {
-    // The gate used to end the run: five turns of conversation, a drafted
-    // business, and then "run `pnpm sim --new` again" over a number the player
-    // would happily have changed. Nothing upstream of financing depends on it,
-    // so the shortfall is information, not a verdict.
+  it('asks for one number — the equity — and quotes the loan that follows from it', async () => {
+    // The old custom flow asked for a term loan, a revolver limit and an
+    // equity figure as three blank fields, then let the lender refuse the
+    // combination two screens later. Nobody arrives knowing a revolver limit.
+    // Now: one equity figure, a floor below which no lender covers the rest,
+    // a quoted rate, and the option to put in more.
     const transport = new ScriptedTransport(
       [
         { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
@@ -369,14 +370,10 @@ describe('the concept path reaches the same gate as the picker', () => {
       '24 scopes, about 1400 square feet.',
       '', // nothing to argue with
       '2', // set the funding myself
-      '0', // no loan
-      '', // revolver
-      '50000', // equity — enough to be lent to, nowhere near month zero
-      'y', // yes, try different financing
-      '2', // again by hand
-      '0', // still no loan
-      '', // revolver
-      '700000', // and this time enough of his own to open
+      '1', // a dollar — below any lender's floor
+      '', // take the floor it names
+      '400000', // then decide to fund it fully instead
+      '', // done challenging
       'y', // commit
     ]);
 
@@ -385,10 +382,13 @@ describe('the concept path reaches the same gate as the picker', () => {
       const result = await runSetup(input, { transport });
       const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
 
-      expect(printed).toContain('Not funded yet');
-      expect(printed).toContain('The concept is intact');
-      // The interview is not re-run, and the concept is not discarded.
-      expect(printed.match(/How many scopes/g)?.length).toBe(1);
+      // The floor refused the dollar before a lender had to.
+      expect(printed).toContain('no lender covers the rest');
+      // The floor plan got a real quote: a loan, a rate, a leverage figure.
+      expect(printed).toMatch(/loan at \d+\.\d+%/);
+      expect(printed).toContain('of the deal');
+      // And raising the equity to cover opening removed the debt entirely.
+      expect(printed).toContain('Fully funded');
       expect(result?.committed).toBe(true);
       expect(result?.world.businesses[0]?.cash).toBeGreaterThan(0n);
     } finally {
@@ -581,9 +581,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       '24 scopes.',
       '', // nothing to argue with
       '2', // fund it myself
-      '0',
-      '',
       '230000', // just enough to open, nowhere near enough to trade
+      '', // done challenging
       'y',
     ]);
 
@@ -652,10 +651,8 @@ describe('the concept path reaches the same gate as the picker', () => {
       '24 scopes.',
       '',
       '2', // set the funding myself
-      '0', // no loan
-      '', // revolver
-      '300000', // everything I have
-      '400000', // and a grant on top
+      '700000', // more than the $300k they have — the excess is outside money
+      '', // done challenging
       'y',
     ]);
 
@@ -673,11 +670,12 @@ describe('the concept path reaches the same gate as the picker', () => {
     }
   });
 
-  it('lets the lender decline, instead of granting whatever is asked for', async () => {
-    // A live run answered a $203,902 shortfall with a $4M SBA and a $4M
-    // revolver against $140,000 of equity, and got all of it. `underwrite` has
-    // always been in the engine — 10% owner injection, collateral coverage —
-    // and setup never consulted it for the one loan that matters most.
+  it('never lets the player ask for a plan the lender would decline', async () => {
+    // The old flow accepted a $4M loan request against $140k of equity and let
+    // the lender refuse it two screens later. The floor now pre-empts the
+    // decline: the equity question names the smallest figure a lender will
+    // cover the rest of, refuses less, and the plan that leaves this screen is
+    // one underwriting approves — so "The lender declined" never appears.
     const transport = new ScriptedTransport(
       [
         { message: 'Dark skies change the draw.', cta: 'How many scopes?', readyToDraft: false },
@@ -692,19 +690,25 @@ describe('the concept path reaches the same gate as the picker', () => {
       '24 scopes.',
       '', // nothing to argue with
       '2', // set the funding myself
-      '5000000', // five million against a $174,000 buildout
-      '',
-      '10000',
-      'n', // and leave it there
+      '5000', // far below the floor
+      '', // take the floor it names
+      '', // accept the quoted loan
+      '', // done challenging
+      'y', // commit
     ]);
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      expect(await runSetup(input, { transport })).toBeUndefined();
+      const result = await runSetup(input, { transport });
       const printed = log.mock.calls.map((c) => String(c[0])).join('\n');
-      expect(printed).toContain('The lender declined');
-      // The reason is the engine's own, with the arithmetic in it.
-      expect(printed).toMatch(/collateral coverage|10% minimum/);
+      expect(printed).toContain('no lender covers the rest');
+      expect(printed).not.toContain('The lender declined');
+      expect(result?.committed).toBe(true);
+      // The committed facility carries the quoted, leverage-priced rate — at
+      // this deal's ~43% debt share, base SBA pricing with no step-up.
+      const sba = result?.world.businesses[0]?.debts.find((d) => d.kind === 'SBA_7A');
+      expect(sba).toBeDefined();
+      expect(sba!.annualRate).toBeCloseTo(0.105, 10);
     } finally {
       log.mockRestore();
     }
@@ -803,15 +807,11 @@ describe('the concept path reaches the same gate as the picker', () => {
     );
     const input = scriptedInput([
       '4', // custom
-      '900000',
+      '60000', // far less than this build needs, even with max lending
       'A telescope rental place on a ridge.',
       '24 scopes.',
       '', // nothing to argue with
-      '2', // set the funding myself
-      '0',
-      '',
-      '1000',
-      '', // no outside capital either
+      '', // take the proposed (short) plan anyway
       'n', // no — leave it
     ]);
 

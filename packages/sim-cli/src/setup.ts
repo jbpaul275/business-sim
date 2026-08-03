@@ -2,9 +2,11 @@ import { execFileSync } from 'node:child_process';
 import { fromDisplay, mulRate, toDisplay, type Money } from '@bizsim/money';
 import {
   DEBT_PRODUCTS,
+  LEVERAGE_PRICING,
   MIN_OWNER_INJECTION_PCT,
   buildModelFromTemplate,
   collateralValue,
+  openingLoanRate,
   underwrite,
   computeMonthZeroOutlays,
   createWorld,
@@ -365,6 +367,17 @@ export const THIN_QUARTERS = 1.5;
  */
 export const isThin = (cash: Money, firstQuarterBurn: Money): boolean =>
   firstQuarterBurn > 0n && Number(cash) / Number(firstQuarterBurn) < THIN_QUARTERS;
+
+/**
+ * The equity that brings a deal's debt share down to `share`, fee-grossed.
+ *
+ * The loan that fills the gap is (needed − e)/(1 − f), so
+ * loan/(loan + e) ≤ s solves to e ≥ needed·(1 − s) / (s·(1 − f) + 1 − s).
+ * This is the number behind "putting in $X more prices the loan lower" — a
+ * hint is only useful if the figure it names actually lands in the tier.
+ */
+export const equityForShare = (needed: Money, share: number, feePct: number): Money =>
+  mulRate(needed, (1 - share) / (share * (1 - feePct) + 1 - share));
 
 function firstQuarterBurn(world: WorldState): Money {
   const result = tick(world, [], { throwOnAssertionFailure: false });
@@ -913,7 +926,21 @@ export async function runSetup(
       );
       const needed = monthZero + quarterOfFixed;
 
-      const proposedEquity = needed < investable ? needed : investable;
+      /**
+       * Propose a round number with room in it, not the bare minimum.
+       *
+       * The old proposal was month zero plus exactly one quarter of fixed
+       * costs — a knife edge. Most businesses take several quarters to reach
+       * profitability, so a player who took the suggestion opened the second
+       * quarter on the revolver and read it as their plan failing rather than
+       * their funding being thin. Round up to the nearest $1M when they have
+       * $1M+ to invest, the nearest $100k below that, and cap at everything
+       * they have when rounding would exceed it. The excess is opening cash,
+       * which is the cheapest runway there is.
+       */
+      const unit = investable >= fromDisplay(1_000_000) ? fromDisplay(1_000_000) : fromDisplay(100_000);
+      const roundedNeed = ((needed + unit - 1n) / unit) * unit;
+      const proposedEquity = roundedNeed < investable ? roundedNeed : investable;
       const gap = needed > proposedEquity ? needed - proposedEquity : 0n;
       // Grossed up for the fee, because a loan does not deliver its own
       // principal: SBA 7(a) charges 3% at close, so borrowing exactly the gap
@@ -1026,39 +1053,103 @@ export async function runSetup(
         revolver = proposedRevolver;
         equity = proposedEquity;
       } else {
-        loan = await ask(
-          input,
-          `  ${pad('SBA 7(a) loan', 42)}[${toDisplay(proposedLoan, { showCents: false })}]: `,
-          proposedLoan,
-          parseMoney,
+        /**
+         * One number: the equity. The loan, its rate and the revolver follow.
+         *
+         * The old form asked for a term loan, a revolver limit and an equity
+         * figure as three blank fields, then let the lender refuse the
+         * combination two screens later. Nobody arrives knowing a revolver
+         * limit; the decision a founder actually owns is how much of their own
+         * money goes in, and everything else is arithmetic this screen already
+         * has. The rate moves with leverage (`LEVERAGE_PRICING`), so more
+         * equity genuinely buys a cheaper loan — the trade this conversation
+         * exists to surface.
+         *
+         * Outside money — the line the solar farm had nowhere to put (its
+         * stack was $1.0M sponsor equity, ~$1.5M of transferred ITC, ~$3.2M of
+         * debt) — folds into the same question: anything above what the
+         * player has is a grant, a credit or a partner by definition.
+         */
+        const grossFee = 1 / (1 - originationPct);
+        // The smallest equity a lender will cover the rest of: the gap loan
+        // has to clear both ceilings — collateral, and ten times the injection.
+        const byCollateral = needed - mulRate(lendable, 1 - originationPct);
+        const byInjection = mulRate(
+          needed,
+          1 / (1 + (1 - originationPct) / MIN_OWNER_INJECTION_PCT),
         );
-        revolver = await ask(
-          input,
-          `  ${pad('Revolver limit', 42)}[${toDisplay(proposedRevolver, { showCents: false })}]: `,
-          proposedRevolver,
-          parseMoney,
+        const larger = byCollateral > byInjection ? byCollateral : byInjection;
+        const floor = larger > 0n ? larger : 0n;
+
+        console.log(
+          note(
+            `One number — how much of your own money goes in. The loan, its rate and the` +
+              ` revolver follow from it, and more equity prices the loan lower. Anything above` +
+              ` your ${toDisplay(investable, { showCents: false })} counts as outside money — a` +
+              ` grant, a tax credit, a partner.`,
+          ),
         );
-        equity = await ask(
+        let dealEquity = await ask(
           input,
-          `  ${pad('Your own capital into the business', 42)}[${toDisplay(proposedEquity, { showCents: false })}]: `,
+          `  Equity to invest (min ${toDisplay(floor, { showCents: false })})` +
+            ` [${toDisplay(proposedEquity, { showCents: false })}]: `,
           proposedEquity,
           parseMoney,
         );
-        /**
-         * The line the solar farm had nowhere to put.
-         *
-         * Its drafted stack was $1.0M sponsor equity, ~$1.5M of transferred
-         * federal ITC and ~$3.2M of debt. The screen carried the first and the
-         * third, dropped the credit, and refused the project as unaffordable —
-         * having itself established that the credit was most of what made it
-         * financeable.
-         */
-        outside = await ask(
-          input,
-          `  ${pad('Grants, tax credits, outside equity', 42)}[$0]: `,
-          0n,
-          parseMoney,
-        );
+        for (;;) {
+          if (dealEquity < floor) {
+            console.log(
+              `  ${RED}Below ${toDisplay(floor, { showCents: false })} no lender covers the` +
+                ` rest — the loan would breach the collateral or the 10%-injection ceiling.${RESET}`,
+            );
+            dealEquity = await ask(
+              input,
+              `  Equity to invest [${toDisplay(floor, { showCents: false })}]: `,
+              floor,
+              parseMoney,
+            );
+            continue;
+          }
+          const shortOfNeed = needed > dealEquity ? needed - dealEquity : 0n;
+          loan = shortOfNeed > 0n ? mulRate(shortOfNeed, grossFee) : 0n;
+          if (loan === 0n) {
+            console.log(`  ${DIM}Fully funded — no debt needed at that figure.${RESET}`);
+            break;
+          }
+          const rate = openingLoanRate(config.primeRate, loan, dealEquity);
+          const share = Number(loan) / Number(loan + dealEquity);
+          const tierIndex = LEVERAGE_PRICING.findIndex((t) => share <= t.maxDebtShare);
+          const cheaper = tierIndex > 0 ? LEVERAGE_PRICING[tierIndex - 1] : undefined;
+          const hint = cheaper
+            ? ` Putting in ${toDisplay(equityForShare(needed, cheaper.maxDebtShare, originationPct), { showCents: false })}` +
+              ` keeps debt at or under ${pctText(cheaper.maxDebtShare)} of the deal and prices` +
+              ` at ${pctText(config.primeRate + DEBT_PRODUCTS.SBA_7A.spreadOverPrime + cheaper.spread)}.`
+            : '';
+          console.log(
+            note(
+              `That takes a ${toDisplay(loan, { showCents: false })} loan at ${pctText(rate)} —` +
+                ` debt is ${pctText(share)} of the deal.${hint}`,
+            ),
+          );
+          const answer = await input.next('  ok, or a higher equity figure > ');
+          const said = (answer ?? '').trim();
+          if (said === '' || /^(ok|okay|y|yes)$/i.test(said)) break;
+          const revised = parseMoney(said);
+          if (revised === undefined) {
+            console.log(`  ${DIM}A dollar figure, or enter to accept the quote.${RESET}`);
+            continue;
+          }
+          dealEquity = revised;
+        }
+        // The revolver is proposed, never asked for — nobody arrives knowing a
+        // limit. Same $100k target as option 1, inside what is left of the
+        // lending ceiling once the term loan has taken its share.
+        const onDealEquity = mulRate(dealEquity, 1 / MIN_OWNER_INJECTION_PCT);
+        const ceilingNow = lendable < onDealEquity ? lendable : onDealEquity;
+        const headroomNow = ceilingNow > loan ? ceilingNow - loan : 0n;
+        revolver = headroomNow < revolverTarget ? headroomNow : revolverTarget;
+        outside = dealEquity > investable ? dealEquity - investable : 0n;
+        equity = dealEquity - outside;
       }
 
       const debt = [
