@@ -1,0 +1,287 @@
+import { describe, expect, it } from 'vitest';
+import { ScriptedTransport } from './client.js';
+import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
+import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
+import { zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
+
+/**
+ * The interview is the input method for §9.1 Phases 1-2 — the thing that
+ * replaces "pick one of twelve industries" with a conversation. What is worth
+ * testing here is everything except the model: the loop, the guards, and the
+ * mapping into the shape the engine consumes.
+ */
+
+const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
+  businessName: '256-flavour scoop shop',
+  summary: 'A counter-service ice cream shop carrying 256 flavours.',
+  legalForm: 'LLC',
+  seedTemplateId: null,
+  streams: [
+    {
+      label: 'Counter sales',
+      archetype: 'TRAFFIC',
+      archetypeRationale:
+        'Passers-by convert at a rate, capped by counter throughput. Not UNITS_CAC: ' +
+        'there is no per-customer acquisition spend.',
+      params: [
+        {
+          name: 'avgTicket',
+          value: 9,
+          low: 7,
+          high: 12,
+          sourceNote: 'Two scoops plus a topping at metro prices.',
+          provenance: 'LLM_ESTIMATE',
+        },
+      ],
+      seasonality: [0.55, 1.15, 1.55, 0.75],
+      marketingSpendPerQuarter: 6_000,
+    },
+  ],
+  costLines: [
+    {
+      label: 'Dairy, mix-ins & packaging',
+      class: 'VARIABLE_REVENUE',
+      statementLine: 'COGS',
+      value: 0.28,
+      isLabor: false,
+      accruable: true,
+      capacityPerBlock: null,
+      minimumBlocks: null,
+      sourceNote: 'Scoop-shop product cost including spoilage on slow movers.',
+      provenance: 'LLM_ESTIMATE',
+    },
+  ],
+  capex: [
+    {
+      label: 'Dipping cabinets',
+      category: 'EQUIPMENT',
+      grossCost: 9_000,
+      usefulLifeYears: 10,
+      quantity: 22,
+      sourceNote: '22 cabinets at 12 flavours each.',
+    },
+  ],
+  workingCapital: {
+    dsoDays: 1,
+    dioDays: 35,
+    dpoDays: 21,
+    prepaidInsuranceMonths: 6,
+    securityDepositMonths: 2,
+    customerDepositPct: 0,
+  },
+  openNotes: ['Capture rate is an estimate; nobody has run a 256-flavour shop here.'],
+  ...over,
+});
+
+const asks = (message: string): InterviewTurn => ({ message, draft: null });
+const drafts = (message: string, d: ConceptDraft = draft()): InterviewTurn => ({
+  message,
+  draft: d,
+});
+
+describe('ConceptInterview', () => {
+  it('asks one question at a time and carries the transcript forward', async () => {
+    const transport = new ScriptedTransport([
+      asks('Where is it, and roughly how big is the space?'),
+      asks('How many people can you serve at the counter at once?'),
+      drafts("Here's the model."),
+    ]);
+    const interview = new ConceptInterview({ transport });
+
+    const first = await interview.send('I want to open an ice cream shop with 256 flavours.');
+    expect(first.status).toBe('ASKING');
+    expect(first.message).toContain('how big');
+
+    const second = await interview.send('Austin, about 900 square feet.');
+    expect(second.status).toBe('ASKING');
+
+    const third = await interview.send('Maybe 30 people at the counter.');
+    expect(third.status).toBe('DRAFTED');
+    if (third.status !== 'DRAFTED') throw new Error('unreachable');
+    expect(third.draft.businessName).toBe('256-flavour scoop shop');
+
+    // Every turn sees the whole conversation, not just the latest message.
+    const lastCall = transport.seen.at(-1)!;
+    expect(lastCall.messages).toHaveLength(5);
+    expect(lastCall.messages[0]?.content).toContain('256 flavours');
+  });
+
+  it('does not offer a list of business types to choose from', async () => {
+    // The correction that produced this whole path: "it's still requiring me to
+    // pick an industry from a fixed list." With no templates passed, the model
+    // has nothing to pick from and must synthesise.
+    const transport = new ScriptedTransport([asks('What is the business, and where?')]);
+    const interview = new ConceptInterview({ transport });
+    await interview.send('A place that rents telescopes by the hour.');
+
+    const system = transport.seen[0]!.system;
+    expect(system).not.toContain('Available seed templates');
+    expect(system).toContain('the business comes from what they tell you');
+  });
+
+  it('offers templates only when there are templates to offer', async () => {
+    const transport = new ScriptedTransport([asks('Where is it?')]);
+    const interview = new ConceptInterview({
+      transport,
+      templates: [{ id: 'full_service_restaurant', label: 'Full-service restaurant' }],
+    });
+    await interview.send('A bistro.');
+
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('`full_service_restaurant`');
+    expect(system).toContain('Otherwise null');
+  });
+
+  it('stops rather than interviewing forever', async () => {
+    const transport = new ScriptedTransport([asks('One?'), asks('Two?')]);
+    const interview = new ConceptInterview({ transport, maxTurns: 2 });
+
+    expect((await interview.send('a')).status).toBe('ASKING');
+    expect((await interview.send('b')).status).toBe('ASKING');
+    // A third would exhaust the script; the turn cap should bite first.
+    const third = await interview.send('c');
+    expect(third.status).toBe('EXHAUSTED');
+  });
+});
+
+describe('paramsToRecord', () => {
+  it('folds the wire array into the record the engine expects', () => {
+    const record = paramsToRecord(draft().streams[0]!.params);
+    expect(record['avgTicket']).toEqual({
+      value: 9,
+      range: { low: 7, high: 12 },
+      sourceNote: 'Two scoops plus a topping at metro prices.',
+      provenance: 'LLM_ESTIMATE',
+    });
+  });
+
+  it('refuses to silently pick a winner among duplicates', () => {
+    const p = draft().streams[0]!.params[0]!;
+    expect(() => paramsToRecord([p, { ...p, value: 40 }])).toThrow(/Duplicate parameter/);
+  });
+});
+
+describe('draftIssues', () => {
+  it('passes a coherent draft', () => {
+    expect(draftIssues(draft())).toEqual([]);
+  });
+
+  /**
+   * The critical negative test. D-5 permits the engine to refuse physical
+   * impossibility and nothing else, so these guards must catch *incoherent
+   * data* without ever catching an unusual business.
+   */
+  it('has no opinion about a business being strange, expensive, or unwise', () => {
+    const strange = draft({
+      businessName: 'Telescope rental, $4,000 an hour',
+      streams: [
+        {
+          ...draft().streams[0]!,
+          params: [
+            {
+              name: 'avgTicket',
+              value: 4_000,
+              low: 4_000,
+              high: 4_000,
+              sourceNote: 'The founder asserts this with no evidence.',
+              provenance: 'PLAYER_ASSUMED',
+            },
+            {
+              name: 'captureRate',
+              value: 0.85,
+              low: 0.8,
+              high: 0.9,
+              sourceNote: 'Also asserted.',
+              provenance: 'PLAYER_ASSUMED',
+            },
+          ],
+        },
+      ],
+    });
+    // Wildly out of band on both price and capture, entirely unsourced — and
+    // still a valid model. Arguing with it is the challenge loop's job, and
+    // arguing is not refusing.
+    expect(draftIssues(strange)).toEqual([]);
+  });
+
+  it('catches a rate booked as dollars — the unit slip that hires 200 crews', () => {
+    const broken = draft({
+      costLines: [{ ...draft().costLines[0]!, class: 'VARIABLE_REVENUE', value: 13_000 }],
+    });
+    const issues = draftIssues(broken);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('fraction of revenue');
+  });
+
+  it('catches seasonality that rescales the year instead of redistributing it', () => {
+    const broken = draft({
+      streams: [{ ...draft().streams[0]!, seasonality: [1.5, 1.5, 1.5, 1.5] }],
+    });
+    expect(draftIssues(broken)[0]).toContain('rescales annual');
+  });
+
+  it('catches a step-fixed line with no block capacity', () => {
+    const broken = draft({
+      costLines: [
+        {
+          ...draft().costLines[0]!,
+          class: 'STEP_FIXED',
+          value: 9_000,
+          capacityPerBlock: null,
+        },
+      ],
+    });
+    expect(draftIssues(broken)[0]).toContain('capacityPerBlock');
+  });
+
+  it('catches a model with nothing driving revenue', () => {
+    expect(draftIssues(draft({ streams: [] }))[0]).toContain('No revenue stream');
+  });
+});
+
+describe('the prompt carries D-5', () => {
+  /**
+   * The prompt is the only place the absurdity principle actually binds at
+   * runtime, so it is worth asserting that the load-bearing instructions have
+   * not been edited away. These are coarse checks — they cannot prove the model
+   * behaves — but they fail loudly if someone deletes the rule.
+   */
+  it('permits the absurd and refuses only the impossible', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Do not talk them out of it');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('physical and contractual impossibility');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('256 flavours');
+  });
+
+  it('treats benchmarks as weak constraints rather than gates', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('weak constraints, not gates');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('what makes it true');
+    // The joint-claim case: high price OK, high capture OK, both is a question.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('only absurd in combination');
+  });
+
+  it('forbids borrowing a template that does not fit', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('quietly borrow its numbers');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Null is a normal answer');
+  });
+
+  it('forbids dressing an estimate as a source', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('An invented citation is worse than an admitted guess');
+  });
+});
+
+describe('the wire schema', () => {
+  it('accepts a draft with no seed template — the novel-concept case', () => {
+    const turn = zInterviewTurn.parse({ message: 'ok', draft: draft() });
+    expect(turn.draft?.seedTemplateId).toBeNull();
+  });
+
+  it('accepts a question with no draft', () => {
+    expect(zInterviewTurn.parse({ message: 'Where is it?', draft: null }).draft).toBeNull();
+  });
+
+  it('rejects a turn missing the draft field entirely', () => {
+    // Nullable, not optional: "I have no draft yet" must be stated rather than
+    // inferred from an absent key.
+    expect(() => zInterviewTurn.parse({ message: 'Where is it?' })).toThrow();
+  });
+});
