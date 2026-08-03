@@ -120,3 +120,120 @@ describe('adjusting an assumption moves the business', () => {
     expect(result.events.some((e) => e.kind === 'ACTION_REJECTED')).toBe(true);
   });
 });
+
+describe('capex paths resolve — the root the resolver silently lacked', () => {
+  /**
+   * The register has always minted `capex.<label>.grossCost` assumptions, and
+   * `setAtPath` resolved streams, costs and workingCapital — so a player who
+   * challenged a $3.26M phantom renovation and won was told the path "no
+   * longer resolves" while the model kept the number. With the challenge list
+   * ranked by dollar impact, capex sits at the top: this was the first
+   * challenge most players would ever try, and it could never land.
+   */
+  it('writes a capex spec on the model, pre-commit', () => {
+    const m = model();
+    expect(
+      setAtPath(m, 'capex.Kitchen equipment package.grossCost', fromDisplay(120_000)),
+    ).toBe(true);
+    expect(m.capex.find((c) => c.label === 'Kitchen equipment package')!.grossCost).toBe(
+      fromDisplay(120_000),
+    );
+  });
+
+  it('writes every quantity-expanded asset on a live business', () => {
+    const world = createWorld({
+      id: 'capex',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model()],
+    });
+    const business = world.businesses[0]!;
+    const kitchen = business.assets.filter((a) => a.label === 'Kitchen equipment package');
+    expect(kitchen.length).toBeGreaterThan(0);
+
+    expect(
+      setAtPath(business, 'capex.Kitchen equipment package.grossCost', fromDisplay(120_000)),
+    ).toBe(true);
+    for (const asset of business.assets.filter((a) => a.label === 'Kitchen equipment package')) {
+      expect(asset.grossCost).toBe(fromDisplay(120_000));
+    }
+  });
+
+  it('still refuses a label that does not exist', () => {
+    expect(setAtPath(model(), 'capex.Imaginary machine.grossCost', fromDisplay(1))).toBe(false);
+  });
+});
+
+describe('the maintenance reserve tracks the assets that exist', () => {
+  /**
+   * `og_maintenance` was computed once from the drafted capex and frozen. A
+   * player who argued a phantom $3.26M item down kept paying ~$32.6k a
+   * quarter to maintain the version that no longer existed, and assets bought
+   * mid-game were maintained for free.
+   */
+  it('falls when a capex price is argued down before the world opens', () => {
+    const cheap = model();
+    setAtPath(cheap, 'capex.Kitchen equipment package.grossCost', fromDisplay(20_000));
+    const world = createWorld({
+      id: 'sync',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [cheap],
+    });
+    const reference = createWorld({
+      id: 'ref',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model()],
+    });
+
+    const line = (w: typeof world): bigint =>
+      tick(w, [], { throwOnAssertionFailure: true }).state.businesses[0]!.costs.fixedPeriod.find(
+        (c) => c.id === 'og_maintenance',
+      )!.amountPerQuarter;
+
+    // Equipment maintains at 4%/yr: $160k less gross is $1,600 less a quarter.
+    expect(line(reference) - line(world)).toBe(fromDisplay(1_600));
+  });
+
+  it('moves the register entry with the line — a record OF the model', () => {
+    const cheap = model();
+    setAtPath(cheap, 'capex.Kitchen equipment package.grossCost', fromDisplay(20_000));
+    const world = createWorld({
+      id: 'sync2',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [cheap],
+    });
+    const after = tick(world, [], { throwOnAssertionFailure: true });
+    const business = after.state.businesses[0]!;
+    const id = business.assumptions.byPath['costs.og_maintenance.amountPerQuarter']!;
+    expect(business.assumptions.byId[id]!.value).toBe(
+      business.costs.fixedPeriod.find((c) => c.id === 'og_maintenance')!.amountPerQuarter,
+    );
+  });
+
+  it('stops recomputing once the player owns the number', () => {
+    // A derived recompute silently reverting an `assume` would make that
+    // command theatre for exactly this line. Derived until claimed, then theirs.
+    const world = createWorld({
+      id: 'owned',
+      playerId: 'p',
+      config: createWorldConfig({ startMode: 'MID' }),
+      models: [model()],
+    });
+    const business = world.businesses[0]!;
+    const id = business.assumptions.byPath['costs.og_maintenance.amountPerQuarter']!;
+
+    const adjusted = tick(
+      world,
+      [{ kind: 'ADJUST_ASSUMPTION', assumptionId: id, newValue: fromDisplay(1_000) }],
+      { throwOnAssertionFailure: true },
+    );
+    const next = tick(adjusted.state, [], { throwOnAssertionFailure: true });
+    const line = next.state.businesses[0]!.costs.fixedPeriod.find(
+      (c) => c.id === 'og_maintenance',
+    )!;
+    expect(line.amountPerQuarter).toBe(fromDisplay(1_000));
+  });
+});

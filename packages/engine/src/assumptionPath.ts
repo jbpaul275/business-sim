@@ -35,6 +35,10 @@ interface Target {
   streams: (Business | BusinessModel)['streams'];
   costs: Business['costs'];
   workingCapital?: BusinessModel['workingCapital'];
+  /** Pre-commit: the model's capex specs, one entry per line. */
+  capex?: BusinessModel['capex'];
+  /** Post-commit: the opened assets, one entry per unit, sharing a label. */
+  assets?: Business['assets'];
 }
 
 /** Every cost line, whatever bucket it lives in. */
@@ -83,6 +87,38 @@ export function setAtPath(target: Target, path: string, value: number | Money): 
 
   if (root === 'workingCapital' && target.workingCapital) {
     return assign(target.workingCapital as unknown as Record<string, unknown>, rest, value);
+  }
+
+  /**
+   * Capex, the root this resolver silently lacked.
+   *
+   * The register has always minted `capex.<label>.grossCost` assumptions, so a
+   * player could challenge a $3.26M phantom renovation, win the ruling — and
+   * be told the path "no longer resolves" while the model kept the number.
+   * With the challenge list now ranked by dollar impact, capex sits at the
+   * top, which made this the first challenge most players would ever try.
+   *
+   * Labels may contain dots, so the field is the last segment and the label is
+   * everything between. Pre-commit the target carries `capex` specs; a live
+   * business carries `assets`, quantity-expanded with the label shared — every
+   * matching unit moves, because they are one line wearing many rows.
+   */
+  if (root === 'capex') {
+    const field = rest[rest.length - 1];
+    const label = rest.slice(0, -1).join('.');
+    if (field === undefined || label === '') return false;
+    let hit = false;
+    for (const item of target.capex ?? []) {
+      if (item.label === label && assign(item as unknown as Record<string, unknown>, [field], value)) {
+        hit = true;
+      }
+    }
+    for (const asset of target.assets ?? []) {
+      if (asset.label === label && assign(asset as unknown as Record<string, unknown>, [field], value)) {
+        hit = true;
+      }
+    }
+    return hit;
   }
 
   return false;
