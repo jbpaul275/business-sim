@@ -312,8 +312,16 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     const named = byName.get(path.split('.').pop() ?? '');
     if (named) return named;
 
-    // Working capital and capex came out of the same draft, but their paths
-    // carry a field or an asset label rather than a parameter name.
+    // A capex item carries its own tag — "I found a property for $400k" is
+    // PLAYER_SOURCED even though it is an asset rather than a parameter. The
+    // label may contain dots, so the match is anchored on both ends.
+    const capexLabel = /^capex\.(.+)\.grossCost$/.exec(path)?.[1];
+    if (capexLabel !== undefined) {
+      return draft.capex.find((c) => c.label === capexLabel)?.provenance ?? 'LLM_ESTIMATE';
+    }
+
+    // Working capital came out of the same draft; its paths carry a field
+    // name rather than a parameter name.
     if (/^(workingCapital|capex)\./.test(path)) return 'LLM_ESTIMATE';
 
     // A stream parameter the draft never named is the engine's own archetype

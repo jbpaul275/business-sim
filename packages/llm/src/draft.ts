@@ -165,6 +165,16 @@ export const zDraftCapex = z.object({
   usefulLifeYears: z.number(),
   quantity: z.number(),
   sourceNote: z.string().default(''),
+  /**
+   * Capex was the one place a draft could not say where a number came from.
+   *
+   * A player said "I found a 5,000 sq ft property... for $400k" — the clearest
+   * player-sourced figure in the session — and the register credited it to the
+   * model, because this schema had a sourceNote and no provenance field. The
+   * default degrades downward, same rule as everywhere else: a forgotten tag
+   * can only understate support, never claim it.
+   */
+  provenance: zProvenanceWire.default('LLM_ESTIMATE'),
 });
 
 /**

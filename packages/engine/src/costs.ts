@@ -376,3 +376,37 @@ export function maintenanceReservePerQuarter(business: Business): Money {
     business.assets.map((a) => mulRate(a.grossCost, a.maintenancePctOfGrossPerYear / 4)),
   );
 }
+
+/**
+ * Point the maintenance line at the assets that exist NOW.
+ *
+ * The `og_maintenance` line was computed once, from the drafted capex, at
+ * model build — and then frozen. A player who challenged a $3.26M phantom
+ * renovation down kept paying $32.6k a quarter to maintain the version of it
+ * that no longer existed, and a player who bought machines mid-game
+ * maintained them for free. The reserve is derived from the asset base, so it
+ * has to move when the base does — both directions.
+ *
+ * The one exception is a number the player has taken ownership of: a
+ * PLAYER_* provenance on the line's assumption means they revised or sourced
+ * it, and a derived recompute silently reverting an `assume` would make that
+ * command theatre for exactly this line. Derived until claimed, then theirs.
+ *
+ * The register entry moves with the line — it is a record OF the model, so
+ * both move or neither does.
+ */
+export function syncMaintenanceReserve(business: Business): void {
+  const line = business.costs.fixedPeriod.find((c) => c.id === 'og_maintenance');
+  if (!line) return;
+  const assumptionId = business.assumptions.byPath['costs.og_maintenance.amountPerQuarter'];
+  const assumption = assumptionId ? business.assumptions.byId[assumptionId] : undefined;
+  if (
+    assumption &&
+    (assumption.provenance === 'PLAYER_ASSUMED' || assumption.provenance === 'PLAYER_SOURCED')
+  ) {
+    return;
+  }
+  const amount = maintenanceReservePerQuarter(business);
+  line.amountPerQuarter = amount;
+  if (assumption) assumption.value = amount;
+}

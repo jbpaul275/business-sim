@@ -26,6 +26,7 @@ import {
   resolveCapacity,
   stepFixedCosts,
   streamContributionMarginPct,
+  syncMaintenanceReserve,
   variableWithActivity,
   variableWithRevenue,
 } from './costs.js';
@@ -148,6 +149,11 @@ export function tick(
 
   // ── 3. Lease escalators and contract expirations ────────────────────────
   applyRenewals(next, period);
+
+  // ── 3a. The maintenance reserve tracks what each business now owns ──────
+  // After actions have matured and applied, so an asset bought this quarter
+  // starts costing upkeep this quarter, and a challenged-down price stops.
+  for (const business of next.businesses) syncMaintenanceReserve(business);
 
   // Household outflows are committed before any business crisis resolution can
   // draw on household cash (§9.2 ordering rule 2).

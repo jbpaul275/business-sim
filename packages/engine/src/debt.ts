@@ -173,6 +173,53 @@ export function collateralValue(business: Business): Money {
 /** SBA requires the owner to fund at least a tenth of the deal (§6.3). */
 export const MIN_OWNER_INJECTION_PCT = 0.1;
 
+/**
+ * Leverage pricing for pre-revenue lending — the mechanism the funding screen
+ * quotes from.
+ *
+ * A pre-revenue loan priced at flat prime-plus-spread regardless of whether
+ * the owner funded half the deal or a tenth of it, which meant the one thing
+ * a founder controls at opening — their own injection — bought them nothing
+ * on rate. Tiers rather than a curve, because a tier has a name the screen
+ * can point at: "put in $40k more and you are under 65% financed, which
+ * prices 75 basis points lower" is a sentence; a formula is not.
+ *
+ * `maxDebtShare` is debt over total deal (debt + contributed capital),
+ * inclusive. The last tier ends at the SBA's own 10%-injection floor — a deal
+ * more levered than that is not priced, it is declined.
+ */
+export const LEVERAGE_PRICING: readonly { maxDebtShare: number; spread: number }[] = [
+  { maxDebtShare: 0.5, spread: 0 },
+  { maxDebtShare: 0.65, spread: 0.0075 },
+  { maxDebtShare: 0.8, spread: 0.015 },
+  { maxDebtShare: 0.9, spread: 0.03 },
+];
+
+/** The leverage step-up for a term loan against the equity in the deal. */
+export function leverageSpread(principal: Money, equityInDeal: Money): number {
+  if (principal <= 0n) return 0;
+  const total = principal + (equityInDeal > 0n ? equityInDeal : 0n);
+  if (total <= 0n) return LEVERAGE_PRICING[LEVERAGE_PRICING.length - 1]!.spread;
+  const share = ratio(principal, total);
+  for (const tier of LEVERAGE_PRICING) {
+    if (share <= tier.maxDebtShare) return tier.spread;
+  }
+  return LEVERAGE_PRICING[LEVERAGE_PRICING.length - 1]!.spread;
+}
+
+/**
+ * What a pre-revenue opening term loan prices at — one source, used by the
+ * funding screen's quote, the underwriting decision and the opened facility,
+ * so the number the player accepts is the number the ledger charges.
+ */
+export function openingLoanRate(
+  primeRate: number,
+  principal: Money,
+  equityInDeal: Money,
+): number {
+  return primeRate + DEBT_PRODUCTS.SBA_7A.spreadOverPrime + leverageSpread(principal, equityInDeal);
+}
+
 export function underwrite(
   business: Business,
   spec: DebtSpec,
@@ -209,6 +256,13 @@ export function underwrite(
     const collateral = collateralValue(business);
     const equityInjection = business.balances.contributedCapital;
     const minimumEquity = mulRate(spec.requestedPrincipal, MIN_OWNER_INJECTION_PCT);
+
+    // With no operating history, the equity ratio is the only risk signal
+    // there is, so it prices the loan. Term facilities only: a revolver's
+    // spread already reflects that it lends against receivables, not the deal.
+    if (spec.kind !== 'REVOLVER') {
+      rate += leverageSpread(spec.requestedPrincipal, equityInjection);
+    }
 
     if (spec.requestedPrincipal > collateral) {
       return {

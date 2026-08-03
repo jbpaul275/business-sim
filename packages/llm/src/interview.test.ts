@@ -67,6 +67,7 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
       usefulLifeYears: 10,
       quantity: 22,
       sourceNote: '22 cabinets at 12 flavours each.',
+      provenance: 'LLM_ESTIMATE',
     },
   ],
   workingCapital: {
