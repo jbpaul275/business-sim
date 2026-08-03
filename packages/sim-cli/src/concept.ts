@@ -1,6 +1,7 @@
 import {
   AnthropicConceptTransport,
   ConceptInterview,
+  BudgetExhaustedError,
   ConceptRefusedError,
   MalformedDraftError,
   UnusableResponseError,
@@ -196,6 +197,20 @@ export async function runConceptInterview(
       if (error instanceof ConceptRefusedError) {
         console.log(`\n  ${RED}${error.message}${RESET}`);
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);
+        return undefined;
+      }
+      if (error instanceof BudgetExhaustedError) {
+        // Only reachable when the retry with more room ran out too, which
+        // means the concept is genuinely large rather than the budget wrong.
+        console.log(
+          `\n  ${RED}${wrap('The model could not fit this concept into a single draft, even with more room.', 74, '')}${RESET}`,
+        );
+        console.log(
+          note(
+            'Raise it with BIZSIM_DRAFT_MAX_TOKENS, or describe a simpler version — fewer' +
+              ' channels, one location — and expand it once it is running.',
+          ),
+        );
         return undefined;
       }
       if (error instanceof UnusableResponseError || error instanceof MalformedDraftError) {

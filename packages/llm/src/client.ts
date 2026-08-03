@@ -173,7 +173,18 @@ export interface AnthropicTransportOptions {
   /** Model for synthesis. Splitting one draft across seventeen overhead fields
    * and six archetypes is the hardest single call this makes. */
   draftModel?: string;
+  /** Kept for callers that set one budget; it now sizes the draft. */
   maxTokens?: number;
+  /** Output budget for a conversational turn. Thinking is billed against it. */
+  turnMaxTokens?: number;
+  /**
+   * Output budget for synthesis, which needs far more than a turn.
+   *
+   * Thinking counts against `max_tokens`, so this has to cover the reasoning
+   * *and* the draft JSON. At high effort the reasoning alone can be four times
+   * the size of the object it is producing.
+   */
+  draftMaxTokens?: number;
   /**
    * Effort for a conversational turn. Lower than the draft on purpose: effort
    * is the latency dial, and asking "how many rooms?" does not warrant the same
@@ -205,17 +216,45 @@ function isGrammarTooLarge(error: unknown): boolean {
   );
 }
 
+/**
+ * The call hit its output ceiling before it finished.
+ *
+ * Thinking is billed against `max_tokens`, so this is nearly always a draft
+ * that reasoned for most of its budget and then stopped part-way through a
+ * JSON object. It ended a live session with the text "Raise maxTokens or lower
+ * effort" — advice addressed to whoever wrote this file, printed to a player
+ * who has no way to act on it and had just watched three turns of work vanish.
+ *
+ * Typed so the draft path can do the obvious thing instead: try again with
+ * more room and one step less reasoning to fill it with.
+ */
+export class BudgetExhaustedError extends Error {
+  constructor(
+    readonly budget: number,
+    readonly thinkingTokens: number,
+  ) {
+    super(
+      `The model used its whole ${budget.toLocaleString()}-token output budget ` +
+        `(${thinkingTokens.toLocaleString()} of it thinking) and stopped part-way through.`,
+    );
+    this.name = 'BudgetExhaustedError';
+  }
+}
+
 export class AnthropicConceptTransport implements ConceptTransport {
   private readonly client: Anthropic;
   private readonly turnModel: string;
   private readonly draftModel: string;
-  private readonly maxTokens: number;
+  private readonly turnMaxTokens: number;
+  private readonly draftMaxTokens: number;
   private readonly turnEffort: Effort;
   private readonly draftEffort: Effort;
   /** How often a response came back empty or corrupted. Surfaced, not swallowed. */
   unusableRetries = 0;
   /** Every call this transport has made, including retries and fallbacks. */
   usage: UsageTotal = EMPTY_USAGE;
+  /** How often a draft had to be retried with more room. Surfaced, not hidden. */
+  budgetRetries = 0;
 
   constructor(options: AnthropicTransportOptions = {}) {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
@@ -227,7 +266,18 @@ export class AnthropicConceptTransport implements ConceptTransport {
     const model = options.model ?? process.env['BIZSIM_MODEL'] ?? 'claude-opus-5';
     this.turnModel = options.turnModel ?? process.env['BIZSIM_TURN_MODEL'] ?? model;
     this.draftModel = options.draftModel ?? process.env['BIZSIM_DRAFT_MODEL'] ?? model;
-    this.maxTokens = options.maxTokens ?? 16_000;
+    // Two budgets, because they are two different jobs. A single 16,000 for
+    // both is what ended a live session three turns in: `thinking` is billed
+    // against max_tokens, so a high-effort draft that reasons for 13k tokens
+    // has 3k left for a JSON object with seventeen overhead fields in it, and
+    // stops mid-object. A conversational turn never needs a tenth of this.
+    const budget = (name: string, fallback: number): number => {
+      const raw = Number(process.env[name]);
+      return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+    };
+    this.turnMaxTokens = options.turnMaxTokens ?? budget('BIZSIM_TURN_MAX_TOKENS', 8_000);
+    this.draftMaxTokens =
+      options.draftMaxTokens ?? options.maxTokens ?? budget('BIZSIM_DRAFT_MAX_TOKENS', 32_000);
     // Overridable without a rebuild, so the speed/quality trade can be tuned
     // by whoever is actually waiting on it.
     this.turnEffort = options.turnEffort ?? envEffort('BIZSIM_TURN_EFFORT', 'medium');
@@ -240,10 +290,11 @@ export class AnthropicConceptTransport implements ConceptTransport {
     schema: Record<string, unknown> | undefined,
     effort: Effort,
     model: string,
+    maxTokens: number,
   ): Promise<{ text: string; reasoning?: string; usage: TurnUsage }> {
     const response = await this.client.messages.create({
       model,
-      max_tokens: this.maxTokens,
+      max_tokens: maxTokens,
       system,
       // Thinking is on by default on this model and billed either way; the
       // default `display` of "omitted" just discards the summary. Asking for it
@@ -256,21 +307,10 @@ export class AnthropicConceptTransport implements ConceptTransport {
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
 
-    // A refusal is a successful HTTP response with an empty content array, so
-    // reading the result without checking would surface as a confusing null
-    // rather than as what it is.
-    if (response.stop_reason === 'refusal') {
-      throw new ConceptRefusedError(response.stop_details?.explanation ?? undefined);
-    }
-    if (response.stop_reason === 'max_tokens') {
-      throw new Error(
-        'The model ran out of output budget mid-draft. Raise maxTokens or lower effort.',
-      );
-    }
-    const text = response.content.find((block) => block.type === 'text')?.text;
-    if (!text) {
-      throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
-    }
+    // Recorded before anything can throw. A call that ran out of budget still
+    // generated — and still billed — every token it produced, and a meter that
+    // only counts successful calls understates the expensive failures by
+    // exactly the amount that makes them worth knowing about.
     const spent: TurnUsage = {
       inputTokens: response.usage.input_tokens,
       cachedInputTokens: response.usage.cache_read_input_tokens ?? 0,
@@ -278,6 +318,20 @@ export class AnthropicConceptTransport implements ConceptTransport {
       thinkingTokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
     };
     this.usage = addUsage(this.usage, spent);
+
+    // A refusal is a successful HTTP response with an empty content array, so
+    // reading the result without checking would surface as a confusing null
+    // rather than as what it is.
+    if (response.stop_reason === 'refusal') {
+      throw new ConceptRefusedError(response.stop_details?.explanation ?? undefined);
+    }
+    if (response.stop_reason === 'max_tokens') {
+      throw new BudgetExhaustedError(maxTokens, spent.thinkingTokens);
+    }
+    const text = response.content.find((block) => block.type === 'text')?.text;
+    if (!text) {
+      throw new Error(`No text content in response (stop_reason: ${response.stop_reason}).`);
+    }
 
     const reasoning = response.content
       .filter((block) => block.type === 'thinking')
@@ -293,7 +347,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
   }
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
-    let attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel);
+    let attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
     // Structured outputs constrain generation against the schema, so this
     // should always hold — but "should" is doing load-bearing work in a
     // sentence about generated JSON.
@@ -305,7 +359,7 @@ export class AnthropicConceptTransport implements ConceptTransport {
     // question ready in the thinking summary and just failed to emit it.
     if (isUnusable(turn)) {
       this.unusableRetries += 1;
-      attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel);
+      attempt = await this.complete(system, messages, TURN_SCHEMA, this.turnEffort, this.turnModel, this.turnMaxTokens);
       turn = zInterviewTurn.parse(JSON.parse(attempt.text));
       if (isUnusable(turn)) {
         throw new UnusableResponseError(turn.message.trim().length === 0 ? 'empty' : 'garbled');
@@ -319,27 +373,64 @@ export class AnthropicConceptTransport implements ConceptTransport {
     };
   }
 
+  /**
+   * Effort to fall back to when the budget ran out.
+   *
+   * Down one step, not to the floor: the draft is the hardest reasoning in the
+   * session and the failure was space, not capability. Dropping straight to
+   * `low` would answer "you thought too long" with "so stop thinking", which
+   * produces a cheap draft that then fails the checks and costs two more calls.
+   */
+  private static readonly ONE_STEP_DOWN: Record<Effort, Effort> = {
+    max: 'xhigh',
+    xhigh: 'high',
+    high: 'medium',
+    medium: 'low',
+    low: 'low',
+  };
+
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
     try {
-      text = (await this.complete(system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel)).text;
+      text = (await this.complete(system, asked, DRAFT_SCHEMA, this.draftEffort, this.draftModel, this.draftMaxTokens)).text;
     } catch (error) {
-      if (!isGrammarTooLarge(error)) throw error;
-      // The draft schema is close to whatever the grammar ceiling is, and where
-      // exactly it sits is not something this package can know. Degrading to an
-      // unconstrained call keeps the feature working: the schema is still in
-      // the prompt and the result is still parsed with Zod, so the guarantee
-      // weakens from "cannot be malformed" to "cannot pass unnoticed".
-      text = (
-        await this.complete(
-          `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
-          asked,
-          undefined,
-          this.draftEffort,
-          this.draftModel,
-        )
-      ).text;
+      if (error instanceof BudgetExhaustedError) {
+        // Thinking is billed against the output ceiling, so a draft that
+        // reasoned for most of its budget has nothing left for the object it
+        // was reasoning about. Both halves of that get fixed: more room, and
+        // one step less reasoning to fill it with. Three turns of a live
+        // session died here rather than taking the obvious second try.
+        this.budgetRetries += 1;
+        text = (
+          await this.complete(
+            system,
+            asked,
+            DRAFT_SCHEMA,
+            AnthropicConceptTransport.ONE_STEP_DOWN[this.draftEffort],
+            this.draftModel,
+            Math.round(this.draftMaxTokens * 1.5),
+          )
+        ).text;
+      } else {
+        if (!isGrammarTooLarge(error)) throw error;
+        // The draft schema is close to whatever the grammar ceiling is, and
+        // where exactly it sits is not something this package can know.
+        // Degrading to an unconstrained call keeps the feature working: the
+        // schema is still in the prompt and the result is still parsed with
+        // Zod, so the guarantee weakens from "cannot be malformed" to "cannot
+        // pass unnoticed".
+        text = (
+          await this.complete(
+            `${system}\n\n## Draft schema\n\n${JSON.stringify(DRAFT_SCHEMA)}`,
+            asked,
+            undefined,
+            this.draftEffort,
+            this.draftModel,
+            this.draftMaxTokens,
+          )
+        ).text;
+      }
     }
     let json: unknown;
     try {
