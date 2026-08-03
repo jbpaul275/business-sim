@@ -31,6 +31,9 @@ create table if not exists public.sessions (
   -- Quality signals, denormalised so the common query needs no join.
   repair_rounds     integer  not null default 0,
   questions_asked   integer  not null default 0,
+  -- Quarters the model narrated (§11.5) — the other denominator for the
+  -- fabrication rate, since narration speaks every quarter and Q&A on request.
+  narrations        integer  not null default 0,
   fabricated_figures integer not null default 0,
   cancelled         integer  not null default 0,
   -- When the row arrived, set server-side. A client clock is not evidence.

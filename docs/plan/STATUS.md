@@ -9,7 +9,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
 | **M4 — Challenge loop** | 🟡 Mostly | The §11.3 contract, isolated from the thread, with rules 1 and 6 enforced in code rather than requested. Adversarial fixtures and the sycophancy regression are in the suite. `ADJUST_ASSUMPTION` now writes through to the model, which it never did. Reverse challenge (§11.3.1) fires on out-of-band assumptions. Cost catalog is a first tranche (16 items), not D-2's ~500 |
-| **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` not started; `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
+| **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` (§11.5) narrates every pause — headline, narrative and suggested questions over the engine's screen, money-guarded like the advisor, silent when it cannot pass the guard. `attributions` deferred (below). `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
 | **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
@@ -191,8 +191,11 @@ which the reference model omitted — the same reason its year three sat above b
   different second business is a new run today.
 - **A clone re-prompting for each parameter that differs.** §9.5 lists location, rent, traffic, wage rate,
   buildout and unit count; this build takes one size multiplier covering all of them.
-- **`TurnNarration` (§11.5).** The quarterly screen is still engine output with no prose over it. A model
-  now answers questions mid-game (§11.4), but it does not narrate the result of a quarter.
+- **`TurnNarration.attributions` (§11.5).** The narration is built; the `attributions` field — each
+  significant move mapped to the assumption ID driving it, with provenance — is not. It needs §10.4's
+  per-quarter delta attribution, which the engine does not compute yet: knowing *which registered
+  assumption* moved the quarter is sensitivity analysis, not narration, and pretending the model can
+  supply it would be inviting exactly the invented mechanisms §11.5 forbids.
 - **Any live-call test, anywhere.** Every LLM path in this repo is verified against scripted or stubbed
   transports. Nothing has ever asserted that a real provider accepts the request a transport builds. That
   was a tolerable gap while there was one provider that had visibly worked; it is the largest unverified

@@ -23,9 +23,11 @@ import {
   zInterviewTurn,
   type ConceptDraft,
 } from './draft.js';
+import { type TurnNarration, zTurnNarration } from './narration.js';
 import {
   ADJUDICATION_SCHEMA,
   ADVICE_SCHEMA,
+  NARRATION_SCHEMA,
   DRAFT_AS_PROSE,
   DRAFT_SCHEMA,
   TURN_SCHEMA,
@@ -516,6 +518,21 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       this.turnMaxTokens,
     );
     return zAdjudication.parse(JSON.parse(stripFence(attempt.text)));
+  }
+
+  /** §11.5, on the advisor's dials — it fires every quarter. */
+  async narrate(system: string, input: string): Promise<TurnNarration> {
+    const attempt = await this.complete(
+      'narrate',
+      1,
+      system,
+      [{ role: 'user', content: input }],
+      NARRATION_SCHEMA,
+      this.adviceEffort,
+      this.turnModel,
+      this.adviceMaxTokens,
+    );
+    return zTurnNarration.parse(JSON.parse(stripFence(attempt.text)));
   }
 
   /**

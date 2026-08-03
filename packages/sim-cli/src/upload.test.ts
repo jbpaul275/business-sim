@@ -40,6 +40,8 @@ const events: JournalEvent[] = [
   { kind: 'fault', round: 1, issues: ['a rate booked as dollars'] },
   { kind: 'asked', question: `how do i grow ${SECRET}`, answered: ['x'] },
   { kind: 'advice_corrected', question: 'how do i grow', figures: ['$412k'] },
+  { kind: 'narration', period: 0, headline: `The ridge opened quietly`, narrative: SECRET, ms: 3_000 },
+  { kind: 'narration_corrected', period: 0, figures: ['$9k'] },
   { kind: 'commit', committed: true, equity: '$1', termDebt: '$0', openingCash: '$1', monthZero: '$1' },
   { kind: 'quarter', period: 0, revenue: '$1', ebitda: '$0', cash: '$1', events: [] },
 ];
@@ -101,7 +103,8 @@ describe('what the metrics tier sends', () => {
     });
     expect(session.outcome).toBe('committed');
     expect(session.repair_rounds).toBe(1);
-    expect(session.fabricated_figures).toBe(1);
+    expect(session.narrations).toBe(1);
+    expect(session.fabricated_figures).toBe(2);
     expect(session.questions_asked).toBe(1);
   });
 
@@ -120,7 +123,7 @@ describe('what the transcript tier sends', () => {
     expect(JSON.stringify(payload.transcripts)).toContain(SECRET);
     // Every content event, and no metric ones duplicated into it.
     expect(payload.transcripts.map((t) => t.kind).sort()).toEqual(
-      ['advice_corrected', 'asked', 'draft', 'turn'].sort(),
+      ['advice_corrected', 'asked', 'draft', 'narration', 'narration_corrected', 'turn'].sort(),
     );
   });
 

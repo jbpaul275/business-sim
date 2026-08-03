@@ -43,6 +43,9 @@ const emptyKind = (): Record<CallKind, { calls: number; costUsd: number; ms: num
   draft: { calls: 0, costUsd: 0, ms: 0 },
   advise: { calls: 0, costUsd: 0, ms: 0 },
   adjudicate: { calls: 0, costUsd: 0, ms: 0 },
+  // One per quarter played, so over a long run this is the volume leader —
+  // which is exactly why it is not folded into `advise`.
+  narrate: { calls: 0, costUsd: 0, ms: 0 },
 });
 
 export function totalSpend(records: readonly CallRecord[]): Spend {

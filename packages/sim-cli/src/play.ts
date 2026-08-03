@@ -13,7 +13,13 @@ import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
 import { postmortem, runPoint, type RunPoint } from './postmortem.js';
-import { askAdvisor, providerKeyVar, type AdviceTransport } from '@bizsim/llm';
+import {
+  askAdvisor,
+  narrateQuarter,
+  providerKeyVar,
+  type AdviceTransport,
+  type NarrationTransport,
+} from '@bizsim/llm';
 import { cloneOutlay, saleValue } from '@bizsim/engine';
 import { buildBriefing } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
@@ -1266,6 +1272,82 @@ async function speakToPlayer(
   }
 }
 
+/**
+ * §11.5 — the sentence over the top of the quarter.
+ *
+ * Runs after `renderTurn`, so everything it explains is already on screen and
+ * everything it says can be checked against what the player sees. Prints
+ * nothing at all when it cannot pass the money guard, when the transport
+ * fails, or when there is no model — the screen above is complete without it,
+ * and correct-but-terse beats fluent-but-wrong.
+ */
+async function narrateTurn(
+  advisor: (AdviceTransport & Partial<NarrationTransport>) | undefined,
+  world: WorldState,
+  business: Business,
+  result: TickResult,
+  history: readonly RunPoint[],
+  journal?: Journal,
+): Promise<void> {
+  if (!advisor?.narrate) return;
+  const period = result.statements.period;
+  try {
+    // The quarter before the one on screen, so "what changed" is a comparison
+    // the model was handed rather than a memory it invents. After a `skip`,
+    // that is the quarter immediately before the rendered one — which is also
+    // the comparison the screen itself implies.
+    const prior = history.length >= 2 ? history[history.length - 2] : undefined;
+    const events = result.events
+      .filter((e) => e.severity !== 'INFO')
+      .map((e) => describeEvent(e));
+    const briefing = buildBriefing(world, business, result, [], [...VERBS].filter(Boolean), {
+      ...(prior ? { prior: { revenue: prior.revenue, ebitda: prior.ebitda, cash: prior.cash } } : {}),
+      events,
+    });
+    const outcome = await narrateQuarter(
+      { narrate: (system, input) => advisor.narrate!(system, input) },
+      briefing,
+      () => Date.now(),
+    );
+    if (!outcome) {
+      // Twice it could not narrate without inventing a figure. Silence, and a
+      // record — the rate at which this happens is the §1.1 quality signal.
+      journal?.write({ kind: 'narration_failed', period });
+      return;
+    }
+
+    const n = outcome.narration;
+    console.log(`\n  ${BOLD}${n.headline}${RESET}`);
+    for (const paragraph of n.narrative.split('\n').filter((x) => x.trim() !== '')) {
+      console.log(`  ${paragraph}`);
+    }
+    if (n.suggestedQuestions.length > 0) {
+      console.log(
+        `  ${DIM}worth asking: ${n.suggestedQuestions
+          .slice(0, 2)
+          .map((q) => `"${q}"`)
+          .join(' · ')} · ${(outcome.ms / 1000).toFixed(1)}s${RESET}`,
+      );
+    } else {
+      console.log(`  ${DIM}· ${(outcome.ms / 1000).toFixed(1)}s${RESET}`);
+    }
+
+    journal?.write({
+      kind: 'narration',
+      period,
+      headline: n.headline,
+      narrative: n.narrative,
+      ms: outcome.ms,
+    });
+    if (outcome.retriedOn && outcome.retriedOn.length > 0) {
+      journal?.write({ kind: 'narration_corrected', period, figures: outcome.retriedOn });
+    }
+  } catch {
+    // A transport fault costs the player a paragraph, not a turn.
+    journal?.write({ kind: 'narration_failed', period });
+  }
+}
+
 async function parseCommand(
   line: string,
   business: Business,
@@ -1274,7 +1356,7 @@ async function parseCommand(
   history: readonly RunPoint[],
   journal?: Journal,
   memory?: AdvisorMemory,
-  advisor?: AdviceTransport,
+  advisor?: AdviceTransport & Partial<NarrationTransport>,
 ): Promise<ParseResult> {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
   const streamId = business.streams[0]?.id ?? 's1';
@@ -2023,7 +2105,7 @@ export async function play(
     milestonePeriod?: number;
     journal?: Journal;
     /** Absent means no model in the loop, which is a supported way to play. */
-    advisor?: AdviceTransport;
+    advisor?: AdviceTransport & Partial<NarrationTransport>;
   } = {},
 ): Promise<void> {
   const milestonePeriod = options.milestonePeriod ?? 39;
@@ -2133,6 +2215,14 @@ export async function play(
   let last = advance([]);
   record(last);
   renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
+  await narrateTurn(
+    options.advisor,
+    state,
+    state.businesses.find((b) => b.id === businessId)!,
+    last,
+    historyOf(businessId),
+    options.journal,
+  );
 
   try {
     while (true) {
@@ -2304,6 +2394,17 @@ export async function play(
       }
 
       renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
+      // One narration per pause, not per quarter: a `skip 8` narrates the
+      // quarter that ended the skip, against the one before it. Narrating all
+      // eight would be eight model calls nobody is reading.
+      await narrateTurn(
+        options.advisor,
+        state,
+        state.businesses.find((b) => b.id === businessId)!,
+        last,
+        historyOf(businessId),
+        options.journal,
+      );
     }
   } finally {
     if (!options.input) input.close();

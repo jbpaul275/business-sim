@@ -117,13 +117,18 @@ describe('reading sessions back', () => {
       { kind: 'asked', question: 'how do i grow', answered: ['x'] },
       { kind: 'asked', question: 'should i raise price', answered: ['x'] },
       { kind: 'advice_corrected', question: 'how do i grow', figures: ['$412k'] },
+      { kind: 'narration', period: 1, headline: 'h', narrative: 'n', ms: 3_000 },
+      { kind: 'narration', period: 2, headline: 'h', narrative: 'n', ms: 2_800 },
+      { kind: 'narration_corrected', period: 2, figures: ['$77k'] },
       { kind: 'cancelled' },
     ]);
     const s = listSessions(dir).find((x) => x.build === 'q')!;
     expect(s.retriedCalls).toBe(1);
     expect(s.failedCalls).toBe(1);
     expect(s.questionsAsked).toBe(2);
-    expect(s.fabricatedFigures).toBe(1);
+    expect(s.narrations).toBe(2);
+    // Both kinds of §1.1 correction: the same guard caught the same failure.
+    expect(s.fabricatedFigures).toBe(2);
     expect(s.cancelled).toBe(1);
     // The truncated attempt is priced in. It was billed, and a comparison that
     // drops it makes the model that truncates look like the cheap one.

@@ -3,6 +3,7 @@ import { looksGarbled } from './garbled.js';
 import { zTurnAdvice } from './advice.js';
 import { zAdjudication } from './challenge.js';
 import { zConceptDraft, zInterviewTurn } from './draft.js';
+import { zTurnNarration } from './narration.js';
 
 /**
  * What goes on the wire, independent of who is on the other end of it.
@@ -36,6 +37,7 @@ export const TURN_SCHEMA = jsonSchemaFor(zInterviewTurn);
 export const DRAFT_SCHEMA = jsonSchemaFor(zConceptDraft);
 export const ADVICE_SCHEMA = jsonSchemaFor(zTurnAdvice);
 export const ADJUDICATION_SCHEMA = jsonSchemaFor(zAdjudication);
+export const NARRATION_SCHEMA = jsonSchemaFor(zTurnNarration);
 
 /**
  * The draft asked for as prose, for the fallback path. Constrained decoding is

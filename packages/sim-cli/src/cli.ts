@@ -136,7 +136,9 @@ function reportSessions(): void {
     row.calls += s.calls;
     row.retried += s.retriedCalls;
     row.failed += s.failedCalls;
-    row.asked += s.questionsAsked;
+    // Narrations join the denominator: the guard sweeps them the same way,
+    // and they are most of the model's output in a long run.
+    row.asked += s.questionsAsked + s.narrations;
     row.fabricated += s.fabricatedFigures;
     row.cancelled += s.cancelled;
     byModel.set(key, row);

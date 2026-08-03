@@ -53,6 +53,7 @@ export interface SessionRow {
   quarters: number;
   repair_rounds: number;
   questions_asked: number;
+  narrations: number;
   fabricated_figures: number;
   cancelled: number;
 }
@@ -106,6 +107,11 @@ const CONTENT_KINDS = new Set([
   'advice_corrected',
   'advice_refused',
   'advice_failed',
+  // The narration is a model's paragraph about the player's business — content
+  // as surely as the draft is. The failure kinds carry the offending figures.
+  'narration',
+  'narration_corrected',
+  'narration_failed',
 ]);
 
 /** Kinds that carry no free text and are safe under the metrics tier. */
@@ -153,7 +159,10 @@ export function redact(events: readonly JournalEvent[], id: string, tier: Consen
     quarters: events.filter((e) => e.kind === 'quarter').length,
     repair_rounds: events.filter((e) => e.kind === 'fault').length,
     questions_asked: events.filter((e) => e.kind === 'asked').length,
-    fabricated_figures: events.filter((e) => e.kind === 'advice_corrected').length,
+    narrations: events.filter((e) => e.kind === 'narration').length,
+    fabricated_figures: events.filter(
+      (e) => e.kind === 'advice_corrected' || e.kind === 'narration_corrected',
+    ).length,
     cancelled: events.filter((e) => e.kind === 'cancelled').length,
   };
 
