@@ -228,20 +228,37 @@ export async function runConceptInterview(
           console.log(
             `${DIM}  the model is busy — trying that again (${transientFailures} of ${MAX_TRANSIENT})${RESET}`,
           );
+          // A failed draft is not a failed turn. The turn before it succeeded
+          // and is already in the transcript, so replaying the player's message
+          // would put it there twice and the model would answer a conversation
+          // that did not happen. Retry only the half that failed.
+          if (error.phase === 'draft') {
+            try {
+              spinner = waiting('building the model');
+              const draft = await interview.retryDraft();
+              spinner.stop();
+              state = { status: 'DRAFTED', message: '', cta: '', draft, transcript: interview.transcript };
+            } catch (again) {
+              spinner.stop();
+              if (again instanceof TransientError) continue;
+              throw again;
+            }
+          } else {
+            continue;
+          }
+        } else {
+        console.log(`\n  ${YELLOW}The model has been busy for several attempts running.${RESET}`);
+          console.log(
+            note(
+              'Nothing is lost — press enter to try the same message again, or type something' +
+                ' else to carry on from here.',
+            ),
+          );
+          transientFailures = 0;
+          const again = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
+          if (again.trim()) reply = again;
           continue;
         }
-        console.log(`\n  ${YELLOW}The model has been busy for several attempts running.${RESET}`);
-        console.log(
-          note(
-            'Nothing is lost — press enter to try the same message again, or type something' +
-              ' else to carry on from here.',
-          ),
-        );
-        transientFailures = 0;
-        const again = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);
-        if (!again.trim()) continue;
-        reply = again;
-        continue;
       }
       if (error instanceof ConceptRefusedError) {
         console.log(`\n  ${RED}${error.message}${RESET}`);

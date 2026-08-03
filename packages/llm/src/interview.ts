@@ -162,6 +162,46 @@ export class ConceptInterview {
       CONCEPT_INTERVIEW_SYSTEM + (templates.length > 0 ? templateCatalogue(templates) : '');
   }
 
+  /**
+   * Synthesise from the transcript as it stands, without a new player message.
+   *
+   * Exists because a draft that fails on an overloaded model is not the same
+   * recovery as a turn that does. The turn before it succeeded and is already
+   * in the transcript, so resending the player's message would duplicate it —
+   * this replays only the half that failed, and costs one call rather than
+   * two.
+   */
+  async retryDraft(): Promise<ConceptDraft> {
+    return this.runDraft();
+  }
+
+  private async runDraft(): Promise<ConceptDraft> {
+    this.onDrafting?.();
+    // A second call, with the draft schema this time. Splitting the two is what
+    // keeps each request's decoding grammar inside the API's size limit, and it
+    // also stops the model juggling seventeen overhead fields while asking
+    // where the shop is.
+    //
+    // `draft()` returns a draft, not a usage record, so the cost is read as a
+    // delta on the transport's running total. That also picks up the
+    // unconstrained retry when the draft grammar will not compile, which is a
+    // second full call at draft effort and the most expensive thing that
+    // happens in a session.
+    const startedAt = Date.now();
+    const before = this.transport.usage?.thinkingTokens ?? 0;
+    let draft;
+    try {
+      draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
+    } catch (error) {
+      throw isTransient(error) ? new TransientError(error, 'draft') : error;
+    }
+    this.lastDraft = {
+      ms: Date.now() - startedAt,
+      thinkingTokens: (this.transport.usage?.thinkingTokens ?? 0) - before,
+    };
+    return draft;
+  }
+
   /** Feed the player's latest message and get the model's next move. */
   async send(playerMessage: string): Promise<InterviewState> {
     // Same invariant on the way in. An empty player line would be rejected by
@@ -253,28 +293,7 @@ export class ConceptInterview {
       };
     }
 
-    this.onDrafting?.();
-    // A second call, with the draft schema this time. Splitting the two is what
-    // keeps each request's decoding grammar inside the API's size limit, and it
-    // also stops the model juggling seventeen overhead fields while asking
-    // where the shop is.
-    // `draft()` returns a draft, not a usage record, so the cost is read as a
-    // delta on the transport's running total. That also picks up the
-    // unconstrained retry when the draft grammar will not compile, which is a
-    // second full call at draft effort and the most expensive thing that
-    // happens in a session.
-    const draftStartedAt = Date.now();
-    const before = this.transport.usage?.thinkingTokens ?? 0;
-    let draft;
-    try {
-      draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
-    } catch (error) {
-      throw isTransient(error) ? new TransientError(error) : error;
-    }
-    this.lastDraft = {
-      ms: Date.now() - draftStartedAt,
-      thinkingTokens: (this.transport.usage?.thinkingTokens ?? 0) - before,
-    };
+    const draft = await this.runDraft();
     return {
       status: 'DRAFTED',
       message: turn.message,

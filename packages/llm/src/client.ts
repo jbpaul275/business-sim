@@ -238,7 +238,19 @@ function isGrammarTooLarge(error: unknown): boolean {
  * that is definitely wrong.
  */
 export class TransientError extends Error {
-  constructor(override readonly cause: unknown) {
+  constructor(
+    override readonly cause: unknown,
+    /**
+     * Which call failed, because the two recover differently.
+     *
+     * A failed turn leaves nothing behind — the player's message is rolled
+     * back and resending it is clean. A failed *draft* happened after a turn
+     * that succeeded and is already in the transcript, so resending the
+     * player's message would put it there twice and the model would answer a
+     * conversation that did not happen. That one retries the draft alone.
+     */
+    readonly phase: 'turn' | 'draft' = 'turn',
+  ) {
     super('The model is busy right now.');
     this.name = 'TransientError';
   }
