@@ -9,6 +9,7 @@ Planning documents for the MVP described in `docs/spec/business-sim-spec.md` (v1
 | [02-milestones.md](./02-milestones.md) | M0–M8 breakdown: tasks, exit criteria, sizing, parallel tracks |
 | [03-spec-gaps.md](./03-spec-gaps.md) | Ambiguities and defects in the spec that need a decision before the affected code is written |
 | [04-risks-and-decisions.md](./04-risks-and-decisions.md) | Risk register, answers to the spec's §16 open questions, performance budgets |
+| [05-provider-migration.md](./05-provider-migration.md) | Moving the four LLM calls off Anthropic onto Kimi: model mapping, what breaks, and the gate a provider passes before it becomes the default |
 
 ---
 

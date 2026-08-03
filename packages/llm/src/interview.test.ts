@@ -425,6 +425,44 @@ describe('draftIssues', () => {
     expect(draftIssues(broken)[0]).toContain('capacityPerBlock');
   });
 
+  /**
+   * The free wall. A phone-game draft carried `Customer support (part-time)`
+   * at $0 a block supporting 1,500 subscribers, and every other check passed
+   * it: the class is right, the capacity is positive, the minimum is 1. The
+   * player was then told they were at "34.8% of capacity (1,500)" on a game
+   * sold through an app store — a ceiling that both does not exist and could
+   * have been lifted for nothing by hiring a second free block.
+   */
+  it('rejects a step-fixed block that costs nothing to add', () => {
+    const free = draft({
+      costLines: [
+        {
+          ...draft().costLines[0]!,
+          label: 'Customer support (part-time)',
+          class: 'STEP_FIXED',
+          value: 0,
+          capacityPerBlock: 1_500,
+        },
+      ],
+    });
+    const issues = draftIssues(free);
+    expect(issues).toHaveLength(1);
+    // Both ways out are named, so the retry has somewhere to go.
+    expect(issues[0]).toContain('drop the line');
+    expect(issues[0]).toContain('real quarterly cost');
+  });
+
+  it('leaves a priced block alone however small the price', () => {
+    // A cheap block is a business decision; a free one is a modelling error.
+    // The guard has to tell them apart or it becomes an opinion about wages.
+    const cheap = draft({
+      costLines: [
+        { ...draft().costLines[0]!, class: 'STEP_FIXED', value: 1, capacityPerBlock: 1_500 },
+      ],
+    });
+    expect(draftIssues(cheap)).toEqual([]);
+  });
+
   it('names the missing price parameter instead of defaulting it to zero', () => {
     // The airline run. OCCUPANCY prices under `ratePerUnitPerQuarter` — not a
     // name anyone reaches for describing a seat fare — so the model emitted

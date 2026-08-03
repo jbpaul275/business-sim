@@ -195,8 +195,19 @@ function renderTurn(result: TickResult, business: Business, world?: WorldState):
         `${YELLOW}at capacity · turned away ` +
         `${Math.round(s.lostDemand).toLocaleString()} of ${Math.round(s.demandVolume).toLocaleString()}${RESET}`;
     } else if (s.capacityVolume !== undefined && s.capacityVolume > 0) {
+      /**
+       * Named as staffing, because that is the only thing it ever was.
+       *
+       * `capacityVolume` is active blocks × capacityPerBlock — a number that
+       * moves the quarter you hire. Printing it as "34.8% of capacity (1,500)"
+       * made it read as the size of the market, and on a phone game sold
+       * through an app store that reading is simply false: there is no ceiling
+       * on subscribers at 1,500, or at 1,500,000. What is true is that the
+       * people currently on payroll cover 1,500 of them, which is a hiring
+       * trigger and not a wall.
+       */
       const used = ratio(fromDisplay(s.realizedVolume), fromDisplay(s.capacityVolume));
-      detail = `${DIM}${pct(used)} of capacity (${Math.round(s.capacityVolume).toLocaleString()})${RESET}`;
+      detail = `${DIM}staffed for ${Math.round(s.capacityVolume).toLocaleString()} (${pct(used)} used)${RESET}`;
     } else {
       // Not a hedge: several archetypes genuinely have no ceiling, and saying
       // so is more honest than implying an unstated one.
@@ -765,8 +776,8 @@ function advise(
         stream.lostDemand > 0.5
           ? `Demand is not the problem — you turned away ${Math.round(stream.lostDemand).toLocaleString()} ` +
               `this quarter. Capacity is what is binding: \`hire\` or \`expand\`.`
-          : `You are running at ${pct(used)} with ${idle.toLocaleString()} of capacity going unused. ` +
-              `Demand is what is short, not the building.`,
+          : `You are running at ${pct(used)} of what you are staffed for, with ${idle.toLocaleString()} ` +
+              `going unused. Demand is what is short, not your capacity to serve it.`,
       );
     }
   }
@@ -1010,11 +1021,12 @@ function advise(
       } else if (used < 0.6) {
         out.push(
           sparePay > 0n
-            ? `You are at ${pct(used)} of capacity: demand is short of what you built, and you are ` +
-                `staffed for the building rather than the demand. \`marketing\` and \`price\` move ` +
+            ? `You are at ${pct(used)} of what you are staffed for: demand is short of what you built, ` +
+                `and you are staffed for the plan rather than the demand. \`marketing\` and \`price\` move ` +
                 `volume; right-sizing the staffing is the half you control this quarter.`
-            : `You are at ${pct(used)} of capacity, so the constraint is demand, not the building. ` +
-                `\`marketing\` and \`price\` move volume, and the staffing already matches the volume.`,
+            : `You are at ${pct(used)} of what you are staffed for, so the constraint is demand, not ` +
+                `your capacity to serve it. \`marketing\` and \`price\` move volume, and the staffing ` +
+                `already matches the volume.`,
         );
       }
     }

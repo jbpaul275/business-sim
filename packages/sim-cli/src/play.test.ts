@@ -646,8 +646,12 @@ describe('asking what to do', () => {
     // is short — and it is also carrying staff the volume does not need, which
     // is the half the player controls this quarter.
     const printed = await transcript(['what do i do now?', 'quit']);
-    expect(printed).toMatch(/of capacity/);
-    expect(printed).toMatch(/staffed for the building rather than the demand/);
+    expect(printed).toMatch(/of what you are staffed for/);
+    expect(printed).toMatch(/staffed for the plan rather than the demand/);
+    // Never "the building". The ceiling is active blocks × capacityPerBlock —
+    // a staffing number, not a physical one — and calling it a building is how
+    // a phone game got told it was at "34.8% of capacity (1,500)".
+    expect(printed).not.toMatch(/the building/);
   });
 
   it('says nothing the ledger does not', async () => {

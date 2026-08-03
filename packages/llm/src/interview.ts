@@ -429,7 +429,32 @@ export function draftIssues(draft: ConceptDraft): string[] {
    *
    * One is a real floor. More than one is a claim worth making explicitly.
    */
+  /**
+   * A ceiling nobody pays for.
+   *
+   * A phone-game draft came back with `Customer support (part-time)` as a
+   * STEP_FIXED line at $0 a block supporting 1,500 subscribers, and the turn
+   * screen dutifully reported "522 subscribers · 34.8% of capacity (1,500)" —
+   * a wall across a business sold through an app store, where the only thing
+   * standing between the player and the next million subscribers was a block
+   * they could have hired for nothing.
+   *
+   * A block that costs nothing is not a constraint, and pretending it is one
+   * is worse than omitting it: the player sees a number that looks like market
+   * size and plans against it. Two honest readings exist and the model has to
+   * pick one — the owner does this job, in which case there is no separate
+   * line, or someone is paid to do it, in which case say what they cost.
+   */
   for (const line of draft.costLines) {
+    if (line.class === 'STEP_FIXED' && line.value <= 0) {
+      issues.push(
+        `'${line.label}' is a STEP_FIXED block costing ${line.value} a quarter, which puts a ` +
+          `ceiling of ${line.capacityPerBlock ?? 0} on the business that costs nothing to lift. ` +
+          `Either the owner does this work at small scale — in which case drop the line entirely, ` +
+          `since their time is already in owner comp — or somebody is paid for it, in which case ` +
+          `give the block its real quarterly cost.`,
+      );
+    }
     if (line.class === 'STEP_FIXED' && (line.minimumBlocks ?? 0) > 1) {
       issues.push(
         `'${line.label}' has a minimum of ${line.minimumBlocks} blocks, which says the business ` +
