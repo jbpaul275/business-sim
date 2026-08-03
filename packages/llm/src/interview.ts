@@ -1,4 +1,5 @@
 import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
+import { statedFiguresAppendix } from './commitments.js';
 import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import {
@@ -165,6 +166,19 @@ export class ConceptInterview {
   }
 
   /**
+   * The system prompt for the next call: the fixed interview prompt plus every
+   * money figure the model has already stated in this conversation, extracted
+   * from the transcript and handed back as explicit commitments.
+   *
+   * Rebuilt per call rather than mutated, because the transcript is the source
+   * of truth: `undo()` retracts an undone turn's figures automatically, and a
+   * failed call that rolled its message back never committed anything.
+   */
+  private promptNow(): string {
+    return this.system + statedFiguresAppendix(this.transcript);
+  }
+
+  /**
    * Synthesise from the transcript as it stands, without a new player message.
    *
    * Exists because a draft that fails on an overloaded model is not the same
@@ -193,7 +207,7 @@ export class ConceptInterview {
     const before = this.transport.usage?.thinkingTokens ?? 0;
     let draft;
     try {
-      draft = assertDraftShape(await this.transport.draft(this.system, this.transcript));
+      draft = assertDraftShape(await this.transport.draft(this.promptNow(), this.transcript));
     } catch (error) {
       throw isTransient(error) ? new TransientError(error, 'draft') : error;
     }
@@ -266,7 +280,7 @@ export class ConceptInterview {
     const callsBefore = this.transport.usage?.calls ?? 0;
     let turn, reasoning, usage;
     try {
-      ({ turn, reasoning, usage } = await this.transport.turn(this.system, this.transcript));
+      ({ turn, reasoning, usage } = await this.transport.turn(this.promptNow(), this.transcript));
     } catch (error) {
       // Roll the player's message back out of the transcript before rethrowing.
       // It was pushed above so the call could see it; leaving it there means a
