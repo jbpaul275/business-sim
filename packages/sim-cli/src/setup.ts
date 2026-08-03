@@ -515,6 +515,31 @@ const adjudicationOf = (transport: ConceptTransport): AdjudicationTransport => (
   adjudicate: (system, input) => transport.adjudicate(system, input),
 });
 
+/**
+ * What to call the capex line, from what is actually in it.
+ *
+ * It was hardcoded to "Buildout & equipment", which is the restaurant's word —
+ * the same reflex that told a concrete plant it needed twelve covers a day. A
+ * mobile game studio was shown "$5,000 Buildout & equipment" for what the draft
+ * had described as a development machine, and the honest reaction to that is
+ * the one it got: a software company does not do buildout.
+ *
+ * Driven off `category`, which the draft already sets, so this stays right for
+ * a business nobody has thought of yet rather than for the six in the seed set.
+ */
+function capexLabel(model: BusinessModel): string {
+  const categories = new Set(model.capex.map((c) => c.category));
+  if (categories.has('REAL_PROPERTY')) return 'Property, buildout & equipment';
+  if (categories.has('LEASEHOLD_IMPROVEMENTS')) return 'Buildout & equipment';
+  if (categories.has('VEHICLES')) {
+    return categories.size > 1 ? 'Vehicles & equipment' : 'Vehicles';
+  }
+  if (categories.has('FF&E')) {
+    return categories.has('EQUIPMENT') ? 'Equipment & fittings' : 'Fittings & furniture';
+  }
+  return 'Equipment';
+}
+
 function renderOpening(model: BusinessModel, world: WorldState): void {
   const outlays = computeMonthZeroOutlays(model);
   const business = world.businesses[0]!;
@@ -522,17 +547,33 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
   console.log(`\n${BOLD}MONTH ZERO${RESET}  ${DIM}— cash out before you serve a single customer (§5.4)${RESET}`);
   const rows: [string, Money][] = [
     ['Lease signing (first + last + deposit)', outlays.leaseSigning],
-    ['Buildout & equipment', outlays.buildoutAndEquipment],
+    [capexLabel(model), outlays.buildoutAndEquipment],
     ['Opening inventory', outlays.initialInventory],
     ['Permits & legal', outlays.permitsAndLegal],
     ['Prepaid insurance', outlays.prepaidInsurance],
     ['Pre-opening payroll & training', outlays.preOpeningPayroll],
     ['Pre-opening marketing', outlays.preOpeningMarketing],
     ['Debt origination fees', outlays.debtOriginationFees],
+    ['Revolver commitment fee', outlays.revolverCommitmentFees],
   ];
   for (const [label, value] of rows) {
     if (value === 0n) continue;
     console.log(`  ${pad(label, 42)}${rpad(toDisplay(value), 16)}`);
+    // What the capex line is actually made of. "$5,000 of buildout" on a
+    // mobile game studio is a figure nobody can argue with because nobody can
+    // tell what it is; the draft named every item and the screen was throwing
+    // the names away.
+    if (label === capexLabel(model)) {
+      for (const item of model.capex.slice(0, 4)) {
+        const each = item.quantity > 1 ? ` × ${item.quantity}` : '';
+        console.log(
+          `    ${DIM}${pad(item.label + each, 40)}${toDisplay(item.grossCost, { showCents: false })}${RESET}`,
+        );
+      }
+      if (model.capex.length > 4) {
+        console.log(`    ${DIM}…and ${model.capex.length - 4} more${RESET}`);
+      }
+    }
   }
   console.log(`  ${BOLD}${pad('TOTAL', 42)}${rpad(toDisplay(outlays.total), 16)}${RESET}`);
 
