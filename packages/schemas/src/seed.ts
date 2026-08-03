@@ -124,3 +124,31 @@ export const zSeedTemplate = z.object({
 });
 export type SeedTemplate = z.infer<typeof zSeedTemplate>;
 export type SeedTemplateInput = z.input<typeof zSeedTemplate>;
+
+/**
+ * The cost catalog — spec §11.3 rule 1's prerequisite, and D-2's build task.
+ *
+ * Rule 1 says a bare assertion moves a value "at most to the nearer boundary of
+ * the existing range". Without a sourced range that rule arbitrates between two
+ * guesses while presenting the result as authoritative — which is the exact
+ * behaviour the contract exists to prevent, one level up.
+ *
+ * Tiers are the mechanism behind rule 3's discriminating question. "$10k or
+ * $60k" is an argument; "countertop 3-quart or floor 20-quart" is a question
+ * with an answer, and the answer settles the number.
+ */
+export const zCatalogItem = z.object({
+  id: z.string(),
+  label: z.string(),
+  /** Seed templates this is relevant to. Empty means it applies to anything. */
+  templates: z.array(z.string()),
+  unit: z.enum(['USD', 'pct']),
+  low: z.number(),
+  high: z.number(),
+  tiers: z.array(z.object({ tier: z.string(), low: z.number(), high: z.number() })),
+  /** Where the range came from, in a sentence a player can go and check. */
+  source: z.string(),
+  /** What a player or a draft might call this line. */
+  keywords: z.array(z.string()),
+});
+export type CatalogItem = z.infer<typeof zCatalogItem>;

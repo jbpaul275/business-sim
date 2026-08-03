@@ -1,5 +1,13 @@
-import { zSeedTemplate, zSecurity, type SeedTemplate, type Security } from '@bizsim/schemas';
+import {
+  zSeedTemplate,
+  zSecurity,
+  zCatalogItem,
+  type SeedTemplate,
+  type Security,
+  type CatalogItem,
+} from '@bizsim/schemas';
 import securities from '../data/securities.json' with { type: 'json' };
+import costCatalog from '../data/cost_catalog.json' with { type: 'json' };
 import fullServiceRestaurant from '../data/full_service_restaurant.json' with { type: 'json' };
 import professionalServicesFirm from '../data/professional_services_firm.json' with { type: 'json' };
 import ecommerceDtcBrand from '../data/ecommerce_dtc_brand.json' with { type: 'json' };
@@ -94,4 +102,47 @@ export function validateMonthlyWeights(template: SeedTemplate): string[] {
     issues.push(`${template.id}: monthly weights average ${overall.toFixed(3)}, expected 1.00.`);
   }
   return issues;
+}
+
+/**
+ * The cost catalog — D-2, and §11.3 rule 1's prerequisite.
+ *
+ * A first tranche, not the full ~500 items D-2 scopes: enough to give the
+ * adjudication contract real ranges to argue from across the six existing
+ * templates, with the tiers that turn "$10k or $60k" into a question with an
+ * answer. Items accrete; the mechanism does not.
+ *
+ * Every entry carries the source of its range in a sentence a player can check.
+ * A catalog whose numbers cannot be traced is the same guess with more
+ * confidence attached, which is what this exists to stop.
+ */
+const catalogItems = costCatalog.map((raw) => zCatalogItem.parse(raw));
+
+export const listCatalogItems = (): CatalogItem[] => [...catalogItems];
+
+/**
+ * The catalog entry a cost line is about, by the words used for it.
+ *
+ * Matched on keywords rather than on ids, because the line was written by a
+ * model describing a business and the catalog was written by someone describing
+ * an item. The longest keyword that appears wins, since a two-word match is far
+ * less likely to be a coincidence than a one-word one.
+ *
+ * Keywords are deliberately narrow. A bare "cooler" on the walk-in entry
+ * matched "reach-in cooler" — a different item at a fifth of the price — and a
+ * wrong match is worse than no match here: it hands the adjudicator an
+ * authoritative-looking range for something else, which is the exact failure
+ * the catalog exists to prevent.
+ */
+export function findCatalogItem(label: string): CatalogItem | undefined {
+  const text = label.toLowerCase();
+  let best: { item: CatalogItem; length: number } | undefined;
+  for (const item of catalogItems) {
+    for (const keyword of item.keywords) {
+      if (text.includes(keyword.toLowerCase()) && (!best || keyword.length > best.length)) {
+        best = { item, length: keyword.length };
+      }
+    }
+  }
+  return best?.item;
 }

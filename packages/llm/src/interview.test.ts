@@ -493,6 +493,7 @@ describe('a malformed draft is a sentence, not a validator dump', () => {
     const transport: ConceptTransport = {
       turn: async () => ({ turn: ready('Building it.') }),
       advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => broken as never,
       usage: EMPTY_USAGE,
     };
@@ -573,6 +574,7 @@ describe('how hard the turn worked', () => {
         },
       }),
       advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => draft(),
       usage: EMPTY_USAGE,
     };
@@ -595,6 +597,7 @@ describe('how hard the turn worked', () => {
         return { turn: asks('Right.', 'How many scopes?') };
       },
       advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => draft(),
       usage: EMPTY_USAGE,
     };
@@ -609,6 +612,7 @@ describe('how hard the turn worked', () => {
     const transport: ConceptTransport = {
       turn: async () => ({ turn: ready('Enough to build against.', 'Here it is.') }),
       advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => {
         await new Promise((r) => setTimeout(r, 15));
         // What the draft call spent, as the real transport would record it.

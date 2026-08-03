@@ -23,6 +23,7 @@ export {
 } from './opening.js';
 export { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
 export { irr } from './metrics.js';
+export { setAtPath } from './assumptionPath.js';
 export {
   cloneBusiness,
   cloneOutlay,

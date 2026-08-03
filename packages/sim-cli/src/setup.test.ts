@@ -4,11 +4,12 @@ import {
   buildModelFromTemplate,
   createWorld,
   createWorldConfig,
+  setAtPath,
   validateBusinessModel,
 } from '@bizsim/engine';
 import { isThin, runSetup } from './setup.js';
 import { projectFundingGap } from './plausibility.js';
-import { getSeedTemplate } from '@bizsim/seeds';
+import { findCatalogItem, getSeedTemplate } from '@bizsim/seeds';
 import { START_CAPITAL, FREEPLAY_CAPITAL_CAP, type WorldState } from '@bizsim/schemas';
 import { clampFreeplay } from '@bizsim/engine';
 import { fromDisplay } from '@bizsim/money';
@@ -407,6 +408,7 @@ describe('the concept path reaches the same gate as the picker', () => {
         turn: { message: 'Enough to build against.', cta: 'Building it now.', readyToDraft: true },
       }),
       advise: () => Promise.reject(new Error('no advice in this double')),
+      adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
       draft: async () => {
         asked += 1;
         return (asked === 1 ? broken : draft) as ConceptDraft;
@@ -848,5 +850,59 @@ describe('what the plan actually needs', () => {
   it('reports no shortfall when the money is genuinely there', () => {
     const gap = projectFundingGap(thinWorld(400_000, 300_000), fromDisplay(50_000_000));
     expect(gap!.shortfall).toBeLessThan(0n);
+  });
+});
+
+/**
+ * The freezer argument — §11.3's own example, end to end.
+ *
+ * "The player says 'I think that machine costs $10k, not $60k' and the model
+ * replies 'Good point — $10k it is.' It would fold identically if the player
+ * had said $500."
+ *
+ * M4's exit criterion is that this argument produces the discriminating
+ * question or the clamp, and never the capitulation.
+ */
+describe('arguing with the register (§11.3)', () => {
+  const modelWithFreezer = () => {
+    const model = buildModelFromTemplate({
+      businessName: 'Argued',
+      template: getSeedTemplate('full_service_restaurant'),
+      scale: { seats: 64, turnsPerDay: 2, price: fromDisplay(42) },
+      equityInjection: fromDisplay(500_000),
+    });
+    return model;
+  };
+
+  it('writes an adjudicated value into the model, not just the register', () => {
+    // The register is a record OF the model. Before this, winning an argument
+    // changed a line in a document and nothing in the business.
+    const model = modelWithFreezer();
+    const ticket = model.assumptions.find((a) => a.path === 'streams.s1.params.avgTicket')!;
+    expect(setAtPath(model, ticket.path, fromDisplay(51))).toBe(true);
+    const params = model.streams[0]!.params;
+    if (params.kind !== 'TRAFFIC') throw new Error('shape');
+    expect(params.avgTicket).toBe(fromDisplay(51));
+  });
+
+  it('finds the catalog entry a cost line is about', () => {
+    // Matched on the words the model used, because the line was written by
+    // something describing a business and the catalog by someone describing an
+    // item.
+    expect(findCatalogItem('Batch freezer, floor model')?.id).toBe('batch_freezer');
+    expect(findCatalogItem('Walk-in cooler and condenser')?.id).toBe('walk_in_cooler');
+    // The longest keyword wins: "walk-in cooler" beats "cooler".
+    expect(findCatalogItem('Reach-in cooler')?.id).not.toBe('walk_in_cooler');
+    expect(findCatalogItem('Something nobody catalogued')).toBeUndefined();
+  });
+
+  it('carries tiers, which is what makes rule 3 answerable', () => {
+    // "$10k or $60k" is an argument. "Countertop 3-quart or floor 20-quart" is
+    // a question with an answer, and the answer settles the number.
+    const freezer = findCatalogItem('batch freezer')!;
+    expect(freezer.tiers.length).toBeGreaterThan(1);
+    expect(freezer.tiers.map((t) => t.tier).join(' ')).toMatch(/countertop/);
+    // And every range says where it came from.
+    expect(freezer.source.length).toBeGreaterThan(20);
   });
 });

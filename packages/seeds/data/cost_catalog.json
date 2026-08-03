@@ -1,0 +1,506 @@
+[
+  {
+    "id": "batch_freezer",
+    "label": "Batch freezer (ice cream)",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "USD",
+    "low": 8000,
+    "high": 60000,
+    "tiers": [
+      {
+        "tier": "countertop, 3qt",
+        "low": 8000,
+        "high": 14000
+      },
+      {
+        "tier": "floor, 20qt used",
+        "low": 18000,
+        "high": 25000
+      },
+      {
+        "tier": "floor, 20qt new",
+        "low": 45000,
+        "high": 60000
+      }
+    ],
+    "source": "Commercial foodservice dealer listings, 2024. Used prices carry no warranty and typically no installation.",
+    "keywords": [
+      "freezer",
+      "batch freezer",
+      "ice cream machine"
+    ]
+  },
+  {
+    "id": "commercial_range",
+    "label": "Commercial range and hood",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "USD",
+    "low": 6000,
+    "high": 45000,
+    "tiers": [
+      {
+        "tier": "used 6-burner, no hood",
+        "low": 6000,
+        "high": 12000
+      },
+      {
+        "tier": "new 6-burner with hood",
+        "low": 18000,
+        "high": 30000
+      },
+      {
+        "tier": "full line with fire suppression",
+        "low": 30000,
+        "high": 45000
+      }
+    ],
+    "source": "Restaurant equipment dealer ranges, 2024. Hood and suppression are usually the larger half and are frequently forgotten.",
+    "keywords": [
+      "commercial range",
+      "kitchen line",
+      "range and hood",
+      "hood"
+    ]
+  },
+  {
+    "id": "walk_in_cooler",
+    "label": "Walk-in cooler",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "USD",
+    "low": 7000,
+    "high": 25000,
+    "tiers": [
+      {
+        "tier": "used 8x10",
+        "low": 7000,
+        "high": 11000
+      },
+      {
+        "tier": "new 8x10 installed",
+        "low": 14000,
+        "high": 25000
+      }
+    ],
+    "source": "Dealer quotes, 2024. Installed price includes the condensing unit and the electrical run, which the box price does not.",
+    "keywords": [
+      "walk-in",
+      "walk in cooler"
+    ]
+  },
+  {
+    "id": "restaurant_buildout_sqft",
+    "label": "Restaurant buildout per square foot",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "USD",
+    "low": 150,
+    "high": 550,
+    "tiers": [
+      {
+        "tier": "second-generation space",
+        "low": 150,
+        "high": 250
+      },
+      {
+        "tier": "grey shell, full build",
+        "low": 300,
+        "high": 550
+      }
+    ],
+    "source": "US restaurant construction cost surveys, 2023-24. A second-generation space with usable hood, grease trap and gas service is the single largest saving available.",
+    "keywords": [
+      "buildout",
+      "build-out",
+      "leasehold improvements",
+      "construction"
+    ]
+  },
+  {
+    "id": "pos_system",
+    "label": "Point-of-sale system",
+    "templates": [
+      "full_service_restaurant",
+      "ecommerce_dtc_brand"
+    ],
+    "unit": "USD",
+    "low": 1200,
+    "high": 12000,
+    "tiers": [
+      {
+        "tier": "tablet, 2 stations",
+        "low": 1200,
+        "high": 3000
+      },
+      {
+        "tier": "4 terminals with KDS",
+        "low": 6000,
+        "high": 12000
+      }
+    ],
+    "source": "Vendor list pricing, 2024. Hardware only; the monthly software fee is a separate recurring line.",
+    "keywords": [
+      "pos",
+      "point of sale",
+      "terminal"
+    ]
+  },
+  {
+    "id": "line_cook_wage",
+    "label": "Line cook, fully loaded per quarter",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "USD",
+    "low": 11000,
+    "high": 22000,
+    "tiers": [
+      {
+        "tier": "low cost-of-living metro",
+        "low": 11000,
+        "high": 15000
+      },
+      {
+        "tier": "major metro",
+        "low": 16000,
+        "high": 22000
+      }
+    ],
+    "source": "BLS 35-2014 median wages by metro, 2024, grossed up for payroll load. Fully loaded means employer taxes, workers' comp and any benefits \u2014 typically 12-18% on top of wage.",
+    "keywords": [
+      "cook",
+      "kitchen labor",
+      "chef",
+      "line cook"
+    ]
+  },
+  {
+    "id": "server_wage",
+    "label": "Server, fully loaded per quarter",
+    "templates": [
+      "full_service_restaurant"
+    ],
+    "unit": "USD",
+    "low": 6000,
+    "high": 16000,
+    "tiers": [
+      {
+        "tier": "tipped, tip-credit state",
+        "low": 6000,
+        "high": 9000
+      },
+      {
+        "tier": "tipped, no tip credit",
+        "low": 12000,
+        "high": 16000
+      }
+    ],
+    "source": "BLS 35-3031 plus state tip-credit rules, 2024. Whether the state allows a tip credit moves this line more than anything else about the business.",
+    "keywords": [
+      "server",
+      "waiter",
+      "front of house",
+      "foh"
+    ]
+  },
+  {
+    "id": "mixer_truck",
+    "label": "Ready-mix mixer truck",
+    "templates": [],
+    "unit": "USD",
+    "low": 45000,
+    "high": 320000,
+    "tiers": [
+      {
+        "tier": "used, 10-15 years",
+        "low": 45000,
+        "high": 95000
+      },
+      {
+        "tier": "used, low hours",
+        "low": 110000,
+        "high": 180000
+      },
+      {
+        "tier": "new",
+        "low": 230000,
+        "high": 320000
+      }
+    ],
+    "source": "Heavy truck dealer and auction listings, 2024. Drum condition and remaining engine life drive the spread far more than year.",
+    "keywords": [
+      "mixer truck",
+      "ready-mix",
+      "concrete truck"
+    ]
+  },
+  {
+    "id": "box_truck",
+    "label": "Box truck or work van",
+    "templates": [
+      "professional_services_firm",
+      "general_contractor"
+    ],
+    "unit": "USD",
+    "low": 18000,
+    "high": 75000,
+    "tiers": [
+      {
+        "tier": "used cargo van",
+        "low": 18000,
+        "high": 32000
+      },
+      {
+        "tier": "new cargo van",
+        "low": 40000,
+        "high": 55000
+      },
+      {
+        "tier": "new box truck",
+        "low": 55000,
+        "high": 75000
+      }
+    ],
+    "source": "Commercial vehicle listings, 2024. Upfit \u2014 shelving, ladder rack, wrap \u2014 typically adds $4-9k and is usually omitted.",
+    "keywords": [
+      "van",
+      "truck",
+      "vehicle",
+      "fleet"
+    ]
+  },
+  {
+    "id": "tradesperson_wage",
+    "label": "Licensed tradesperson, fully loaded per quarter",
+    "templates": [
+      "professional_services_firm",
+      "general_contractor"
+    ],
+    "unit": "USD",
+    "low": 16000,
+    "high": 34000,
+    "tiers": [
+      {
+        "tier": "apprentice",
+        "low": 16000,
+        "high": 21000
+      },
+      {
+        "tier": "journeyman",
+        "low": 22000,
+        "high": 28000
+      },
+      {
+        "tier": "master, licensed",
+        "low": 28000,
+        "high": 34000
+      }
+    ],
+    "source": "BLS 47-2152 and 47-2111 medians, 2024, grossed up for payroll load and workers' comp \u2014 which for trades runs far above the 4% typical of office work.",
+    "keywords": [
+      "plumber",
+      "electrician",
+      "technician",
+      "tradesperson",
+      "crew"
+    ]
+  },
+  {
+    "id": "general_liability",
+    "label": "General liability insurance per year",
+    "templates": [
+      "full_service_restaurant",
+      "professional_services_firm",
+      "self_storage",
+      "general_contractor"
+    ],
+    "unit": "USD",
+    "low": 900,
+    "high": 30000,
+    "tiers": [
+      {
+        "tier": "small office or shop",
+        "low": 900,
+        "high": 3000
+      },
+      {
+        "tier": "restaurant with liquor",
+        "low": 6000,
+        "high": 14000
+      },
+      {
+        "tier": "contractor with crews",
+        "low": 12000,
+        "high": 30000
+      }
+    ],
+    "source": "Broker quote ranges, 2024. Liquor liability and any work at height move this by multiples, not percentages.",
+    "keywords": [
+      "insurance",
+      "liability",
+      "gl"
+    ]
+  },
+  {
+    "id": "commercial_rent_sqft",
+    "label": "Commercial rent per square foot per year",
+    "templates": [
+      "full_service_restaurant",
+      "professional_services_firm",
+      "ecommerce_dtc_brand"
+    ],
+    "unit": "USD",
+    "low": 12,
+    "high": 90,
+    "tiers": [
+      {
+        "tier": "secondary market, industrial",
+        "low": 12,
+        "high": 22
+      },
+      {
+        "tier": "secondary market, retail",
+        "low": 22,
+        "high": 40
+      },
+      {
+        "tier": "major metro retail",
+        "low": 45,
+        "high": 90
+      }
+    ],
+    "source": "Brokerage market reports, 2024. Triple-net adds taxes, insurance and common-area maintenance on top \u2014 often another 20-30%.",
+    "keywords": [
+      "rent",
+      "lease",
+      "occupancy cost"
+    ]
+  },
+  {
+    "id": "self_storage_buildout_unit",
+    "label": "Self-storage buildout per unit",
+    "templates": [
+      "self_storage"
+    ],
+    "unit": "USD",
+    "low": 2500,
+    "high": 9000,
+    "tiers": [
+      {
+        "tier": "single-storey drive-up",
+        "low": 2500,
+        "high": 4500
+      },
+      {
+        "tier": "climate-controlled multi-storey",
+        "low": 6000,
+        "high": 9000
+      }
+    ],
+    "source": "Self-storage development cost surveys, 2023-24, excluding land. Climate control roughly doubles both the buildout and the utility line.",
+    "keywords": [
+      "storage unit",
+      "buildout",
+      "climate control"
+    ]
+  },
+  {
+    "id": "saas_engineer",
+    "label": "Software engineer, fully loaded per quarter",
+    "templates": [
+      "b2b_saas"
+    ],
+    "unit": "USD",
+    "low": 30000,
+    "high": 90000,
+    "tiers": [
+      {
+        "tier": "secondary market or remote",
+        "low": 30000,
+        "high": 48000
+      },
+      {
+        "tier": "major metro, mid-level",
+        "low": 50000,
+        "high": 70000
+      },
+      {
+        "tier": "major metro, senior",
+        "low": 70000,
+        "high": 90000
+      }
+    ],
+    "source": "Levels.fyi and BLS 15-1252 medians, 2024, grossed up for payroll load and benefits. Equity is not in this figure and does not reduce it.",
+    "keywords": [
+      "engineer",
+      "developer",
+      "software"
+    ]
+  },
+  {
+    "id": "cloud_hosting",
+    "label": "Cloud hosting per quarter",
+    "templates": [
+      "b2b_saas",
+      "ecommerce_dtc_brand"
+    ],
+    "unit": "USD",
+    "low": 1500,
+    "high": 60000,
+    "tiers": [
+      {
+        "tier": "early, single region",
+        "low": 1500,
+        "high": 8000
+      },
+      {
+        "tier": "production, multi-region",
+        "low": 15000,
+        "high": 60000
+      }
+    ],
+    "source": "Published list pricing, 2024. Egress and managed database are the lines that surprise people, not compute.",
+    "keywords": [
+      "hosting",
+      "aws",
+      "cloud",
+      "infrastructure"
+    ]
+  },
+  {
+    "id": "card_processing",
+    "label": "Card processing rate",
+    "templates": [
+      "full_service_restaurant",
+      "ecommerce_dtc_brand",
+      "self_storage"
+    ],
+    "unit": "pct",
+    "low": 0.019,
+    "high": 0.035,
+    "tiers": [
+      {
+        "tier": "card present, negotiated",
+        "low": 0.019,
+        "high": 0.024
+      },
+      {
+        "tier": "card not present",
+        "low": 0.026,
+        "high": 0.035
+      }
+    ],
+    "source": "Interchange plus typical processor markup, 2024. Card-not-present is structurally dearer and no amount of negotiating closes that gap.",
+    "keywords": [
+      "card processing",
+      "merchant fees",
+      "interchange"
+    ]
+  }
+]

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { looksGarbled } from './garbled.js';
 import { zTurnAdvice, type TurnAdvice } from './advice.js';
+import { zAdjudication, type Adjudication } from './challenge.js';
 
 /**
  * A turn that cannot be shown or replayed.
@@ -118,6 +119,14 @@ export interface ConceptTransport {
    * player is waiting between decisions, not designing a business.
    */
   advise(system: string, messages: readonly InterviewMessage[]): Promise<AdviceResult>;
+  /**
+   * One disagreement, settled in isolation — §11.3.
+   *
+   * A single message and no history. The spec is explicit that this call must
+   * not see the conversational thread, and the transport is the thing that
+   * could accidentally supply it, so the isolation lives here.
+   */
+  adjudicate(system: string, input: string): Promise<Adjudication>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
   /**
@@ -148,6 +157,7 @@ const jsonSchemaFor = (schema: Parameters<typeof zodToJsonSchema>[0]): Record<st
 const TURN_SCHEMA = jsonSchemaFor(zInterviewTurn);
 const DRAFT_SCHEMA = jsonSchemaFor(zConceptDraft);
 const ADVICE_SCHEMA = jsonSchemaFor(zTurnAdvice);
+const ADJUDICATION_SCHEMA = jsonSchemaFor(zAdjudication);
 
 /**
  * The draft asked for as prose, for the fallback path. Constrained decoding is
@@ -499,6 +509,27 @@ export class AnthropicConceptTransport implements ConceptTransport {
     return { advice: zTurnAdvice.parse(JSON.parse(attempt.text)), usage: attempt.usage };
   }
 
+  /**
+   * One disagreement, settled in isolation — §11.3.
+   *
+   * A single user message carrying the assumption and the claim, and no
+   * history at all. That is not an optimisation: the spec is explicit that this
+   * call must not see the conversational thread, because rapport is what
+   * produces capitulation. The transport is the thing that could accidentally
+   * supply it, so the transport is where the isolation is enforced.
+   */
+  async adjudicate(system: string, input: string): Promise<Adjudication> {
+    const attempt = await this.complete(
+      system,
+      [{ role: 'user', content: input }],
+      ADJUDICATION_SCHEMA,
+      this.turnEffort,
+      this.turnModel,
+      this.turnMaxTokens,
+    );
+    return zAdjudication.parse(JSON.parse(attempt.text));
+  }
+
   async draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft> {
     const asked: InterviewMessage[] = [...messages, { role: 'user', content: DRAFT_AS_PROSE }];
     let text: string;
@@ -602,6 +633,7 @@ export class UnusableResponseError extends Error {
 export class ScriptedTransport implements ConceptTransport {
   private index = 0;
   private adviceIndex = 0;
+  private rulingIndex = 0;
   readonly seen: { system: string; messages: InterviewMessage[] }[] = [];
   /** Nothing was spent; a scripted run makes no calls. */
   readonly usage: UsageTotal = EMPTY_USAGE;
@@ -611,6 +643,7 @@ export class ScriptedTransport implements ConceptTransport {
     private readonly drafts: readonly ConceptDraft[] = [],
     private readonly reasoning: readonly string[] = [],
     private readonly advice: readonly TurnAdvice[] = [],
+    private readonly rulings: readonly Adjudication[] = [],
   ) {}
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
@@ -630,6 +663,14 @@ export class ScriptedTransport implements ConceptTransport {
     this.seen.push({ system, messages: [...messages] });
     const next = this.drafts[0];
     if (!next) throw new Error('ScriptedTransport has no draft to return.');
+    return next;
+  }
+
+  async adjudicate(system: string, input: string): Promise<Adjudication> {
+    this.seen.push({ system, messages: [{ role: 'user', content: input }] });
+    const next = this.rulings[this.rulingIndex];
+    if (!next) throw new Error('ScriptedTransport has no ruling to return.');
+    this.rulingIndex += 1;
     return next;
   }
 

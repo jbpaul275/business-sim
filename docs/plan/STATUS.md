@@ -8,7 +8,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
 | **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
 | **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
-| **M4 — Challenge loop** | ⬜ Not started | Same |
+| **M4 — Challenge loop** | 🟡 Mostly | The §11.3 contract, isolated from the thread, with rules 1 and 6 enforced in code rather than requested. Adversarial fixtures and the sycophancy regression are in the suite. `ADJUST_ASSUMPTION` now writes through to the model, which it never did. Reverse challenge (§11.3.1) fires on out-of-band assumptions. Cost catalog is a first tranche (16 items), not D-2's ~500 |
 | **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` not started; `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
@@ -160,6 +160,12 @@ which the reference model omitted — the same reason its year three sat above b
 
 - **Six more seed templates**, to reach the twelve §4.7 asks for: quick-service food, retail shop, coffee
   shop, marketing agency, trades contractor, gym/fitness studio.
+- **The rest of the cost catalog.** D-2 scopes ~500 items across twelve templates; sixteen are in, chosen to
+  give the adjudication contract real ranges and real tiers to argue from. The mechanism is done and the
+  content accretes — but until an item is in the catalog, rule 1 clamps against the draft's own estimated
+  range, which is a weaker claim than the rule is meant to make.
+- **Retrieval (§16 Q1).** `PriceRetrieval` is defined and unimplemented. With web access the argument stops
+  being the model's priors against the player's and becomes a question about current listings.
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.

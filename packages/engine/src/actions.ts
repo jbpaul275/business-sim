@@ -13,6 +13,7 @@ import {
 import { getSecurity } from '@bizsim/seeds';
 import { setStreamPrice } from './archetypes.js';
 import { cloneBusiness, cloneOutlay, saleValue } from './clone.js';
+import { setAtPath } from './assumptionPath.js';
 import { priceAt } from './market.js';
 import { netBookValue } from './depreciation.js';
 import { DEBT_PRODUCTS, underwrite } from './debt.js';
@@ -685,14 +686,31 @@ export function applyAction(
       state.config.crisisPolicy = [...action.policy];
       return events;
 
+    /**
+     * §10.1 — and the half of it that was missing.
+     *
+     * This set the value on the register and stopped. The register is not what
+     * the tick reads: formulas read the model, so a player who argued a $60k
+     * freezer down to $22k and won changed a line in a document and nothing in
+     * their business. The register is meant to be a record OF the model, not a
+     * document beside it.
+     */
     case 'ADJUST_ASSUMPTION': {
       for (const business of state.businesses) {
         const assumption = business.assumptions.byId[action.assumptionId];
-        if (assumption) {
-          assumption.value = action.newValue;
-          assumption.provenance = action.evidence ? 'PLAYER_SOURCED' : 'PLAYER_ASSUMED';
-          return events;
+        if (!assumption) continue;
+        if (!setAtPath(business, assumption.path, action.newValue)) {
+          return [
+            reject(
+              period,
+              action,
+              `${assumption.label} is registered at ${assumption.path}, which no longer resolves.`,
+            ),
+          ];
         }
+        assumption.value = action.newValue;
+        assumption.provenance = action.evidence ? 'PLAYER_SOURCED' : 'PLAYER_ASSUMED';
+        return events;
       }
       return [reject(period, action, `Unknown assumption ${action.assumptionId}`)];
     }
