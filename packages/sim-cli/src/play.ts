@@ -8,7 +8,15 @@ import {
   tick,
   type TickResult,
 } from '@bizsim/engine';
-import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
+import {
+  deviationLabel,
+  type Action,
+  type Assumption,
+  type Business,
+  type CrisisRemedy,
+  type EngineEvent,
+  type WorldState,
+} from '@bizsim/schemas';
 import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
 import { priceOptimum, priceUnits, type PriceOptimum } from './pricing.js';
 import { benchmarkLines, portfolioLines, positions, quoteLines } from './portfolio.js';
@@ -124,6 +132,15 @@ function describeAction(a: Action): string {
       return `sell the business at ${a.multipleOfEbitda ?? DEFAULT_MULTIPLE}× EBITDA`;
     case 'SET_CRISIS_POLICY':
       return `crisis order → ${a.policy.join(', ')}`;
+    case 'ADJUST_ASSUMPTION': {
+      const value =
+        typeof a.newValue === 'bigint'
+          ? toDisplay(a.newValue, { showCents: false })
+          : a.newValue <= 1
+            ? `${(a.newValue * 100).toFixed(1)}%`
+            : String(a.newValue);
+      return `assumption ${a.assumptionId} → ${value}`;
+    }
     default:
       return a.kind;
   }
@@ -316,6 +333,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}expand${RESET} 20 150k        add capacity for what it costs to build ${DIM}— +2 quarters${RESET}
   ${BOLD}market${RESET} 40% 150k       open a new territory: more demand, not more room ${DIM}— +2 quarters${RESET}
   ${BOLD}upgrade${RESET} 15% 800k      build something better: +15% to what a customer will pay ${DIM}— +2 quarters${RESET}
+  ${BOLD}assume${RESET} a12 35% [why]   revise a model assumption ${DIM}— a COGS rate, a cost per unit — \`assumptions\` lists them${RESET}
   ${BOLD}policy${RESET} revolver,inject,defer,emergency,insolvency
                         reorder the cash-crisis ladder (§9.4)
 
@@ -331,6 +349,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
   ${BOLD}postmortem${RESET}            what would have had to be true ${DIM}— any time, not just at the end${RESET}
   ${BOLD}costs${RESET}                 where the money goes, biggest line first
   ${BOLD}lines${RESET}                 list step-fixed cost line ids
+  ${BOLD}assumptions${RESET}           every number the model rests on, and how to argue with one
   ${BOLD}help${RESET} · ${BOLD}quit${RESET}
 `;
 
@@ -1120,7 +1139,7 @@ const VERBS = new Set([
   '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing', 'postmortem',
   'hire', 'fire', 'debt', 'repay', 'draw', 'inject', 'distribute', 'expand', 'market',
   'upgrade', 'renovate', 'policy', 'quotes', 'quote', 'portfolio', 'holdings', 'buy', 'sell',
-  'businesses', 'switch', 'clone', 'divest',
+  'businesses', 'switch', 'clone', 'divest', 'assume', 'assumptions',
 ]);
 
 /**
@@ -1149,6 +1168,51 @@ function looksLikeAQuestion(line: string, verb: string): boolean {
  * computed. Sorted by size because that is the order the decisions come in:
  * nobody cuts the software subscription first.
  */
+/** An assumption's value, in its own units. */
+function renderAssumptionValue(a: Assumption): string {
+  if (typeof a.value === 'bigint') return toCompact(a.value);
+  if (a.unit === 'pct') return pct(a.value);
+  return `${a.value.toLocaleString()} ${a.unit === 'ratio' ? '' : a.unit}`.trim();
+}
+
+const renderRange = (a: Assumption): string =>
+  a.unit === 'pct' && !a.isMoney
+    ? `${pct(a.range.low)}–${pct(a.range.high)}`
+    : a.isMoney
+      ? `${toCompact(BigInt(Math.round(a.range.low * 100)))}–${toCompact(BigInt(Math.round(a.range.high * 100)))}`
+      : `${a.range.low.toLocaleString()}–${a.range.high.toLocaleString()}`;
+
+/** A plausible value for the error message, so the example actually parses. */
+const exampleValue = (a: Assumption): string =>
+  a.isMoney ? '12k' : a.unit === 'pct' ? '35%' : '450';
+
+/**
+ * The register, mid-game — §10.1's read half.
+ *
+ * The setup flow shows every one of these before commit; this is the same
+ * ledger once the world exists, because "what does the model actually
+ * believe?" is a question a player asks in period 6, usually right after the
+ * screen disagreed with them.
+ */
+function renderAssumptions(business: Business): void {
+  const all = Object.values(business.assumptions.byId).sort((a, b) =>
+    a.category === b.category ? a.label.localeCompare(b.label) : a.category.localeCompare(b.category),
+  );
+  if (all.length === 0) {
+    console.log(`  ${DIM}This business has no registered assumptions to argue with.${RESET}`);
+    return;
+  }
+  console.log(
+    `\n  ${BOLD}ASSUMPTIONS${RESET}  ${DIM}the numbers the model rests on — \`assume <id> <value> [why]\` revises one${RESET}`,
+  );
+  for (const a of all) {
+    console.log(
+      `  ${pad(a.id, 6)}${pad(a.label, 38)}${rpad(renderAssumptionValue(a), 10)}  ` +
+        `${DIM}${rpad(renderRange(a), 17)}  ${a.provenance}${RESET}`,
+    );
+  }
+}
+
 function renderCosts(business: Business, result: TickResult): void {
   const entry = result.statements.byBusiness[business.id];
   if (!entry) {
@@ -1158,11 +1222,19 @@ function renderCosts(business: Business, result: TickResult): void {
   const is = entry.incomeStatement;
 
   const lines: { label: string; amount: Money; note: string }[] = [
-    ...business.costs.variableWithRevenue.map((c) => ({
-      label: c.label,
-      amount: mulRate(is.revenue, c.pctOfRevenue),
-      note: `${pct(c.pctOfRevenue)} of revenue`,
-    })),
+    ...business.costs.variableWithRevenue.map((c) => {
+      // The rate is an assumption, and the register knows it by id. Naming the
+      // command here matters because this line is where a player who thinks
+      // the rate is wrong is looking when they think it.
+      const assumptionId = business.assumptions.byPath[`costs.${c.id}.pctOfRevenue`];
+      return {
+        label: c.label,
+        amount: mulRate(is.revenue, c.pctOfRevenue),
+        note:
+          `${pct(c.pctOfRevenue)} of revenue` +
+          (assumptionId ? ` — \`assume ${assumptionId}\` changes it` : ''),
+      };
+    }),
     ...business.costs.stepFixed.map((c) => ({
       label: c.label,
       amount: c.blockCostPerQuarter * BigInt(c.currentBlocks),
@@ -1196,7 +1268,8 @@ function renderCosts(business: Business, result: TickResult): void {
   );
   console.log(
     `  ${DIM}${toCompact(reachable)} of that is staffing you can change this quarter with` +
-      ` \`fire\`; the rest is contracted or scales with revenue.${RESET}`,
+      ` \`fire\`; the revenue-scaled rates are assumptions \`assume\` can revise; the rest` +
+      ` is contracted.${RESET}`,
   );
 }
 
@@ -1421,6 +1494,98 @@ async function parseCommand(
         console.log(`  ${pad(c.id, 22)}${DIM}${c.label} · ${c.currentBlocks} blocks${RESET}`);
       }
       return none;
+
+    case 'assumptions':
+      renderAssumptions(business);
+      return none;
+
+    /**
+     * §10.1's second half, finally reachable from the game.
+     *
+     * A vending operator said his coffee and soft-serve margins should run
+     * 60-70% where the draft assumed a flat 50% product cost — a claim about
+     * the real world (substitute a generic product, renegotiate supply) that
+     * the game could not express: every registered assumption was locked the
+     * moment setup ended, and the only margin lever left was price. The
+     * engine's `ADJUST_ASSUMPTION` had write-through to the model all along;
+     * no command ever emitted it.
+     *
+     * D-5 applies mid-game exactly as it does at setup: a value outside the
+     * drafted range gets a warning and a provenance mark, never a refusal.
+     * The player is the one looking at the real supplier quote.
+     */
+    case 'assume': {
+      const token = rest[0] ?? '';
+      const target = token.trim()
+        ? Object.values(business.assumptions.byId).find(
+            (a) => a.id === token || a.label.toLowerCase().startsWith(token.toLowerCase()),
+          )
+        : undefined;
+      if (!target) {
+        return fail(
+          token.trim()
+            ? `No assumption matches "${token}". \`assumptions\` lists every id.`
+            : 'assume needs an assumption and a value, e.g. `assume a12 35%`. `assumptions` lists them.',
+        );
+      }
+
+      const raw = rest[1] ?? '';
+      if (!raw.trim()) {
+        return fail(
+          `${target.label} is currently ${renderAssumptionValue(target)}. ` +
+            `Give the new value too, e.g. \`assume ${target.id} ${exampleValue(target)}\`.`,
+        );
+      }
+
+      let newValue: number | Money;
+      if (target.isMoney) {
+        const money = parseMoney(raw);
+        if (money === undefined) return fail(`${target.label} is a dollar amount, e.g. \`assume ${target.id} ${exampleValue(target)}\`.`);
+        if (money < 0n) return fail(`${target.label} cannot be negative.`);
+        newValue = money;
+      } else if (target.unit === 'pct') {
+        // "35%", "0.35" and "35" all mean the same rate: bare numbers above 1
+        // are read as percentage points, because nobody types `assume a12 35`
+        // meaning thirty-five times revenue.
+        const numeric = Number(raw.replace(/%$/, '').replace(/,/g, ''));
+        if (!Number.isFinite(numeric)) return fail(`${target.label} is a rate, e.g. \`assume ${target.id} 35%\`.`);
+        const rate = raw.trim().endsWith('%') || numeric > 1 ? numeric / 100 : numeric;
+        if (rate < 0 || rate > 1) return fail(`A rate has to sit between 0% and 100%; ${raw} does not.`);
+        newValue = rate;
+      } else {
+        const numeric = Number(raw.replace(/,/g, ''));
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          return fail(`${target.label} is a number (${target.unit}), e.g. \`assume ${target.id} ${exampleValue(target)}\`.`);
+        }
+        newValue = numeric;
+      }
+
+      const evidence = rest.slice(2).join(' ').trim();
+      const action: Action = {
+        kind: 'ADJUST_ASSUMPTION',
+        assumptionId: target.id,
+        newValue,
+        ...(evidence ? { evidence } : {}),
+      };
+
+      // The warning, not the refusal (D-5). Out of the drafted range is a
+      // claim worth flagging at the moment it is made — after the quarter runs
+      // it is indistinguishable from a number that was always there.
+      const numeric = typeof newValue === 'bigint' ? Number(newValue) / 100 : newValue;
+      const flags: string[] = [];
+      if (numeric < target.range.low || numeric > target.range.high) {
+        flags.push(
+          `outside the drafted range (${renderRange(target)}) — modelled anyway, recorded as ` +
+            (evidence ? 'your sourced figure' : 'your assertion, no evidence behind it'),
+        );
+      }
+      const deviation = deviationLabel({ ...target, value: newValue });
+      if (deviation) flags.push(`${deviation} — benchmark: ${target.benchmarkBand!.source}`);
+      return {
+        actions: [action],
+        ...(flags.length > 0 ? { message: `${DIM}${target.label}: ${flags.join('; ')}${RESET}` } : {}),
+      };
+    }
 
     case 'skip': {
       const n = Number(rest[0] ?? 1);

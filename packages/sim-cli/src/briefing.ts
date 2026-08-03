@@ -119,6 +119,32 @@ export function buildBriefing(
       true,
     );
   }
+  /**
+   * The variable rates, because they ARE the model's cost assumptions and the
+   * advisor was guessing at them. Live: a vending operator said his margins on
+   * coffee and soft-serve should run 60-70%, and the advisor answered that his
+   * "50-70% margins are already baked into the model" — while the model
+   * carried a flat 50% product cost it had never been shown. A model that
+   * cannot see an assumption cannot be honest about it; one that can is
+   * expected to be, and the `assume` id makes the honest answer actionable.
+   */
+  for (const cost of business.costs.variableWithRevenue) {
+    const assumptionId = business.assumptions.byPath[`costs.${cost.id}.pctOfRevenue`];
+    add(
+      `Cost rate — ${cost.label}`,
+      `${pct(cost.pctOfRevenue)} of revenue, a model assumption` +
+        (assumptionId ? ` — \`assume ${assumptionId} <pct>\` revises it` : ''),
+    );
+  }
+  for (const cost of business.costs.variableWithActivity) {
+    const assumptionId = business.assumptions.byPath[`costs.${cost.id}.costPerUnit`];
+    add(
+      `Cost per unit — ${cost.label}`,
+      `${toCompact(cost.costPerUnit)} per ${cost.driver.toLowerCase().replace(/_/g, ' ')}, a model assumption` +
+        (assumptionId ? ` — \`assume ${assumptionId} <amount>\` revises it` : ''),
+      true,
+    );
+  }
   const fixed = business.costs.fixedPeriod.reduce<Money>((a, c) => a + c.amountPerQuarter, 0n);
   add('Fixed costs a quarter', toCompact(fixed), true);
 

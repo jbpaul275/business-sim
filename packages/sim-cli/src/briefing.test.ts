@@ -48,6 +48,17 @@ describe('the briefing', () => {
     expect(briefing.text).toMatch(/Staffing — .* \(id \w+\)/);
   });
 
+  it('carries the variable cost rates, which are the model’s actual assumptions', () => {
+    // A vending operator was told his "50-70% margins are already baked into
+    // the model" while the model carried a flat 50% product cost the advisor
+    // had never been shown. A model that cannot see an assumption cannot be
+    // honest about it.
+    const { briefing } = briefed();
+    expect(briefing.text).toMatch(/Cost rate — .+: .*% of revenue, a model assumption/);
+    // And the honest answer is actionable: the assumption id is right there.
+    expect(briefing.text).toMatch(/`assume \w+ <pct>` revises it/);
+  });
+
   it('lists what the deterministic advisor already said, so it is not repeated', () => {
     const { briefing } = briefed();
     expect(briefing.text).toContain('do not repeat these');
