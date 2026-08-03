@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { looksGarbled } from './garbled.js';
 import {
   zConceptDraft,
   zInterviewTurn,
@@ -106,6 +107,8 @@ export class AnthropicConceptTransport implements ConceptTransport {
   private readonly model: string;
   private readonly maxTokens: number;
   private readonly effort: NonNullable<AnthropicTransportOptions['effort']>;
+  /** How often a response came back corrupted. Surfaced, not swallowed. */
+  garbledRetries = 0;
 
   constructor(options: AnthropicTransportOptions = {}) {
     // Zero-arg construction resolves ANTHROPIC_API_KEY from the environment,
@@ -171,14 +174,29 @@ export class AnthropicConceptTransport implements ConceptTransport {
   }
 
   async turn(system: string, messages: readonly InterviewMessage[]): Promise<TurnResult> {
-    const { text, reasoning, usage } = await this.complete(system, messages, TURN_SCHEMA);
+    let attempt = await this.complete(system, messages, TURN_SCHEMA);
     // Structured outputs constrain generation against the schema, so this
     // should always hold — but "should" is doing load-bearing work in a
     // sentence about generated JSON.
+    let turn = zInterviewTurn.parse(JSON.parse(attempt.text));
+
+    // A response can be schema-valid and still arrive corrupted — seen live as
+    // every token doubled, and as two different answers interleaved character
+    // by character. Nothing here can fix that; declining to show it and asking
+    // again is cheap, and the alternative is prose the player cannot read.
+    if (looksGarbled(turn.message) || looksGarbled(turn.cta)) {
+      this.garbledRetries += 1;
+      attempt = await this.complete(system, messages, TURN_SCHEMA);
+      turn = zInterviewTurn.parse(JSON.parse(attempt.text));
+      if (looksGarbled(turn.message) || looksGarbled(turn.cta)) {
+        throw new GarbledResponseError(turn.message);
+      }
+    }
+
     return {
-      turn: zInterviewTurn.parse(JSON.parse(text)),
-      ...(reasoning ? { reasoning } : {}),
-      usage,
+      turn,
+      ...(attempt.reasoning ? { reasoning: attempt.reasoning } : {}),
+      usage: attempt.usage,
     };
   }
 
@@ -226,6 +244,22 @@ export class ConceptRefusedError extends Error {
         : 'The model declined this request.',
     );
     this.name = 'ConceptRefusedError';
+  }
+}
+
+/**
+ * The model returned text that is corrupted rather than merely wrong — doubled
+ * or interleaved — twice in a row. Named so the CLI can say what happened
+ * instead of showing the mess or blaming the player's description.
+ */
+export class GarbledResponseError extends Error {
+  constructor(readonly sample: string) {
+    super(
+      'The model returned garbled text twice in a row (tokens doubled or two ' +
+        'answers interleaved). This is a generation fault, not a problem with ' +
+        'what you described.',
+    );
+    this.name = 'GarbledResponseError';
   }
 }
 

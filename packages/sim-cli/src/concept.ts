@@ -2,6 +2,7 @@ import {
   AnthropicConceptTransport,
   ConceptInterview,
   ConceptRefusedError,
+  GarbledResponseError,
   draftIssues,
   draftToTemplate,
   type ConceptDraft,
@@ -123,6 +124,11 @@ export async function runConceptInterview(
       if (error instanceof ConceptRefusedError) {
         console.log(`\n  ${RED}${error.message}${RESET}`);
         console.log(`  ${DIM}This is the model's own safety filter, not a judgement about your business.${RESET}`);
+        return undefined;
+      }
+      if (error instanceof GarbledResponseError) {
+        console.log(`\n  ${RED}${wrap(error.message, 74, '')}${RESET}`);
+        console.log(`  ${DIM}Nothing was committed. Run \`pnpm sim --new\` to start again.${RESET}`);
         return undefined;
       }
       // Anything else — a bad key, a rate limit, a malformed draft — should

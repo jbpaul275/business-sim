@@ -3,3 +3,4 @@ export * from './prompt.js';
 export * from './client.js';
 export * from './interview.js';
 export * from './toTemplate.js';
+export * from './garbled.js';
