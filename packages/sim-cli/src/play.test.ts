@@ -51,9 +51,50 @@ describe('asking what to do', () => {
     }
   });
 
+  it('answers a request that does not open with a question word', async () => {
+    // "we need to cut costs - give me a breakdown of where the money is
+    // currently going" fell through twice, because detection worked from a
+    // list of interrogative openings and this one opens with "we". The
+    // question is not which sentences look like questions — it is which are
+    // commands, and that set is closed.
+    for (const asked of [
+      'we need to cut costs - give me a breakdown of where the money is going',
+      'need to cut costs',
+      'give me a breakdown',
+      'tell me about the staffing',
+      'the rent seems high',
+    ]) {
+      const printed = await transcript([asked, 'quit']);
+      expect(printed, asked).not.toContain('Unknown command');
+    }
+  });
+
+  it('breaks the costs down, biggest line first', async () => {
+    // Asked for twice in one session against a screen that showed EBITDA and
+    // two subtotals. The advisor could say staffing was $118k; it could not
+    // say which line, or that one of them was a third of everything.
+    const printed = await transcript(['costs', 'quit']);
+    expect(printed).toContain('WHERE THE MONEY GOES');
+    expect(printed).toContain('Kitchen line');
+    // Each line says what kind of cost it is, because that is what decides
+    // whether it can be cut at all.
+    expect(printed).toMatch(/% of revenue/);
+    expect(printed).toMatch(/fixed, every quarter/);
+    expect(printed).toMatch(/`fire \w+`/);
+    // And it names the part a decision can actually reach this quarter.
+    expect(printed).toContain('staffing you can change this quarter');
+  });
+
+  it('orders the breakdown by size, not by how the engine stores it', async () => {
+    // Nobody cuts the software subscription first.
+    const printed = await transcript(['costs', 'quit']);
+    const body = printed.slice(printed.indexOf('WHERE THE MONEY GOES'));
+    expect(body.indexOf('Kitchen line')).toBeLessThan(body.indexOf('Permits & licenses'));
+  });
+
   it('still rejects a mistyped command as a mistyped command', async () => {
     // The guard has to stay narrow enough that a fat-fingered verb is a verb.
-    const printed = await transcript(['hier kitchen', 'quit']);
+    const printed = await transcript(['hier', 'quit']);
     expect(printed).toContain('Unknown command');
     // And points at the way out, which the old message did not.
     expect(printed).toContain('plain English');

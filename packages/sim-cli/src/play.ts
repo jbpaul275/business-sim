@@ -1,4 +1,4 @@
-import { fromDisplay, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
+import { fromDisplay, mulRate, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
 import { tick, type TickResult } from '@bizsim/engine';
 import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@bizsim/schemas';
 import { SCENARIOS } from './scenarios.js';
@@ -198,6 +198,7 @@ ${BOLD}Commands${RESET} — enter as many as you like, then a blank line to run 
                         reorder the cash-crisis ladder (§9.4)
 
   ${BOLD}skip${RESET} <n>              run n quarters with no actions
+  ${BOLD}costs${RESET}                 where the money goes, biggest line first
   ${BOLD}lines${RESET}                 list step-fixed cost line ids
   ${BOLD}help${RESET} · ${BOLD}quit${RESET}
 `;
@@ -288,8 +289,8 @@ function advise(business: Business, result: TickResult): string[] {
   if (is.ebitda < 0n && is.revenue > 0n) {
     out.push(
       `EBITDA is ${toCompact(is.ebitda)} on ${toCompact(is.revenue)} of revenue. ` +
-        `Fixed costs are ${toCompact(fixed)} a quarter and staffing is ${toCompact(blocks)}; ` +
-        `\`lines\` shows what \`fire\` can reach, and only the second of those is reachable.`,
+        `Fixed costs are ${toCompact(fixed)} a quarter and staffing is ${toCompact(blocks)}, ` +
+        `and only the second is reachable this quarter. \`costs\` breaks it down line by line.`,
     );
   }
 
@@ -312,13 +313,95 @@ function advise(business: Business, result: TickResult): string[] {
 }
 
 /**
- * Input that is a question rather than a command.
+ * Every verb the parser knows. The list is closed; English is not.
  *
- * Kept broad on purpose. The cost of treating a mistyped verb as a question is
- * one paragraph of genuinely relevant state; the cost of the reverse is what
- * this session did three times in a row.
+ * Detection used to work the other way round — a list of interrogative
+ * openings — and "we need to cut costs, give me a breakdown of where the money
+ * is going" fell straight through it, twice, because it opens with "we". The
+ * question is not which sentences look like questions. It is which sentences
+ * are commands, and that set is exactly this.
  */
-const LOOKS_LIKE_A_QUESTION = /\?|^\s*(what|how|why|which|who|when|where|can|could|should|do|does|is|are|tell|help me|i )/i;
+const VERBS = new Set([
+  '', 'help', 'quit', 'exit', 'lines', 'costs', 'skip', 'price', 'marketing',
+  'hire', 'fire', 'debt', 'draw', 'inject', 'distribute', 'expand', 'policy',
+]);
+
+/**
+ * Anything that is not a command, and is more than one word, is a question.
+ *
+ * The asymmetry is deliberate and it is the whole design: treating a mistyped
+ * verb as a question costs one paragraph of genuinely relevant state, and
+ * treating a question as a mistyped verb costs the player the belief that they
+ * can talk to this. A single unrecognised word is still a typo — `hier` is not
+ * a sentence — so the one-word case keeps its error.
+ */
+function looksLikeAQuestion(line: string, verb: string): boolean {
+  if (VERBS.has(verb.toLowerCase())) return false;
+  return /\?/.test(line) || line.trim().split(/\s+/).length > 1;
+}
+
+/**
+ * Where the money actually goes, biggest first.
+ *
+ * Asked for twice in one session — "give me a breakdown of where the money is
+ * currently going" — against a screen that reported EBITDA and two subtotals
+ * and nothing else. The advisor could say staffing was $100k a quarter; it
+ * could not say which line, or that a single one of them was half of it.
+ *
+ * Read off the last statement, so every figure is one the ledger already
+ * computed. Sorted by size because that is the order the decisions come in:
+ * nobody cuts the software subscription first.
+ */
+function renderCosts(business: Business, result: TickResult): void {
+  const entry = result.statements.byBusiness[business.id];
+  if (!entry) {
+    console.log(`  ${DIM}No statements yet — run a quarter first.${RESET}`);
+    return;
+  }
+  const is = entry.incomeStatement;
+
+  const lines: { label: string; amount: Money; note: string }[] = [
+    ...business.costs.variableWithRevenue.map((c) => ({
+      label: c.label,
+      amount: mulRate(is.revenue, c.pctOfRevenue),
+      note: `${pct(c.pctOfRevenue)} of revenue`,
+    })),
+    ...business.costs.stepFixed.map((c) => ({
+      label: c.label,
+      amount: c.blockCostPerQuarter * BigInt(c.currentBlocks),
+      note: `${c.currentBlocks} × ${toCompact(c.blockCostPerQuarter)} — \`fire ${c.id}\``,
+    })),
+    ...business.costs.fixedPeriod.map((c) => ({
+      label: c.label,
+      amount: c.amountPerQuarter,
+      note: 'fixed, every quarter',
+    })),
+  ].sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
+
+  const total = lines.reduce<Money>((a, l) => a + l.amount, 0n);
+  console.log(`\n  ${BOLD}${pad('WHERE THE MONEY GOES', 30)}${rpad('per quarter', 12)}${RESET}`);
+  for (const l of lines) {
+    if (l.amount === 0n) continue;
+    const share = total > 0n ? ratio(l.amount, total) : 0;
+    console.log(
+      `  ${pad(l.label, 30)}${rpad(toCompact(l.amount), 12)}  ${DIM}${rpad(pct(share), 6)}  ${l.note}${RESET}`,
+    );
+  }
+  console.log(`  ${BOLD}${pad('TOTAL', 30)}${rpad(toCompact(total), 12)}${RESET}`);
+  console.log(
+    `  ${DIM}${pad('against revenue of', 30)}${rpad(toCompact(is.revenue), 12)}${RESET}`,
+  );
+  // The step-fixed lines are the only ones a decision can reach this quarter.
+  // Saying which is the difference between a table and an answer.
+  const reachable = business.costs.stepFixed.reduce<Money>(
+    (a, c) => a + c.blockCostPerQuarter * BigInt(c.currentBlocks),
+    0n,
+  );
+  console.log(
+    `  ${DIM}${toCompact(reachable)} of that is staffing you can change this quarter with` +
+      ` \`fire\`; the rest is contracted or scales with revenue.${RESET}`,
+  );
+}
 
 function parseCommand(line: string, business: Business, result: TickResult): ParseResult {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
@@ -342,6 +425,10 @@ function parseCommand(line: string, business: Business, result: TickResult): Par
     case 'quit':
     case 'exit':
       return { actions: [], quit: true };
+
+    case 'costs':
+      renderCosts(business, result);
+      return none;
 
     case 'lines':
       for (const c of business.costs.stepFixed) {
@@ -453,7 +540,7 @@ function parseCommand(line: string, business: Business, result: TickResult): Par
     }
 
     default:
-      if (LOOKS_LIKE_A_QUESTION.test(line)) {
+      if (looksLikeAQuestion(line, verb)) {
         for (const line of advise(business, result)) {
           console.log(`  ${DIM}${line}${RESET}`);
         }
