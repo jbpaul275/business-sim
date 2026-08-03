@@ -19,6 +19,7 @@ import { buildabilityIssues, revenueRealityIssues } from './plausibility.js';
 import { accent, note, rule, speech, youPrompt } from './ui.js';
 import { spendLine } from './spend.js';
 import { faultLine } from './faults.js';
+import type { Journal } from './journal.js';
 
 /**
  * §9.1 Phases 1-2 as a conversation.
@@ -104,6 +105,7 @@ function effortLine(
 export async function runConceptInterview(
   input: LineSource,
   transport?: ConceptTransport,
+  journal?: Journal,
 ): Promise<ConceptResult | undefined> {
   console.log(`\n${rule('What are you building?')}`);
   console.log(
@@ -165,6 +167,7 @@ export async function runConceptInterview(
    */
   let transientFailures = 0;
   const MAX_TRANSIENT = 3;
+  let turns = 0;
 
   /**
    * `why` shows the reasoning behind the last turn.
@@ -228,6 +231,7 @@ export async function runConceptInterview(
           console.log(
             `${DIM}  the model is busy — trying that again (${transientFailures} of ${MAX_TRANSIENT})${RESET}`,
           );
+          journal?.write({ kind: 'transient', phase: error.phase, attempt: transientFailures });
           // A failed draft is not a failed turn. The turn before it succeeded
           // and is already in the transcript, so replaying the player's message
           // would put it there twice and the model would answer a conversation
@@ -322,6 +326,19 @@ export async function runConceptInterview(
     // the ledger. They should not look alike.
     if (state.message.trim()) console.log(`\n${speech(wrap(state.message, 70, ''))}`);
     console.log(`\n${speech(BOLD + wrap(state.cta, 70, '') + RESET)}`);
+    journal?.write({
+      kind: 'turn',
+      index: turns,
+      player: reply,
+      message: state.message,
+      cta: state.cta,
+      ...(interview.lastReasoning ? { reasoning: interview.lastReasoning } : {}),
+      ms: interview.lastTurn?.ms ?? 0,
+      thinkingTokens: interview.lastTurn?.thinkingTokens ?? 0,
+      calls: interview.lastTurn?.calls ?? 1,
+    });
+    turns += 1;
+
     const effort = effortLine(interview.lastTurn);
     const why = state.message.trim() && interview.lastReasoning ? '`why` to see how it got there' : '';
     const footer = [why, effort].filter(Boolean).join(' · ');
@@ -367,6 +384,7 @@ export async function runConceptInterview(
        * It is the model's homework. That it is being redone is worth one line;
        * the schema vocabulary is not.
        */
+      journal?.write({ kind: 'fault', round: repairs, issues });
       console.log(`${DIM}  ${faultLine(issues, repairs)}${RESET}`);
       if (process.env['BIZSIM_DEBUG']) {
         for (const issue of issues) console.log(`    ${DIM}- ${wrap(issue, 70, '      ').trimStart()}${RESET}`);
@@ -401,6 +419,14 @@ export async function runConceptInterview(
       console.log(`${DIM}  built the model in ${seconds(d.ms)}${thought}${RESET}`);
     }
 
+    journal?.write({
+      kind: 'draft',
+      businessName: state.draft.businessName,
+      archetype: state.draft.stream.archetype,
+      draft: state.draft,
+      ms: interview.lastDraft?.ms ?? 0,
+    });
+
     renderConceptNotes(state.draft);
 
     /**
@@ -417,6 +443,7 @@ export async function runConceptInterview(
       '',
       (raw) => raw.trim() || undefined,
     );
+    if (objection.trim()) journal?.write({ kind: 'objection', text: objection });
     if (objection.trim()) {
       // A fresh drafting attempt the player asked for, so it gets fresh repair
       // rounds. Carrying the old count forward would mean a concept that took
@@ -429,6 +456,7 @@ export async function runConceptInterview(
     // What the conversation cost, once, at the end. Not a running total: a
     // number ticking up while someone decides what to build changes what they
     // build, and this is a design tool before it is a budget.
+    journal?.write({ kind: 'spend', ...interview.usage });
     const spent = spendLine(interview.usage);
     if (spent) console.log(`\n${note(spent)}`);
 

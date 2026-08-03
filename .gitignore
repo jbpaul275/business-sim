@@ -6,3 +6,7 @@ dist/
 .env.local
 out/
 coverage/
+
+# Recorded sessions. They contain business ideas someone typed in confidence
+# and the model's reasoning about them; they stay on the machine that made them.
+.bizsim/

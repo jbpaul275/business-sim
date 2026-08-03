@@ -4,6 +4,7 @@ import type { Action, Business, CrisisRemedy, EngineEvent, WorldState } from '@b
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, type LineSource } from './input.js';
 import { rule } from './ui.js';
+import type { Journal } from './journal.js';
 
 /**
  * The interactive turn loop — spec §9.1 Phase 5, without the LLM.
@@ -523,7 +524,12 @@ function renderCosts(business: Business, result: TickResult): void {
   );
 }
 
-function parseCommand(line: string, business: Business, result: TickResult): ParseResult {
+function parseCommand(
+  line: string,
+  business: Business,
+  result: TickResult,
+  journal?: Journal,
+): ParseResult {
   const [verb = '', ...rest] = line.trim().split(/\s+/);
   const streamId = business.streams[0]?.id ?? 's1';
   const none: ParseResult = { actions: [] };
@@ -661,9 +667,9 @@ function parseCommand(line: string, business: Business, result: TickResult): Par
 
     default:
       if (looksLikeAQuestion(line, verb)) {
-        for (const said of advise(business, result, line)) {
-          console.log(`  ${DIM}${said}${RESET}`);
-        }
+        const answered = advise(business, result, line);
+        for (const said of answered) console.log(`  ${DIM}${said}${RESET}`);
+        journal?.write({ kind: 'asked', question: line, answered });
         console.log(`  ${DIM}\`help\` lists every command.${RESET}`);
         return none;
       }
@@ -677,7 +683,7 @@ function parseCommand(line: string, business: Business, result: TickResult): Par
 
 export async function play(
   source: string | WorldState,
-  options: { input?: LineSource; milestonePeriod?: number } = {},
+  options: { input?: LineSource; milestonePeriod?: number; journal?: Journal } = {},
 ): Promise<void> {
   const milestonePeriod = options.milestonePeriod ?? 39;
 
@@ -713,8 +719,34 @@ export async function play(
     return result;
   };
 
+  /**
+   * Every quarter, recorded as it happens.
+   *
+   * The interesting question across many sessions is not what a business
+   * looked like at commit — it is what happened next, and how long it took to
+   * go wrong. That only exists if it is written down each period rather than
+   * summarised at the end, because the sessions worth reading are the ones
+   * that end abruptly.
+   */
+  const record = (result: TickResult): void => {
+    const entry = result.statements.byBusiness[businessId];
+    if (!entry) return;
+    options.journal?.write({
+      kind: 'quarter',
+      period: result.statements.period,
+      revenue: toDisplay(entry.incomeStatement.revenue),
+      ebitda: toDisplay(entry.incomeStatement.ebitda),
+      cash: toDisplay(entry.balanceSheet.cash),
+      ...(entry.derivedMetrics.streamMetrics[0]?.occupancy !== undefined
+        ? { occupancy: entry.derivedMetrics.streamMetrics[0].occupancy }
+        : {}),
+      events: result.events.filter((e) => e.severity !== 'INFO').map((e) => e.kind),
+    });
+  };
+
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
+  record(last);
   renderTurn(last, state.businesses.find((b) => b.id === businessId)!);
 
   try {
@@ -750,7 +782,7 @@ export async function play(
           quit = true;
           break;
         }
-        const parsed = parseCommand(line, business, last);
+        const parsed = parseCommand(line, business, last, options.journal);
         if (parsed.message) console.log(parsed.message);
         if (parsed.quit) {
           quit = true;
@@ -784,11 +816,13 @@ export async function play(
       if (skip > 0) {
         for (let i = 0; i < skip && state.currentPeriod < milestonePeriod; i++) {
           last = advance([]);
+          record(last);
           const b = state.businesses.find((x) => x.id === businessId)!;
           if (b.status === 'CLOSED') break;
         }
       } else {
         last = advance(queued);
+        record(last);
       }
 
       renderTurn(last, state.businesses.find((b) => b.id === businessId)!);

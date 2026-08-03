@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { fromDisplay, mulRate, toDisplay, type Money } from '@bizsim/money';
 import {
   DEBT_PRODUCTS,
@@ -28,6 +29,7 @@ import type { ConceptTransport } from '@bizsim/llm';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
 import { conceptPathAvailable, runConceptInterview, type ConceptResult } from './concept.js';
 import { capitalIntensityNote } from './plausibility.js';
+import { openJournal, type Journal } from './journal.js';
 import { masthead, note, rule } from './ui.js';
 
 /**
@@ -342,6 +344,8 @@ function renderOpening(model: BusinessModel, world: WorldState): void {
 // ---------------------------------------------------------------------------
 
 export interface SetupResult {
+  /** Where this session was recorded, for the caller to keep writing to. */
+  journal?: Journal;
   world: WorldState;
   committed: boolean;
 }
@@ -349,6 +353,28 @@ export interface SetupResult {
 export interface RunSetupOptions {
   /** Injected in tests so the whole flow runs without a key or a network. */
   transport?: ConceptTransport;
+  /** Injected in tests so nothing is written to disk. */
+  journal?: Journal;
+}
+
+/**
+ * The build this run came from, so a recorded session says what produced it.
+ *
+ * The same reasoning as the masthead stamp: three sessions running were
+ * diagnosed by inferring the build from which corruption got through, and a
+ * journal without it would make that worse at scale rather than better.
+ */
+function buildSha(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1_000,
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
 }
 
 export async function runSetup(
@@ -356,6 +382,13 @@ export async function runSetup(
   options?: RunSetupOptions,
 ): Promise<SetupResult | undefined> {
   console.log(masthead());
+  const journal = options?.journal ?? openJournal('setup');
+  journal.write({
+    kind: 'session',
+    build: buildSha(),
+    startedAt: new Date().toISOString(),
+    startCapital: '',
+  });
 
   const capital = await chooseCapital(input);
 
@@ -368,7 +401,7 @@ export async function runSetup(
   let concept: ConceptResult | undefined;
 
   if (options?.transport || conceptPathAvailable()) {
-    concept = await runConceptInterview(input, options?.transport);
+    concept = await runConceptInterview(input, options?.transport, journal);
     if (!concept) return undefined;
     template = concept.mapped.template;
     archetype = concept.mapped.archetype;
@@ -776,11 +809,24 @@ export async function runSetup(
     return t === 'y' || t === 'yes' ? 'y' : t === 'n' || t === 'no' ? 'n' : undefined;
   });
 
+  journal.write({
+    kind: 'commit',
+    committed: answer !== 'n',
+    equity: toDisplay(model.financingPlan.equityInjection),
+    termDebt: toDisplay(
+      model.financingPlan.debtRequests
+        .filter((d) => d.kind !== 'REVOLVER')
+        .reduce<Money>((a, d) => a + d.requestedPrincipal, 0n),
+    ),
+    openingCash: toDisplay(world.businesses[0]?.cash ?? 0n),
+    monthZero: toDisplay(computeMonthZeroOutlays(model).total),
+  });
+
   if (answer === 'n') {
     console.log(`${DIM}Nothing committed.${RESET}`);
-    return { world, committed: false };
+    return { world, committed: false, journal };
   }
-  return { world, committed: true };
+  return { world, committed: true, journal };
 }
 
 export const summariseRegister = (model: BusinessModel): string => {

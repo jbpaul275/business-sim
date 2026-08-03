@@ -6,6 +6,8 @@ import { SCENARIOS } from './scenarios.js';
 import { play } from './play.js';
 import { runSetup } from './setup.js';
 import { openInput } from './input.js';
+import { journalDir, listSessions } from './journal.js';
+import { summariseFaults } from './faults.js';
 
 /**
  * The headless runner. This is the calibration harness for seed templates and
@@ -13,12 +15,75 @@ import { openInput } from './input.js';
  * calibration without it is two weeks of clicking.
  */
 
+/**
+ * What the recorded sessions say, together.
+ *
+ * The point of recording is the aggregate, not the individual run: which
+ * faults recur, how many conversations reach a committed business, what a
+ * session costs. One transcript pasted into a chat answers none of those.
+ */
+function reportSessions(): void {
+  const sessions = listSessions();
+  if (sessions.length === 0) {
+    console.log(`No recorded sessions in ${journalDir()}.`);
+    return;
+  }
+
+  const DIM = '\x1b[2m';
+  const BOLD = '\x1b[1m';
+  const RESET = '\x1b[0m';
+  const pad = (s: string, n: number): string =>
+    s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n);
+
+  console.log(`\n${BOLD}${pad('WHEN', 18)}${pad('BUILD', 9)}${pad('BUSINESS', 30)}${pad('OUTCOME', 12)}${pad('TURNS', 6)}${pad('QTRS', 6)}COST${RESET}`);
+  for (const s of sessions) {
+    console.log(
+      pad(s.startedAt.slice(0, 16).replace('T', ' '), 18) +
+        pad(s.build, 9) +
+        pad(s.businessName ?? '—', 30) +
+        pad(s.outcome, 12) +
+        pad(String(s.turns), 6) +
+        pad(String(s.quarters), 6) +
+        (s.costUsd !== undefined ? `$${s.costUsd.toFixed(2)}` : '—'),
+    );
+  }
+
+  const committed = sessions.filter((s) => s.outcome === 'committed').length;
+  const spent = sessions.reduce((a, s) => a + (s.costUsd ?? 0), 0);
+  const turns = sessions.reduce((a, s) => a + s.turns, 0);
+  console.log(
+    `\n${DIM}${sessions.length} sessions · ${committed} committed · ` +
+      `${turns} turns · $${spent.toFixed(2)} · ` +
+      `${sessions.reduce((a, s) => a + s.transientRetries, 0)} retries after an overload${RESET}`,
+  );
+
+  // The faults, ranked. This is the number that says which check is
+  // miscalibrated, and it is invisible one session at a time.
+  const byCategory = new Map<string, number>();
+  for (const s of sessions) {
+    for (const issue of s.faults) {
+      const key = summariseFaults([issue]);
+      byCategory.set(key, (byCategory.get(key) ?? 0) + 1);
+    }
+  }
+  if (byCategory.size > 0) {
+    console.log(`\n${BOLD}REPAIR ROUNDS BY CAUSE${RESET}`);
+    for (const [what, n] of [...byCategory].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${pad(String(n), 5)}${DIM}${what.replace(/^the first draft (came back wrong — )?/, '')}${RESET}`);
+    }
+  }
+
+  console.log(`\n${DIM}Raw events: ${journalDir()}/*.jsonl${RESET}`);
+}
+
 interface Args {
   scenario: string;
   periods: number;
   print: 'statements' | 'summary' | 'events' | 'bands';
   /** Interactive turn loop (§9.1 Phase 5) rather than a batch run. */
   interactive: boolean;
+  /** Report on recorded sessions rather than running one. */
+  sessions: boolean;
   /** Full setup — §9.1 Phases 0-4 — then play what you designed. */
   newGame: boolean;
   help: boolean;
@@ -38,7 +103,12 @@ Options
                          (default: restaurant)
   --periods <n>          quarters to run (default: 40)
   --print <mode>         summary | statements | bands | events (default: summary)
+  --sessions             what past runs did: outcome, turns, faults, cost
   --help, -h             this
+
+Sessions are recorded to .bizsim/sessions as JSONL, one file per run, flushed
+per event so a crash keeps everything up to it. BIZSIM_NO_JOURNAL=1 turns it
+off; BIZSIM_JOURNAL_DIR moves it.
 `;
 
 function parseArgs(argv: string[]): Args {
@@ -47,6 +117,7 @@ function parseArgs(argv: string[]): Args {
     periods: 40,
     print: 'summary',
     interactive: false,
+    sessions: false,
     newGame: false,
     help: false,
   };
@@ -64,6 +135,8 @@ function parseArgs(argv: string[]): Args {
       i++;
     } else if (arg === '--play' || arg === '--interactive') {
       args.interactive = true;
+    } else if (arg === '--sessions') {
+      args.sessions = true;
     } else if (arg === '--new') {
       args.newGame = true;
     } else if (arg === '--help' || arg === '-h') {
@@ -228,10 +301,20 @@ async function main(): Promise<void> {
     const input = await openInput();
     try {
       const setup = await runSetup(input);
-      if (setup?.committed) await play(setup.world, { input });
+      if (setup?.committed) {
+        await play(setup.world, { input, ...(setup.journal ? { journal: setup.journal } : {}) });
+      }
+      if (setup?.journal?.path) {
+        console.log(`\n\x1b[2mSession recorded at ${setup.journal.path}\x1b[0m`);
+      }
     } finally {
       input.close();
     }
+    return;
+  }
+
+  if (args.sessions) {
+    reportSessions();
     return;
   }
 
