@@ -235,7 +235,7 @@ describe('the web setup state machine', () => {
       label: 'Coffee shop',
     });
     expect(session.chat[0]!.text).toContain('Coffee shop');
-    expect(session.chat[0]!.text).toContain('make it yours');
+    expect(session.chat[0]!.text).toContain('Tell me about the one you have in mind');
 
     await say(session, 'a slow-bar espresso place by the university');
     const first = transport.seen[0]!.messages.at(-1)!.content;

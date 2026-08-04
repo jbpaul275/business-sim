@@ -149,13 +149,14 @@ export function createSetup(
       {
         who: 'model',
         text: seed
-          ? `${seed.label}, then — the calibrated cost structure is ready to ` +
-            'borrow. Now make it yours: where is it, who is it for, and what makes yours ' +
-            'different from the one down the street? Describe the concept and I will draft ' +
-            'the numbers — you will argue with every one before anything is committed.'
-          : 'Describe it however you like — a sentence is enough to start. I will ask ' +
-            'what I need and estimate the rest, and you will see every number before ' +
-            'anything is committed.',
+          ? `${seed.label} it is. The template covers the typical costs for this kind of ` +
+            'business, so we can spend our time on your concept. Tell me about the one you ' +
+            'have in mind: the location, the customers you want to serve, and anything that ' +
+            "would set it apart. I'll draft the starting numbers from your description, and " +
+            "you'll be able to review and challenge every one of them before the game begins."
+          : "Tell me about the business you'd like to run. A sentence or two is plenty to " +
+            "start; I'll ask follow-up questions where I need to and estimate the rest. " +
+            "You'll see every number, and you can challenge any of them before the game begins.",
       },
     ],
     capital,

@@ -120,11 +120,11 @@ export function SetupClient() {
         <h1>{seed ? 'Make it yours' : 'Describe your own'}</h1>
         <p className="sub">
           {seed
-            ? 'The template brings a calibrated cost structure — what the business actually is ' +
-              'stays yours to decide. Say where it is, who it serves, and what makes it ' +
-              'different; you argue with every number before anything is committed.'
-            : 'A sentence is enough to start. The model asks what it needs, estimates the rest, ' +
-              'and you argue with every number before anything is committed.'}
+            ? 'The template supplies a realistic cost structure, but the business itself is ' +
+              'yours to invent. Describe what you have in mind, and challenge any number you ' +
+              'disagree with before committing.'
+            : 'A sentence or two is enough to start. The model will ask follow-up questions, ' +
+              'estimate the rest, and let you challenge any number before committing.'}
         </p>
         <div className="control" style={{ maxWidth: 240 }}>
           <label htmlFor="capital">Starting capital ($)</label>

@@ -61,10 +61,10 @@ export default function Home() {
         ))}
       </div>
       <p className="picker-foot">
-        Every template is calibrated against published operating benchmarks — the EBITDA bands above
-        are the ranges its own test suite holds it to. Seeding starts the same conversation with the
-        template&apos;s cost structure ready to borrow; what the business actually is stays yours to
-        decide.
+        Every template is calibrated against published operating benchmarks, and the EBITDA bands
+        above are the ranges its own test suite holds it to. Choosing one starts the same
+        conversation with realistic costs already filled in; what the business actually is stays
+        yours to decide.
       </p>
     </main>
   );
