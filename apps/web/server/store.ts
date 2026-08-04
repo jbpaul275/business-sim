@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { toDisplay } from '@bizsim/money';
+import { toDisplay, type Money } from '@bizsim/money';
 import { attributeQuarter, tick, type TickResult } from '@bizsim/engine';
 import type { Action, DeltaAttribution, StatementSet, WorldState } from '@bizsim/schemas';
+import type { ConceptTransport } from '@bizsim/llm';
 import {
   SCENARIOS,
   describeAttribution,
   describeEvent,
   journalActions,
+  selectAxis,
   type JournalEvent,
 } from '@bizsim/sim-cli';
 
@@ -32,6 +34,40 @@ export interface TurnLogEntry {
   attributions: DeltaAttribution[];
 }
 
+/**
+ * A decision the advisor suggested, already translated into something the
+ * action bar can stage. The server does the parsing (it knows the cost ids
+ * and the register); the client only applies it.
+ */
+export type StagedMove =
+  | { type: 'price'; value: number }
+  | { type: 'marketing'; value: number }
+  | { type: 'assume'; assumptionId: string; value: string }
+  | { type: 'staff'; costId: string; delta: number };
+
+export interface SuggestedMove {
+  command: string;
+  stage: StagedMove;
+}
+
+/**
+ * One item in the advisor feed. The turn structure lives here: each quarter
+ * posts an `update` (what happened — LLM narration when a key is present)
+ * and a `question` (the eigen axis, deterministic, always). `chat` is the
+ * conversation the player has in between — which is the game, not overhead.
+ */
+export interface AdvisorEntry {
+  who: 'advisor' | 'you';
+  kind: 'update' | 'question' | 'chat';
+  period?: number;
+  /** Narration headline, on `update` entries. */
+  headline?: string;
+  /** The engine-computed ground a `question` stands on. */
+  fact?: string;
+  text: string;
+  suggested?: SuggestedMove[];
+}
+
 export interface GameSession {
   id: string;
   scenario: string;
@@ -48,6 +84,16 @@ export interface GameSession {
    * actions ride along, so a shared run is a deterministic replay.
    */
   events: JournalEvent[];
+  /** The advisor feed: per-quarter update + eigen question, and the chat. */
+  advisor: AdvisorEntry[];
+  /** Axis keys already asked, oldest first — the repetition memory. */
+  askedAxes: string[];
+  /** The quarter before the one on screen, for the narration's comparison. */
+  prevQuarter?: { revenue: Money; ebitda: Money; cash: Money };
+  /** Lazily created when a provider key is present; calls journal to `events`. */
+  transport?: ConceptTransport;
+  /** Guards against concurrent model calls on one session. */
+  advisorBusy?: boolean;
   /** Set once the player has shared this run — the id they were shown. */
   sharedAs?: string;
 }
@@ -90,7 +136,10 @@ export function createSession(scenario: string): GameSession {
       { kind: 'market_seed', seed: world.config.marketSeed },
       quarterEvent(first, []),
     ],
+    advisor: [],
+    askedAxes: [],
   };
+  pushQuestion(session);
   sessions.set(session.id, session);
   return session;
 }
@@ -123,7 +172,10 @@ export function createSessionFromWorld(
     attributions: [],
     log: [logEntry(first, [])],
     events: [...priorEvents, quarterEvent(first, [])],
+    advisor: [],
+    askedAxes: [],
   };
+  pushQuestion(session);
   sessions.set(session.id, session);
   return session;
 }
@@ -134,6 +186,17 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
   for (let i = 0; i < quarters; i++) {
     if (session.world.currentPeriod >= session.world.config.milestonePeriod + 40) break;
     const before = session.world;
+    // The quarter about to be replaced becomes the narration's comparison
+    // point — after a skip, that is the quarter immediately before the one
+    // rendered, which is also the comparison the screen itself implies.
+    const prevEntry = session.last.statements.byBusiness[session.businessId];
+    if (prevEntry) {
+      session.prevQuarter = {
+        revenue: prevEntry.incomeStatement.revenue,
+        ebitda: prevEntry.incomeStatement.ebitda,
+        cash: prevEntry.balanceSheet.cash,
+      };
+    }
     const applied = i === 0 ? actions : [];
     const result = tick(before, applied, { throwOnAssertionFailure: false });
     session.attributions = session.priorStatements
@@ -157,7 +220,33 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
       break;
     }
   }
+  pushQuestion(session);
   return session;
+}
+
+/**
+ * The eigen question for the quarter on screen — §the-turn-loop. The engine
+ * picks the axis (deterministically, from its own attribution and state);
+ * the feed shows the data, then the one question. No key required.
+ */
+function pushQuestion(session: GameSession): void {
+  const business = session.world.businesses.find((b) => b.id === session.businessId);
+  if (!business || business.status === 'CLOSED') return;
+  const axis = selectAxis({
+    world: session.world,
+    business,
+    result: session.last,
+    attributions: session.attributions,
+    asked: session.askedAxes,
+  });
+  session.askedAxes.push(axis.key);
+  session.advisor.push({
+    who: 'advisor',
+    kind: 'question',
+    period: session.last.statements.period,
+    fact: axis.fact,
+    text: axis.question,
+  });
 }
 
 const logEntry = (result: TickResult, attributions: DeltaAttribution[]): TurnLogEntry => ({

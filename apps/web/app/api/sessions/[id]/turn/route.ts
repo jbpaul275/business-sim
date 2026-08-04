@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fromDisplay } from '@bizsim/money';
 import type { Action } from '@bizsim/schemas';
 import { advanceSession, getSession } from '../../../../../server/store';
+import { narrateAdvance } from '../../../../../server/advisor';
 import { parseAssumptionValue } from '../../../../../server/setup';
 import { toView } from '../../../../../server/view';
 
@@ -83,5 +84,8 @@ export async function POST(
 
   const skip = typeof body.skip === 'number' && Number.isInteger(body.skip) ? body.skip : 0;
   advanceSession(session, actions, skip);
+  // The model's paragraph over the quarter, when a key is present. Fails soft
+  // inside — a transport fault costs the player a paragraph, not the turn.
+  await narrateAdvance(session);
   return NextResponse.json(toView(session));
 }

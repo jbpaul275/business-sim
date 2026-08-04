@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { AdvisorEntry, StagedMove } from '../server/store';
 import type { AttributionView, GameView, Row } from '../server/view';
 import { groupDigits, groupMoney, ungroup } from './format';
 
@@ -16,6 +17,11 @@ export function GameClient({ initial }: { initial: GameView }) {
   const router = useRouter();
   const [view, setView] = useState(initial);
   const [tab, setTab] = useState<'is' | 'bs' | 'cf'>('is');
+  // The advisor is the default left pane: the conversation is the game, and
+  // the turn log is the paper trail behind it.
+  const [leftTab, setLeftTab] = useState<'advisor' | 'log'>('advisor');
+  const [msg, setMsg] = useState('');
+  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sharing, setSharing] = useState(false);
   // The milestone banner is a scoreboard, not a wall — "keep playing" is a
@@ -64,6 +70,40 @@ export function GameClient({ initial }: { initial: GameView }) {
     }
   };
 
+  const ask = async (): Promise<void> => {
+    const text = msg.trim();
+    if (text === '' || asking) return;
+    setAsking(true);
+    setMsg('');
+    try {
+      const res = await fetch(`/api/sessions/${view.id}/ask`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) setView((await res.json()) as GameView);
+      else setMsg(text);
+    } catch {
+      setMsg(text);
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  // A suggestion chip stages the move in the action bar — it never runs the
+  // quarter. The decision stays with the player; the chip just saves typing.
+  const applyStage = (stage: StagedMove): void => {
+    if (stage.type === 'price') setPrice(groupMoney(String(stage.value)));
+    else if (stage.type === 'marketing') setMarketing(groupDigits(String(stage.value)));
+    else if (stage.type === 'staff') setHires({ ...hires, [stage.costId]: stage.delta });
+    else if (stage.type === 'assume') {
+      setAssumes({
+        ...assumes,
+        [stage.assumptionId]: { value: stage.value, evidence: assumes[stage.assumptionId]?.evidence ?? '' },
+      });
+    }
+  };
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -80,26 +120,57 @@ export function GameClient({ initial }: { initial: GameView }) {
       </header>
 
       <div className="panes">
-        <section className="pane" aria-label="Turn log">
-          <h2>Turn log</h2>
-          {view.log.map((turn) => (
-            <div className="turn" key={turn.period}>
-              <div className="when">
-                P{turn.period} · Y{turn.year} Q{turn.quarter}
-              </div>
-              {turn.events.map((event, i) => (
-                <div className="event" key={i}>
-                  {event}
+        <section className="pane advisor-pane" aria-label="Advisor">
+          <div className="tabs" role="tablist">
+            {(
+              [
+                ['advisor', 'Advisor'],
+                ['log', 'Turn log'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={leftTab === key}
+                className={leftTab === key ? 'active' : ''}
+                onClick={() => setLeftTab(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {leftTab === 'advisor' ? (
+            <AdvisorFeed
+              entries={view.advisor}
+              available={view.advisorAvailable}
+              asking={asking}
+              msg={msg}
+              setMsg={setMsg}
+              onAsk={ask}
+              onStage={applyStage}
+            />
+          ) : (
+            <div className="turnlog">
+              {view.log.map((turn) => (
+                <div className="turn" key={turn.period}>
+                  <div className="when">
+                    P{turn.period} · Y{turn.year} Q{turn.quarter}
+                  </div>
+                  {turn.events.map((event, i) => (
+                    <div className="event" key={i}>
+                      {event}
+                    </div>
+                  ))}
+                  {turn.attributions.map((a) => (
+                    <Attribution key={a.lineLabel} a={a} />
+                  ))}
+                  {turn.events.length === 0 && turn.attributions.length === 0 && (
+                    <div className="quiet">A quiet quarter.</div>
+                  )}
                 </div>
               ))}
-              {turn.attributions.map((a) => (
-                <Attribution key={a.lineLabel} a={a} />
-              ))}
-              {turn.events.length === 0 && turn.attributions.length === 0 && (
-                <div className="quiet">A quiet quarter.</div>
-              )}
             </div>
-          ))}
+          )}
         </section>
 
         <section className="pane" aria-label="Statements">
@@ -379,6 +450,104 @@ function SharePanel({
         </button>
         <button className="primary" onClick={share} disabled={busy}>
           {busy ? 'Sharing…' : 'Approve & share this run'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The turn loop, on screen: each quarter an update (what happened), then ONE
+ * question (the eigen axis), then whatever conversation the player wants to
+ * have about it. The question renders whether or not a model is reachable —
+ * it is deterministic — and the input quietly explains itself when chat is
+ * unavailable.
+ */
+function AdvisorFeed({
+  entries,
+  available,
+  asking,
+  msg,
+  setMsg,
+  onAsk,
+  onStage,
+}: {
+  entries: AdvisorEntry[];
+  available: boolean;
+  asking: boolean;
+  msg: string;
+  setMsg: (v: string) => void;
+  onAsk: () => void;
+  onStage: (stage: StagedMove) => void;
+}) {
+  const feedRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = feedRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [entries.length, asking]);
+
+  return (
+    <div className="advisor">
+      <div className="advisor-feed" ref={feedRef}>
+        {entries.map((e, i) => {
+          if (e.kind === 'question') {
+            return (
+              <div className="a-question" key={i}>
+                {e.fact && <div className="a-fact">{e.fact}</div>}
+                <div className="a-ask">{e.text}</div>
+              </div>
+            );
+          }
+          if (e.kind === 'update') {
+            return (
+              <div className="a-update" key={i}>
+                {e.headline && <div className="a-headline">{e.headline}</div>}
+                <div>{e.text}</div>
+              </div>
+            );
+          }
+          return (
+            <div className={`a-chat ${e.who}`} key={i}>
+              <div>{e.text}</div>
+              {e.suggested && e.suggested.length > 0 && (
+                <div className="a-chips">
+                  {e.suggested.map((s) => (
+                    <button
+                      key={s.command}
+                      className="chip"
+                      title="Stage this in the action bar — nothing runs until you run the quarter"
+                      onClick={() => onStage(s.stage)}
+                    >
+                      {s.command}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {asking && <div className="a-chat advisor thinking">Thinking…</div>}
+      </div>
+      <div className="say-row">
+        <textarea
+          placeholder={
+            available
+              ? 'Answer, argue, or ask anything about the business…'
+              : 'Chat needs a model key on the server — the questions above still play.'
+          }
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              onAsk();
+            }
+          }}
+          rows={2}
+          disabled={!available || asking}
+        />
+        <button className="primary" onClick={onAsk} disabled={!available || asking || msg.trim() === ''}>
+          {asking ? '…' : 'Send'}
         </button>
       </div>
     </div>
