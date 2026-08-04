@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ScriptedTransport, type Adjudication, type ConceptDraft } from '@bizsim/llm';
-import { challenge, createSetup, fund, say, undo } from './setup';
+import { challenge, createSetup, finishSetup, fund, say, undo } from './setup';
 import { toSetupView } from './setupView';
 import { advanceSession, createSessionFromWorld } from './store';
 import { toView } from './view';
@@ -134,11 +134,14 @@ function scripted(rulings: Adjudication[] = []) {
 
 describe('the web setup state machine', () => {
   it('walks describe → interview → draft → funding → review → committed game', async () => {
-    const session = createSetup(500_000, scripted());
+    const transport = scripted();
+    const session = createSetup(500_000, transport);
 
     await say(session, 'telescope rentals by the hour on a dark-sky ridge');
     expect(session.phase).toBe('INTERVIEW');
     expect(session.chat.at(-1)?.cta).toContain('scopes');
+    // The interview drafts to the person: their capital rides every call.
+    expect(transport.seen[0]!.system).toContain('$500,000');
 
     await say(session, '24 scopes in a 1,400 sq ft unit');
     expect(session.phase).toBe('FUNDING');
@@ -165,6 +168,30 @@ describe('the web setup state machine', () => {
     expect(gameView.businessName).toBe('Telescope rental by the hour');
     expect(game.events.some((e) => e.kind === 'draft')).toBe(true);
     expect(game.events.some((e) => e.kind === 'market_seed')).toBe(true);
+  });
+
+  it('"build it" forces the draft mid-interview — depth is the player\'s choice', async () => {
+    /**
+     * The standing out. The model still had questions (its first turn is not
+     * readyToDraft), but the player said no more questions, and the draft
+     * comes from whatever the transcript holds. The register review still
+     * argues every number afterwards, which is what makes forcing safe.
+     */
+    const session = createSetup(500_000, scripted());
+    expect(toSetupView(session).canFinish).toBe(false);
+
+    await say(session, 'telescope rentals by the hour on a dark-sky ridge');
+    expect(session.phase).toBe('INTERVIEW');
+    expect(toSetupView(session).canFinish).toBe(true);
+
+    await finishSetup(session);
+    expect(session.phase).toBe('FUNDING');
+    expect(session.concept?.draft.businessName).toBe('Telescope rental by the hour');
+    // The out is an honest chat message, not a hidden control path.
+    expect(session.chat.some((c) => c.who === 'you' && c.text.includes('build the model'))).toBe(
+      true,
+    );
+    expect(toSetupView(session).canFinish).toBe(false);
   });
 
   it('adjudicates a challenge and writes the ruling through to the model', async () => {

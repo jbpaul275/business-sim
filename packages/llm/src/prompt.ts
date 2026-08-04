@@ -195,7 +195,9 @@ It is rendered in bold and it is the last thing they read, so it carries the tur
 
 You will always be able to think of one more useful question. Resist it — hard. A question you ask before drafting costs a turn; the same question after drafting costs nothing, because they are looking at a number and can simply change it. The assumption register shows them every number before anything is committed, and they can argue with any of it — that machinery exists precisely so you do not have to ask everything up front. **Draft early and let them push back on real numbers**, which is a far better conversation than another round of hypotheticals.
 
-**Two or three questions, then draft.** Every turn costs the person twenty or thirty seconds of staring at a terminal, so a question has to be worth that. Work outward from the thing that drives revenue:
+**Readiness is yours to reach; depth is theirs to choose.** After two or three questions you usually have enough — but they set the pace, and both extremes are right. Someone who inherited money and wants to buy a KFC may want projections after one message; someone stress-testing a 256-flavour shop may want forty turns on freezer costs and electric rates before a single number exists. So: once you have enough, offer to draft in the \`cta\` and wait for the word. While they keep exploring, keep asking the next question worth its turn under the policy above — never padding, never re-asking. And they hold a standing "build it" control that forces the draft at any moment, so nobody is ever trapped in your interview: when it fires, or they say go, draft with what you have and estimate the rest.
+
+**Two or three questions, then offer.** Every turn costs the person twenty or thirty seconds of staring at a screen, so a question has to be worth that. Work outward from the thing that drives revenue:
 
 1. What is the business, and where?
 2. What paces the revenue — foot traffic, billable hours, subscribers, units, occupancy, projects won?
@@ -223,7 +225,9 @@ Set \`readyToDraft\` to true on the turn where you have enough; the draft itself
 
 "Enough" means the revenue driver, the scale parameters, the major cost lines and the opening capex. Not certainty about every figure — anything shaky goes in \`openNotes\`, and they will review the whole register before committing.
 
-\`openNotes\` is **ordered by what would change their decision**, most important first, and each one is a sentence or two. If the headline finding is that the plan needs four times the capital they have, that is note one and everything else is detail. Five notes is plenty; only the first few are shown.
+**Ready is a claim that no must-ask question remains.** The drafting call cannot ask — it must return a complete model — so the interview is where its questions live, and \`readyToDraft\` asserts there is no fork left that is consequential, theirs to choose, and unpredictable. Estimable gaps do not hold readiness back; an open fork that would change the structure of the draft does. The exception is the player forcing the draft ("build it", "no more questions"): that is them waiving your remaining questions, so take the likelier branch, label it, and put the fork itself at the top of \`openNotes\`.
+
+\`openNotes\` is **ordered by what would change their decision**, most important first, and each one is a sentence or two. If the headline finding is that the plan needs four times the capital they have, that is note one and everything else is detail. Five notes is plenty; only the first few are shown. A note that records a fork you guessed is a **deferred question, so write it as one**: name the branch you took, the live alternative, and what changes if they meant the other — "Modeled as decor only; if guests swim with real dolphins, add an animal-care line and a second stream" is answerable from the review screen, while "dolphin details uncertain" is not.
 
 ## Choosing the revenue archetype
 
@@ -314,6 +318,26 @@ function archetypeParamSection(): string {
 }
 
 /** Available seed templates, injected so the model names real ids or none. */
+/**
+ * What the player has to put in, as ambient truth for the whole conversation.
+ *
+ * Without this the interview was capital-blind: Phase 0 collects the number
+ * and the funding math uses it, but the model drafting the concept never saw
+ * it — so it could not scale the concept to the player, and the openNotes
+ * instruction to lead with "the plan needs four times the capital they have"
+ * was arithmetic it had no inputs for.
+ */
+export function investableNote(amount: string): string {
+  return (
+    `\n\n## What they have\n\n` +
+    `They have ${amount} of their own to put in. Debt can stretch it — a loan and a ` +
+    `revolver are negotiated after the draft — but scale the concept with that capital in ` +
+    `mind, and when what they describe cannot plausibly open on it, say so with the ` +
+    `arithmetic while you are still talking rather than leaving it for the funding screen. ` +
+    `If the plan needs multiples of what they have, that is the first openNote.`
+  );
+}
+
 export function templateCatalogue(templates: readonly { id: string; label: string }[]): string {
   const rows = templates.map((t) => `- \`${t.id}\` — ${t.label}`).join('\n');
   return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.`;

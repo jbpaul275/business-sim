@@ -3,6 +3,13 @@ import { looksGarbled } from './garbled.js';
 import { zTurnAdvice } from './advice.js';
 import { zAdjudication } from './challenge.js';
 import { zConceptDraft, zInterviewTurn } from './draft.js';
+import {
+  zDraftCapital,
+  zDraftCosts,
+  zDraftFinish,
+  zDraftSpine,
+  type DraftStageName,
+} from './stages.js';
 import { zTurnNarration } from './narration.js';
 
 /**
@@ -35,6 +42,17 @@ const jsonSchemaFor = (schema: Parameters<typeof zodToJsonSchema>[0]): Record<st
 
 export const TURN_SCHEMA = jsonSchemaFor(zInterviewTurn);
 export const DRAFT_SCHEMA = jsonSchemaFor(zConceptDraft);
+/**
+ * One compiled schema per draft stage. Each is a fraction of DRAFT_SCHEMA's
+ * size, which is the point: the monolith's grammar sometimes exceeded the
+ * API's limit and silently degraded to unconstrained generation.
+ */
+export const STAGE_SCHEMAS: Record<DraftStageName, Record<string, unknown>> = {
+  spine: jsonSchemaFor(zDraftSpine),
+  costs: jsonSchemaFor(zDraftCosts),
+  capital: jsonSchemaFor(zDraftCapital),
+  finish: jsonSchemaFor(zDraftFinish),
+};
 export const ADVICE_SCHEMA = jsonSchemaFor(zTurnAdvice);
 export const ADJUDICATION_SCHEMA = jsonSchemaFor(zAdjudication);
 export const NARRATION_SCHEMA = jsonSchemaFor(zTurnNarration);

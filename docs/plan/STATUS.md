@@ -220,7 +220,11 @@ which the reference model omitted — the same reason its year three sat above b
 - **Any live-call test, anywhere.** Every LLM path in this repo is verified against scripted or stubbed
   transports. Nothing has ever asserted that a real provider accepts the request a transport builds. That
   was a tolerable gap while there was one provider that had visibly worked; it is the largest unverified
-  surface in the build now that the default provider changed on the strength of stubs alone.
+  surface in the build now that the default provider changed on the strength of stubs alone. The staged
+  draft pipeline (spine → costs → capital → finish; `llm/stages.ts`) raises the stakes here: it exists to
+  fix a live failure (draft grammar exceeding the API's size limit and degrading to unconstrained
+  generation), and only a live session proves the per-stage grammars behave. The Anthropic transport does
+  not implement `draftStage` and falls back to the one-shot draft.
 - **One real session on the meter.** Every `spend` record in `.bizsim/` is a test fixture with zero tokens.
   The cost case for the provider switch is entirely arithmetic on published rates.
 

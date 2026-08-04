@@ -779,7 +779,14 @@ export async function runSetup(
   let concept: ConceptResult | undefined;
 
   if (options?.transport || conceptPathAvailable()) {
-    concept = await runConceptInterview(input, options?.transport, journal);
+    const startAmount =
+      capital.custom ?? (capital.mode === 'FREEPLAY' ? START_CAPITAL.MID : START_CAPITAL[capital.mode]);
+    concept = await runConceptInterview(
+      input,
+      options?.transport,
+      journal,
+      toDisplay(startAmount, { showCents: false }),
+    );
     if (!concept) return undefined;
     template = concept.mapped.template;
     archetype = concept.mapped.archetype;
