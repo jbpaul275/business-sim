@@ -134,11 +134,14 @@ function scripted(rulings: Adjudication[] = []) {
 
 describe('the web setup state machine', () => {
   it('walks describe → interview → draft → funding → review → committed game', async () => {
-    const session = createSetup(500_000, scripted());
+    const transport = scripted();
+    const session = createSetup(500_000, transport);
 
     await say(session, 'telescope rentals by the hour on a dark-sky ridge');
     expect(session.phase).toBe('INTERVIEW');
     expect(session.chat.at(-1)?.cta).toContain('scopes');
+    // The interview drafts to the person: their capital rides every call.
+    expect(transport.seen[0]!.system).toContain('$500,000');
 
     await say(session, '24 scopes in a 1,400 sq ft unit');
     expect(session.phase).toBe('FUNDING');

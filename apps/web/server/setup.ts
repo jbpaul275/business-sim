@@ -141,6 +141,10 @@ export function createSetup(
     interview: new ConceptInterview({
       transport,
       templates: listSeedTemplates().map((t) => ({ id: t.id, label: t.label })),
+      // The interview sees the player's capital from the first turn — the
+      // concept should be scaled to the person describing it, and the draft
+      // call inherits the same system prompt.
+      investable: toDisplay(capital, { showCents: false }),
     }),
     calls,
     events,

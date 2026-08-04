@@ -131,6 +131,8 @@ export async function runConceptInterview(
   input: LineSource,
   transport?: ConceptTransport,
   journal?: Journal,
+  /** Starting capital, display-formatted — the interview drafts to the person. */
+  investable?: string,
 ): Promise<ConceptResult | undefined> {
   console.log(`\n${rule('What are you building?')}`);
   console.log(
@@ -234,6 +236,7 @@ export async function runConceptInterview(
     // one only when its cost structure genuinely fits, and otherwise emits its
     // own cost lines (D-5).
     templates: listSeedTemplates().map((t) => ({ id: t.id, label: t.label })),
+    ...(investable ? { investable } : {}),
   });
 
   let reply = await ask(input, youPrompt(), '', (raw) => raw.trim() || undefined);

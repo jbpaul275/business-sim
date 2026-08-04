@@ -316,6 +316,26 @@ function archetypeParamSection(): string {
 }
 
 /** Available seed templates, injected so the model names real ids or none. */
+/**
+ * What the player has to put in, as ambient truth for the whole conversation.
+ *
+ * Without this the interview was capital-blind: Phase 0 collects the number
+ * and the funding math uses it, but the model drafting the concept never saw
+ * it — so it could not scale the concept to the player, and the openNotes
+ * instruction to lead with "the plan needs four times the capital they have"
+ * was arithmetic it had no inputs for.
+ */
+export function investableNote(amount: string): string {
+  return (
+    `\n\n## What they have\n\n` +
+    `They have ${amount} of their own to put in. Debt can stretch it — a loan and a ` +
+    `revolver are negotiated after the draft — but scale the concept with that capital in ` +
+    `mind, and when what they describe cannot plausibly open on it, say so with the ` +
+    `arithmetic while you are still talking rather than leaving it for the funding screen. ` +
+    `If the plan needs multiples of what they have, that is the first openNote.`
+  );
+}
+
 export function templateCatalogue(templates: readonly { id: string; label: string }[]): string {
   const rows = templates.map((t) => `- \`${t.id}\` — ${t.label}`).join('\n');
   return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.`;

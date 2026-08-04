@@ -1032,6 +1032,28 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('done your job for you');
   });
 
+  it('the interview and the draft both see what the player has to invest', async () => {
+    // Capital was collected in Phase 0 and used by the funding math, but the
+    // model drafting the concept never saw it — so it could not scale the
+    // concept to the person, and the openNotes rule about "needs four times
+    // the capital they have" was arithmetic it had no inputs for. The amount
+    // rides the system prompt, which the draft call shares.
+    const transport = new ScriptedTransport([
+      { message: 'Noted.', cta: 'Where would it be?', readyToDraft: false },
+    ]);
+    const interview = new ConceptInterview({ transport, investable: '$500,000' });
+    await interview.send('a tiny observatory hotel');
+    expect(transport.seen[0]!.system).toContain('What they have');
+    expect(transport.seen[0]!.system).toContain('$500,000');
+
+    // Without the option, no fabricated capital line appears.
+    const bare = new ScriptedTransport([
+      { message: 'Noted.', cta: 'Where?', readyToDraft: false },
+    ]);
+    await new ConceptInterview({ transport: bare }).send('same idea');
+    expect(bare.seen[0]!.system).not.toContain('What they have');
+  });
+
   it('the more standardized the business, the more personal the question', () => {
     // A Subway aspirant should not be asked about fees the franchisor
     // publishes — every content question fails the reversal test, and what

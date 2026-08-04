@@ -1,6 +1,6 @@
 import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
 import { statedFiguresAppendix } from './commitments.js';
-import { CONCEPT_INTERVIEW_SYSTEM, templateCatalogue } from './prompt.js';
+import { CONCEPT_INTERVIEW_SYSTEM, investableNote, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
 import {
   CancelledError,
@@ -34,6 +34,12 @@ export interface InterviewOptions {
    * commits is a failure mode the player cannot escape from the inside.
    */
   maxTurns?: number;
+  /**
+   * The player's starting capital, already formatted for display ("$500,000").
+   * Rides the system prompt for every turn AND the draft call, so the model
+   * scales the concept to the person rather than drafting capital-blind.
+   */
+  investable?: string;
   /**
    * Fired when the interview stops asking and starts synthesising. The draft
    * is a second call at higher effort and is much the slower of the two, so a
@@ -162,7 +168,9 @@ export class ConceptInterview {
     this.maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
     const templates = options.templates ?? [];
     this.system =
-      CONCEPT_INTERVIEW_SYSTEM + (templates.length > 0 ? templateCatalogue(templates) : '');
+      CONCEPT_INTERVIEW_SYSTEM +
+      (templates.length > 0 ? templateCatalogue(templates) : '') +
+      (options.investable ? investableNote(options.investable) : '');
   }
 
   /**
