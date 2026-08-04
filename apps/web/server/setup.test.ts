@@ -160,12 +160,19 @@ describe('the web setup state machine', () => {
     expect(session.candidate!.openingCash).toBeGreaterThanOrEqual(0n);
 
     const view = toSetupView(session);
-    // The register arrives clustered (≤9 fixed categories) with escalators
+    // The register arrives tabbed by what each number bears on — investment,
+    // P&L, descriptive — with category clusters inside each tab and escalators
     // folded onto their lines as a column; the count still reflects every
     // assumption underneath.
-    expect(view.review!.register.length).toBeLessThanOrEqual(9);
+    const tabs = view.review!.register;
+    expect(tabs.map((t) => t.key)).toEqual(['investment', 'pnl', 'descriptive']);
+    // A telescope yard has real capex and deposits, dollar rates, and a
+    // physical shape (scopes, square feet) — all three tabs are populated.
+    for (const t of tabs) expect(t.count).toBeGreaterThan(0);
     expect(view.review!.registerCount).toBeGreaterThan(10);
-    const allRows = view.review!.register.flatMap((g) => g.rows);
+    const allGroups = tabs.flatMap((t) => t.groups);
+    expect(allGroups.length).toBeLessThanOrEqual(3 * 9);
+    const allRows = allGroups.flatMap((g) => g.rows);
     expect(allRows.some((r) => r.escalator !== undefined)).toBe(true);
     expect(allRows.some((r) => r.label.includes('annual escalator'))).toBe(false);
     expect(view.review!.arguable.length).toBeGreaterThan(0);

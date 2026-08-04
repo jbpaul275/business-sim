@@ -206,10 +206,12 @@ which the reference model omitted — the same reason its year three sat above b
   cumulative volume. Half-deliberate (nothing may move without a visible assumption), and today the player
   enacts the curve through `assume` revisions the eigen questions prompt. If it lands, it lands as
   scheduled, register-visible revisions — never a hidden curve.
-- **A duplicate-overheads guard.** A live draft carried "Accounting & legal" AND "Accounting, legal, and
-  compliance" at $2,500 each — omission-guard defaults beside custom lines saying the same thing, paying
-  twice. The register grouping now puts such pairs side by side; a deterministic near-duplicate check
-  (same statement line, overlapping label tokens) should feed the repair loop.
+- **A duplicate-overheads guard beyond known families.** A live draft carried "Accounting & legal" AND
+  "Accounting, legal, and compliance" at $2,500 each — omission-guard defaults beside custom lines saying
+  the same thing, paying twice. `duplicateOverheadIssues` now catches the known families (accounting,
+  software, insurance, permits, utilities, owner comp) deterministically and feeds the repair loop; a
+  generic near-duplicate check (same statement line, overlapping label tokens) would catch pairs the
+  family list does not name.
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.
@@ -218,7 +220,11 @@ which the reference model omitted — the same reason its year three sat above b
   fails soft to silence) and ONE deterministic eigen question — `selectAxis` in `sim-cli/eigen.ts`
   picks the axis by hierarchy (crisis → biggest §10.4 driver → looming constraint → idle slack) with
   a two-quarter repetition memory, and the chat answers through the same briefing/money-guard the
-  CLI uses, with suggested commands parsed into stageable action-bar moves. Still CLI-or-nothing:
+  CLI uses, with suggested commands parsed into stageable action-bar moves. The register is tabbed by
+  what each number bears on — investment (capex, working-capital terms, financing), P&L (prices, rates,
+  recurring amounts), descriptive (square feet, seats, hours) — with the category clusters and the
+  escalator column inside each tab, classified deterministically from `category`/`unit`/`isMoney`.
+  Still CLI-or-nothing:
   "show the math", the crisis policy editor and debt/capex controls; web sessions are in-memory,
   and the CLI's own turn loop does not yet use `selectAxis`.
 - **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which

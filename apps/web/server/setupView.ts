@@ -3,7 +3,7 @@ import { computeMonthZeroOutlays } from '@bizsim/engine';
 import { computeConfidenceScore } from '@bizsim/schemas';
 import { arguableAssumptions, type CandidateResult } from '@bizsim/sim-cli';
 import { spendSummary, type ChatEntry, type SetupPhase, type SetupSession } from './setup';
-import { groupRegister, type RegisterGroupView } from './view';
+import { tabRegister, type RegisterTabView } from './view';
 
 /**
  * Everything the setup client renders, display-ready — same rule as the game
@@ -47,7 +47,7 @@ export interface ReviewView {
   debtLine?: string;
   confidence: string;
   registerCount: number;
-  register: RegisterGroupView[];
+  register: RegisterTabView[];
   /** Ids worth arguing with first, in order. */
   arguable: string[];
   notes: string[];
@@ -200,7 +200,7 @@ export function toSetupView(session: SetupSession): SetupView {
 
     const byId = Object.fromEntries(model.assumptions.map((a) => [a.id, a]));
     const confidence = computeConfidenceScore({ byId, byPath: {}, confidenceScore: 0 });
-    const register = groupRegister(model.assumptions);
+    const register = tabRegister(model.assumptions);
 
     view.review = {
       monthZero: money(cMonthZero(c)),

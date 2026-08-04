@@ -174,6 +174,9 @@ describe('ConceptInterview', () => {
     const system = transport.seen[0]!.system;
     expect(system).toContain('Borrowing a template means pruning it');
     expect(system).toContain("must survive the player's own description");
+    // Live: a food truck kept a 2,000 sq ft floor-area assumption — a
+    // storefront's number on a vehicle with ~200 usable square feet.
+    expect(system).toContain('Scale parameters are lines too');
     expect(system).toContain('Pay-per-outcome revenue is not billable hours');
     expect(system).toContain('unit of outcome');
   });

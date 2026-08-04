@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { SetupView } from '../server/setupView';
 import { groupDigits, ungroup } from './format';
 
@@ -537,6 +537,9 @@ function ReviewPanel({
   const [objection, setObjection] = useState('');
   const [busy, setBusy] = useState(false);
   const [commitError, setCommitError] = useState<string | undefined>();
+  // Unset falls back to the first tab with an out-of-benchmark row, so the
+  // review opens where the arguments are.
+  const [regTab, setRegTab] = useState<string | undefined>();
 
   const challenge = async (assumptionId: string): Promise<void> => {
     setBusy(true);
@@ -586,100 +589,150 @@ function ReviewPanel({
         <span>model confidence {r.confidence}</span>
       </div>
       <div className="review-register">
-        {r.register.map((g) => (
-        <details className="reg-group" key={g.label} open={g.deviations > 0}>
-          <summary>
-            <span>{g.label}</span>
-            <span className="reg-meta">
-              {g.count}
-              {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
-            </span>
-          </summary>
-        {g.rows.map((a) => (
-          <div key={a.id} className={`assumption${r.arguable.includes(a.id) ? ' arguable' : ''}`}>
-            <div className="row1">
-              <span>{a.label}</span>
-              <span className="val">{a.value}</span>
-            </div>
-            <div className="row2">
-              <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
-                {a.provenance.toLowerCase().replace(/_/g, ' ')}
-              </span>
-              {a.escalator && a.escalatorId && (
-                <button
-                  className="share-link"
-                  title="Annual escalator — click to challenge it"
-                  onClick={() => {
-                    setOpen(open === a.escalatorId ? undefined : a.escalatorId);
-                    setValue('');
-                    setBasis('');
-                    setRuling(undefined);
-                  }}
-                >
-                  esc {a.escalator}/yr
-                </button>
-              )}
-              {a.deviation && <span className="deviation">{a.deviation}</span>}
-              <button
-                className="share-link"
-                onClick={() => {
-                  setOpen(open === a.id ? undefined : a.id);
-                  setValue('');
-                  setBasis('');
-                  setRuling(undefined);
-                }}
-              >
-                challenge
-              </button>
-            </div>
-            {(open === a.id || (a.escalatorId !== undefined && open === a.escalatorId)) && (
-              <div className="challenge-form">
-                <div className="quiet" title={a.sourceNote}>
-                  {a.sourceNote}
-                </div>
-                <div className="say-row">
-                  <input
-                    placeholder="your number"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                  />
-                  <input
-                    placeholder="the basis — a quote, a listing, a model number (optional)"
-                    value={basis}
-                    onChange={(e) => setBasis(e.target.value)}
-                    style={{ flex: 2 }}
-                  />
+        {(() => {
+          const tabs = r.register;
+          const active =
+            tabs.find((t) => t.key === regTab) ?? tabs.find((t) => t.deviations > 0) ?? tabs[0];
+          if (!active) return null;
+          return (
+            <>
+              <div className="reg-tabs" role="tablist">
+                {tabs.map((t) => (
                   <button
-                    className="primary"
-                    disabled={busy || value.trim() === ''}
-                    onClick={() => void challenge(open ?? a.id)}
+                    key={t.key}
+                    role="tab"
+                    aria-selected={t.key === active.key}
+                    className={t.key === active.key ? 'active' : ''}
+                    onClick={() => setRegTab(t.key)}
                   >
-                    {busy ? 'Arguing…' : 'Argue it'}
+                    {t.label}
+                    <span className="reg-meta">
+                      {' '}
+                      {t.count}
+                      {t.deviations > 0 ? ` · ${t.deviations}⚠` : ''}
+                    </span>
                   </button>
-                </div>
-                <div className="quiet">
-                  A bare number moves it at most to the edge of its range; a real basis moves it
-                  properly.
-                </div>
-                {ruling && (
-                  <div className={`ruling ${ruling.ruling.toLowerCase()}`}>
-                    <strong>{ruling.ruling}</strong> {ruling.reasoning}
-                    {ruling.clarifyingQuestion && <div>? {ruling.clarifyingQuestion}</div>}
-                    {ruling.secondOrderEffect && <div>↳ {ruling.secondOrderEffect}</div>}
-                    {ruling.applied && (
-                      <div>
-                        → {ruling.resultingValue} · {ruling.provenance.toLowerCase().replace(/_/g, ' ')}
-                        {ruling.clamped ? ' (held at the edge of its range)' : ''}
-                      </div>
-                    )}
-                  </div>
-                )}
+                ))}
               </div>
-            )}
-          </div>
-        ))}
-        </details>
-        ))}
+              <div className="reg-hint">{active.hint}</div>
+              {active.groups.map((g) => (
+                <details className="reg-group" key={g.label} open={g.deviations > 0}>
+                  <summary>
+                    <span>{g.label}</span>
+                    <span className="reg-meta">
+                      {g.count}
+                      {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
+                    </span>
+                  </summary>
+                  <table className="reg-table">
+                    <tbody>
+                      {g.rows.map((a) => (
+                        <Fragment key={a.id}>
+                          <tr
+                            className={`assumption${r.arguable.includes(a.id) ? ' arguable' : ''}`}
+                            title={a.sourceNote}
+                          >
+                            <td className="rt-label">
+                              {a.label}
+                              {a.deviation && <span className="deviation">{a.deviation}</span>}
+                            </td>
+                            <td className="rt-val">{a.value}</td>
+                            <td className="rt-esc">
+                              {a.escalator && a.escalatorId ? (
+                                <button
+                                  className="share-link"
+                                  title="Annual escalator — click to challenge it"
+                                  onClick={() => {
+                                    setOpen(open === a.escalatorId ? undefined : a.escalatorId);
+                                    setValue('');
+                                    setBasis('');
+                                    setRuling(undefined);
+                                  }}
+                                >
+                                  {a.escalator}/yr
+                                </button>
+                              ) : (
+                                <span className="quiet">—</span>
+                              )}
+                            </td>
+                            <td className="rt-prov">
+                              <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
+                                {a.provenance.toLowerCase().replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="rt-act">
+                              <button
+                                className="share-link"
+                                onClick={() => {
+                                  setOpen(open === a.id ? undefined : a.id);
+                                  setValue('');
+                                  setBasis('');
+                                  setRuling(undefined);
+                                }}
+                              >
+                                challenge
+                              </button>
+                            </td>
+                          </tr>
+                          {(open === a.id ||
+                            (a.escalatorId !== undefined && open === a.escalatorId)) && (
+                            <tr>
+                              <td colSpan={5}>
+                                <div className="challenge-form">
+                                  <div className="quiet" title={a.sourceNote}>
+                                    {a.sourceNote}
+                                  </div>
+                                  <div className="say-row">
+                                    <input
+                                      placeholder="your number"
+                                      value={value}
+                                      onChange={(e) => setValue(e.target.value)}
+                                    />
+                                    <input
+                                      placeholder="the basis — a quote, a listing, a model number (optional)"
+                                      value={basis}
+                                      onChange={(e) => setBasis(e.target.value)}
+                                      style={{ flex: 2 }}
+                                    />
+                                    <button
+                                      className="primary"
+                                      disabled={busy || value.trim() === ''}
+                                      onClick={() => void challenge(open ?? a.id)}
+                                    >
+                                      {busy ? 'Arguing…' : 'Argue it'}
+                                    </button>
+                                  </div>
+                                  <div className="quiet">
+                                    A bare number moves it at most to the edge of its range; a real
+                                    basis moves it properly.
+                                  </div>
+                                  {ruling && (
+                                    <div className={`ruling ${ruling.ruling.toLowerCase()}`}>
+                                      <strong>{ruling.ruling}</strong> {ruling.reasoning}
+                                      {ruling.clarifyingQuestion && <div>? {ruling.clarifyingQuestion}</div>}
+                                      {ruling.secondOrderEffect && <div>↳ {ruling.secondOrderEffect}</div>}
+                                      {ruling.applied && (
+                                        <div>
+                                          → {ruling.resultingValue} ·{' '}
+                                          {ruling.provenance.toLowerCase().replace(/_/g, ' ')}
+                                          {ruling.clamped ? ' (held at the edge of its range)' : ''}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              ))}
+            </>
+          );
+        })()}
       </div>
 
       <div className="card-notes" style={{ marginTop: 12 }}>

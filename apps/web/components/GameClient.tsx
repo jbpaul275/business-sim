@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { AdvisorEntry, StagedMove } from '../server/store';
 import type { AttributionView, GameView, Row } from '../server/view';
 import { groupDigits, groupMoney, ungroup } from './format';
@@ -39,6 +39,9 @@ export function GameClient({ initial }: { initial: GameView }) {
   // Staged assumption revisions — the in-game `assume` lever, applied next tick.
   const [assumes, setAssumes] = useState<Record<string, { value: string; evidence: string }>>({});
   const [assumeOpen, setAssumeOpen] = useState<string | undefined>();
+  // Which register tab is showing; unset falls back to the first tab that has
+  // an out-of-benchmark row, so a fresh screen opens where the arguments are.
+  const [regTab, setRegTab] = useState<string | undefined>();
 
   const runQuarter = async (skip: number): Promise<void> => {
     setBusy(true);
@@ -282,83 +285,139 @@ export function GameClient({ initial }: { initial: GameView }) {
             <span>{view.register.count} assumptions</span>
             <span>model confidence {view.register.confidence}</span>
           </div>
-          {view.register.groups.map((g) => (
-            <details className="reg-group" key={g.label} open={g.deviations > 0}>
-              <summary>
-                <span>{g.label}</span>
-                <span className="reg-meta">
-                  {g.count}
-                  {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
-                </span>
-              </summary>
-              {g.rows.map((a) => (
-                <div className="assumption" key={a.id} title={a.sourceNote}>
-                  <div className="row1">
-                    <span>{a.label}</span>
-                    <span className="val">{a.value}</span>
-                  </div>
-                  <div className="row2">
-                    <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
-                      {a.provenance.toLowerCase().replace(/_/g, ' ')}
-                    </span>
-                    {a.escalator && a.escalatorId && (
-                      <button
-                        className="share-link"
-                        title="Annual escalator — click to revise it"
-                        onClick={() =>
-                          setAssumeOpen(assumeOpen === a.escalatorId ? undefined : a.escalatorId)
-                        }
-                      >
-                        esc {a.escalator}/yr
-                      </button>
-                    )}
-                    {a.deviation && <span className="deviation">{a.deviation}</span>}
+          {(() => {
+            const tabs = view.register.tabs;
+            const active =
+              tabs.find((t) => t.key === regTab) ?? tabs.find((t) => t.deviations > 0) ?? tabs[0];
+            if (!active) return null;
+            return (
+              <>
+                <div className="reg-tabs" role="tablist">
+                  {tabs.map((t) => (
                     <button
-                      className="share-link"
-                      onClick={() => setAssumeOpen(assumeOpen === a.id ? undefined : a.id)}
+                      key={t.key}
+                      role="tab"
+                      aria-selected={t.key === active.key}
+                      className={t.key === active.key ? 'active' : ''}
+                      onClick={() => setRegTab(t.key)}
                     >
-                      {assumes[a.id]?.value ? 'staged' : 'revise'}
+                      {t.label}
+                      <span className="reg-meta">
+                        {' '}
+                        {t.count}
+                        {t.deviations > 0 ? ` · ${t.deviations}⚠` : ''}
+                      </span>
                     </button>
-                  </div>
-                  {(assumeOpen === a.id || (a.escalatorId !== undefined && assumeOpen === a.escalatorId)) &&
-                    (() => {
-                      const fid = assumeOpen!;
-                      return (
-                        <div className="challenge-form">
-                          <div className="say-row">
-                            <input
-                              placeholder={fid === a.escalatorId ? 'new escalator (e.g. 3%)' : 'new value'}
-                              value={assumes[fid]?.value ?? ''}
-                              onChange={(e) =>
-                                setAssumes({
-                                  ...assumes,
-                                  [fid]: { value: e.target.value, evidence: assumes[fid]?.evidence ?? '' },
-                                })
-                              }
-                            />
-                            <input
-                              placeholder="evidence (optional)"
-                              value={assumes[fid]?.evidence ?? ''}
-                              onChange={(e) =>
-                                setAssumes({
-                                  ...assumes,
-                                  [fid]: { value: assumes[fid]?.value ?? '', evidence: e.target.value },
-                                })
-                              }
-                              style={{ flex: 2 }}
-                            />
-                          </div>
-                          <div className="assume-note">
-                            Applies when the quarter runs. Without evidence it is recorded as your
-                            assertion, ranked below the model&apos;s own estimate.
-                          </div>
-                        </div>
-                      );
-                    })()}
+                  ))}
                 </div>
-              ))}
-            </details>
-          ))}
+                <div className="reg-hint">{active.hint}</div>
+                {active.groups.map((g) => (
+                  <details className="reg-group" key={g.label} open={g.deviations > 0}>
+                    <summary>
+                      <span>{g.label}</span>
+                      <span className="reg-meta">
+                        {g.count}
+                        {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
+                      </span>
+                    </summary>
+                    <table className="reg-table">
+                      <tbody>
+                        {g.rows.map((a) => (
+                          <Fragment key={a.id}>
+                            <tr className="assumption" title={a.sourceNote}>
+                              <td className="rt-label">
+                                {a.label}
+                                {a.deviation && <span className="deviation">{a.deviation}</span>}
+                              </td>
+                              <td className="rt-val">{a.value}</td>
+                              <td className="rt-esc">
+                                {a.escalator && a.escalatorId ? (
+                                  <button
+                                    className="share-link"
+                                    title="Annual escalator — click to revise it"
+                                    onClick={() =>
+                                      setAssumeOpen(
+                                        assumeOpen === a.escalatorId ? undefined : a.escalatorId,
+                                      )
+                                    }
+                                  >
+                                    {a.escalator}/yr
+                                  </button>
+                                ) : (
+                                  <span className="quiet">—</span>
+                                )}
+                              </td>
+                              <td className="rt-prov">
+                                <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
+                                  {a.provenance.toLowerCase().replace(/_/g, ' ')}
+                                </span>
+                              </td>
+                              <td className="rt-act">
+                                <button
+                                  className="share-link"
+                                  onClick={() => setAssumeOpen(assumeOpen === a.id ? undefined : a.id)}
+                                >
+                                  {assumes[a.id]?.value ? 'staged' : 'revise'}
+                                </button>
+                              </td>
+                            </tr>
+                            {(assumeOpen === a.id ||
+                              (a.escalatorId !== undefined && assumeOpen === a.escalatorId)) &&
+                              (() => {
+                                const fid = assumeOpen!;
+                                return (
+                                  <tr>
+                                    <td colSpan={5}>
+                                      <div className="challenge-form">
+                                        <div className="say-row">
+                                          <input
+                                            placeholder={
+                                              fid === a.escalatorId ? 'new escalator (e.g. 3%)' : 'new value'
+                                            }
+                                            value={assumes[fid]?.value ?? ''}
+                                            onChange={(e) =>
+                                              setAssumes({
+                                                ...assumes,
+                                                [fid]: {
+                                                  value: e.target.value,
+                                                  evidence: assumes[fid]?.evidence ?? '',
+                                                },
+                                              })
+                                            }
+                                          />
+                                          <input
+                                            placeholder="evidence (optional)"
+                                            value={assumes[fid]?.evidence ?? ''}
+                                            onChange={(e) =>
+                                              setAssumes({
+                                                ...assumes,
+                                                [fid]: {
+                                                  value: assumes[fid]?.value ?? '',
+                                                  evidence: e.target.value,
+                                                },
+                                              })
+                                            }
+                                            style={{ flex: 2 }}
+                                          />
+                                        </div>
+                                        <div className="assume-note">
+                                          Applies when the quarter runs. Without evidence it is recorded as
+                                          your assertion, ranked below the model&apos;s own estimate.
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                ))}
+              </>
+            );
+          })()}
         </section>
       </div>
 

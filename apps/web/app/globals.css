@@ -1023,3 +1023,68 @@ select:focus {
 .reg-group .assumption {
   margin-left: 10px;
 }
+
+/* The register, tabbed by what each number bears on: investment, P&L, shape. */
+.reg-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.reg-tabs button {
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.reg-tabs button.active {
+  color: var(--text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.reg-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.reg-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+.reg-table td {
+  padding: 5px 6px 5px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: baseline;
+}
+.reg-table .rt-label {
+  width: 38%;
+  overflow-wrap: break-word;
+}
+.reg-table .rt-label .deviation {
+  display: block;
+}
+.reg-table .rt-val {
+  width: 18%;
+  font-family: var(--mono);
+  text-align: right;
+  white-space: nowrap;
+}
+.reg-table .rt-esc {
+  width: 13%;
+  text-align: right;
+  white-space: nowrap;
+}
+.reg-table .rt-prov {
+  width: 19%;
+}
+.reg-table .rt-act {
+  width: 12%;
+  text-align: right;
+}
+tr.assumption.arguable .rt-label {
+  color: var(--warning);
+}
