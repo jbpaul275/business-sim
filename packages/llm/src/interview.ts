@@ -347,6 +347,19 @@ export class ConceptInterview {
     return false;
   }
 
+  /**
+   * Rebuild a conversation from a persisted transcript — the restart seam.
+   *
+   * Web sessions used to die with the dev server; the transcript is the
+   * interview's whole state, so pushing it back restores the conversation
+   * exactly. `turnsTaken` is recovered from the player messages so the
+   * max-turns budget survives the restart instead of resetting.
+   */
+  resume(transcript: readonly InterviewMessage[]): void {
+    for (const message of transcript) this.transcript.push(message);
+    this.turnsTaken = transcript.filter((m) => m.role === 'user').length;
+  }
+
   /** Feed the player's latest message and get the model's next move. */
   async send(playerMessage: string): Promise<InterviewState> {
     // Same invariant on the way in. An empty player line would be rejected by
@@ -568,6 +581,21 @@ export function draftIssues(draft: ConceptDraft): string[] {
           `Either the owner does this work at small scale — in which case drop the line entirely, ` +
           `since their time is already in owner comp — or somebody is paid for it, in which case ` +
           `give the block its real quarterly cost.`,
+      );
+    }
+    /**
+     * Wages that never reach the Labor line.
+     *
+     * Live: a plumbing shop's income statement showed Labor $0 while paying
+     * $60k a quarter of visible wage blocks — the wage lines carried
+     * `statementLine: 'G&A'`, so labor cost vanished into overhead and the
+     * statement misread top to bottom. `isLabor` and `statementLine` state
+     * the same fact twice; when they disagree, the draft is wrong somewhere.
+     */
+    if (line.isLabor && line.statementLine !== 'LABOR') {
+      issues.push(
+        `'${line.label}' is marked as labor but posts to ${line.statementLine} — wages belong ` +
+          `on the LABOR statement line, or the line is not labor. Make the two agree.`,
       );
     }
     if (line.class === 'STEP_FIXED' && (line.minimumBlocks ?? 0) > 1) {

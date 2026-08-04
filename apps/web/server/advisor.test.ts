@@ -53,6 +53,35 @@ describe('the eigen question in the web turn loop', () => {
   });
 });
 
+describe('the end of a run', () => {
+  it('a closed business gets the §9.4 postmortem in the feed, and stops trading', () => {
+    const session = createSession('storage');
+    advanceSession(session, [], 1);
+    // Force the closure the engine's crisis ladder reaches on a broken build
+    // (the reference scenarios are calibrated to survive, so closure is
+    // staged directly — the state is plain data).
+    const business = session.world.businesses.find((b) => b.id === session.businessId)!;
+    business.status = 'CLOSED';
+    advanceSession(session, [], 0);
+
+    const post = session.advisor.find((e) => e.headline === 'What would have had to be true');
+    expect(post).toBeDefined();
+    expect(post!.text.length).toBeGreaterThan(40);
+
+    // Frozen at the final traded quarter: advancing a corpse changes nothing,
+    // so the last real statements stay on screen for the postmortem.
+    const period = session.last.statements.period;
+    const logLength = session.log.length;
+    advanceSession(session, [], 0);
+    expect(session.last.statements.period).toBe(period);
+    expect(session.log.length).toBe(logLength);
+    // And the postmortem posts exactly once.
+    expect(
+      session.advisor.filter((e) => e.headline === 'What would have had to be true'),
+    ).toHaveLength(1);
+  });
+});
+
 describe('narration over the quarter', () => {
   it('inserts the update before that quarter\'s question — data first', async () => {
     const session = createSession('storage');
@@ -99,9 +128,10 @@ describe('the conversation', () => {
     expect(chat).toHaveLength(2);
     expect(chat[0]!.who).toBe('you');
     expect(chat[1]!.who).toBe('advisor');
-    // `expand` has no web control, so only the marketing chip survives.
+    // Both suggestions now map to web levers and become chips.
     expect(chat[1]!.suggested).toEqual([
       { command: 'marketing 25000', stage: { type: 'marketing', value: 25000 } },
+      { command: 'expand 100 500000', stage: { type: 'expand', units: 100, cost: 500_000 } },
     ]);
   });
 
@@ -163,9 +193,37 @@ describe('parseSuggestion', () => {
         stage: { type: 'staff', costId: line.id, delta: 2 },
       });
     }
-    expect(parseSuggestion('debt 500000', b)).toBeUndefined();
+    expect(parseSuggestion('clone 250000 second-site', b)).toBeUndefined();
     expect(parseSuggestion('assume not_a_real_id 0.4', b)).toBeUndefined();
     expect(parseSuggestion('price minus-forty', b)).toBeUndefined();
+  });
+
+  it('parses the growth and money verbs, gated by what the business has', () => {
+    const b = business();
+    expect(parseSuggestion('expand 40 200000', b)).toEqual({
+      command: 'expand 40 200000',
+      stage: { type: 'expand', units: 40, cost: 200_000 },
+    });
+    expect(parseSuggestion('upgrade 15% 250000', b)).toEqual({
+      command: 'upgrade 15% 250000',
+      stage: { type: 'upgrade', pct: 15, cost: 250_000 },
+    });
+    // Storage is OCCUPANCY — no territory to open.
+    expect(parseSuggestion('market 40% 150000', b)).toBeUndefined();
+    expect(parseSuggestion('debt 300000 20', b)).toEqual({
+      command: 'debt 300000 20',
+      stage: { type: 'debt', amount: 300_000, quarters: 20 },
+    });
+    expect(parseSuggestion('inject 50000', b)).toEqual({
+      command: 'inject 50000',
+      stage: { type: 'inject', amount: 50_000 },
+    });
+    expect(parseSuggestion('distribute 25000', b)).toEqual({
+      command: 'distribute 25000',
+      stage: { type: 'distribute', amount: 25_000 },
+    });
+    // An upgrade that more than doubles willingness to pay is a different business.
+    expect(parseSuggestion('upgrade 400% 100000', b)).toBeUndefined();
   });
 
   it('validates assume ids against the actual register', () => {

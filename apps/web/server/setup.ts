@@ -17,9 +17,11 @@ import {
   type CallRecord,
   type ConceptDraft,
   type ConceptTransport,
+  type InterviewMessage,
   type MappedConcept,
 } from '@bizsim/llm';
 import { listSeedTemplates } from '@bizsim/seeds';
+import { loadState, saveState } from './persist';
 import {
   argueAssumption,
   arguableAssumptions,
@@ -27,6 +29,7 @@ import {
   buildabilityIssues,
   capacityCeilingIssues,
   capitalIntensityNote,
+  projectMatureRevenue,
   proposeFunding,
   quoteForEquity,
   revenueRealityIssues,
@@ -103,7 +106,63 @@ export interface SetupSession {
 const globalStore = globalThis as unknown as { __bizsimSetups?: Map<string, SetupSession> };
 const setups: Map<string, SetupSession> = (globalStore.__bizsimSetups ??= new Map());
 
-export const getSetup = (id: string): SetupSession | undefined => setups.get(id);
+/**
+ * What survives a restart: everything but the runtime objects. The interview
+ * is its transcript (see `ConceptInterview.resume`), the transport recreates
+ * itself, and `busy`/`progress` describe a call that no longer exists.
+ */
+type PersistedSetup = Omit<SetupSession, 'transport' | 'interview' | 'busy' | 'progress'> & {
+  interviewTranscript: InterviewMessage[];
+};
+
+export function persistSetup(session: SetupSession): void {
+  const { transport: _t, interview, busy: _b, progress: _p, ...state } = session;
+  saveState('setup', session.id, {
+    ...state,
+    interviewTranscript: [...interview.transcript],
+  });
+}
+
+/** Drop the in-memory map — the restart seam the persistence tests walk. */
+export function forgetSetups(): void {
+  setups.clear();
+}
+
+export const getSetup = (id: string, injectedTransport?: ConceptTransport): SetupSession | undefined => {
+  const held = setups.get(id);
+  if (held) return held;
+  const loaded = loadState<PersistedSetup>('setup', id);
+  if (!loaded) return undefined;
+  const { interviewTranscript, ...state } = loaded;
+  const calls = state.calls;
+  const events = state.events;
+  // Keyless restart: the conversation cannot continue without a transport,
+  // and a setup session IS a conversation — honest 404 over a broken shell.
+  const transport =
+    injectedTransport ??
+    (providerKeyPresent()
+      ? createConceptTransport({
+          onCall: (record) => {
+            calls.push(record);
+            events.push({ kind: 'call', ...record });
+          },
+        })
+      : undefined);
+  if (!transport) return undefined;
+  const progress: { text?: string | undefined } = {};
+  const interview = new ConceptInterview({
+    transport,
+    templates: listSeedTemplates().map((t) => ({ id: t.id, label: t.label })),
+    investable: toDisplay(state.capital, { showCents: false }),
+    onStage: ({ index, total, label }) => {
+      progress.text = `building the model — ${label} (${index + 1}/${total})`;
+    },
+  });
+  interview.resume(interviewTranscript);
+  const session: SetupSession = { ...state, transport, interview, busy: false, progress };
+  setups.set(id, session);
+  return session;
+};
 
 const MAX_REPAIRS = 2;
 const MAX_TRANSIENT = 3;
@@ -184,6 +243,7 @@ export function createSetup(
     progress,
   };
   setups.set(session.id, session);
+  persistSetup(session);
   return session;
 }
 
@@ -400,7 +460,42 @@ export async function say(
   } finally {
     session.busy = false;
     session.progress.text = undefined;
+    persistSetup(session);
   }
+}
+
+/**
+ * The one thing commit refuses: a model that contradicts itself. D-5 protects
+ * businesses — the moon hotel gets modeled — but a draft stating one revenue
+ * while its parameters produce under a tenth (or over ten times) of it is a
+ * self-contradiction no in-game decision can close: a live one opened,
+ * fire-sold its vans, and closed inside period 0, before the player's first
+ * turn. Any challenge touching the stream lifts the block — a ruling may
+ * legitimately move either side of the contradiction — and mild mismatches
+ * stay warnings. Returns the sentence to show, or undefined when commit may
+ * proceed.
+ */
+export function commitBlocker(session: SetupSession): string | undefined {
+  const draft = session.concept?.draft;
+  if (!draft || !session.candidate) return undefined;
+  const projection = projectMatureRevenue(draft);
+  if (!projection) return undefined;
+  const ratio = Number(projection.matureAnnualRevenue) / 100 / draft.stream.expectedAnnualRevenue;
+  if (ratio >= 0.1 && ratio <= 10) return undefined;
+  const streamTouched = session.candidate.model.assumptions.some(
+    (a) => a.path.startsWith('streams.') && a.challengeHistory.length > 0,
+  );
+  if (streamTouched) return undefined;
+  const stated = toDisplay(BigInt(Math.round(draft.stream.expectedAnnualRevenue)) * 100n, {
+    showCents: false,
+  });
+  const produced = toDisplay(projection.matureAnnualRevenue, { showCents: false });
+  return (
+    `This draft says the business does ${stated} a year, but its own volume and price ` +
+    `parameters produce ${produced} — a self-contradiction, not a plan, and no in-game ` +
+    `decision can close it. Challenge the volume numbers in the register until they reach ` +
+    `the revenue you stated, or use "Something structural to change?" to redraft.`
+  );
 }
 
 export function undo(session: SetupSession): boolean {
@@ -412,6 +507,7 @@ export function undo(session: SetupSession): boolean {
       session.chat.pop();
     }
     session.chat.pop();
+    persistSetup(session);
   }
   return undone;
 }
@@ -446,6 +542,18 @@ export function fund(
   if (session.phase !== 'FUNDING' || !session.concept || !session.proposal) {
     return { ok: false };
   }
+  try {
+    return fundInner(session, request);
+  } finally {
+    persistSetup(session);
+  }
+}
+
+function fundInner(
+  session: SetupSession,
+  request: { proposed: true } | { equityDollars: number },
+): FundOutcome {
+  if (!session.concept || !session.proposal) return { ok: false };
   const ctx = fundingContext(session);
   const p = session.proposal;
 
@@ -562,6 +670,7 @@ export async function challenge(
     };
   } finally {
     session.busy = false;
+    persistSetup(session);
   }
 }
 

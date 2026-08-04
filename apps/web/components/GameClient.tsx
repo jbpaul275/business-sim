@@ -32,6 +32,10 @@ export function GameClient({ initial }: { initial: GameView }) {
   const [price, setPrice] = useState('');
   const [marketing, setMarketing] = useState('');
   const [hires, setHires] = useState<Record<string, number>>({});
+  // The occasional moves, behind a toggle so the everyday bar stays calm.
+  const [more, setMore] = useState(false);
+  const [moves, setMoves] = useState<Record<string, string>>({});
+  const move = (key: string, value: string): void => setMoves({ ...moves, [key]: value });
   // Staged assumption revisions — the in-game `assume` lever, applied next tick.
   const [assumes, setAssumes] = useState<Record<string, { value: string; evidence: string }>>({});
   const [assumeOpen, setAssumeOpen] = useState<string | undefined>();
@@ -51,6 +55,23 @@ export function GameClient({ initial }: { initial: GameView }) {
       const body: Record<string, unknown> = { skip, hire, fire, assume };
       if (price.trim() !== '') body['price'] = ungroup(price);
       if (marketing.trim() !== '') body['marketingPerQuarter'] = ungroup(marketing);
+      const staged = (key: string): number | undefined =>
+        (moves[key] ?? '').trim() !== '' ? ungroup(moves[key]!) : undefined;
+      if (staged('expandUnits') && staged('expandCost')) {
+        body['expand'] = { units: staged('expandUnits'), costDollars: staged('expandCost') };
+      }
+      if (staged('upgradePct') && staged('upgradeCost')) {
+        body['upgrade'] = { upliftPct: staged('upgradePct'), costDollars: staged('upgradeCost') };
+      }
+      if (staged('territoryPct') && staged('territoryCost')) {
+        body['territory'] = { pct: staged('territoryPct'), costDollars: staged('territoryCost') };
+      }
+      if (staged('debt')) {
+        body['debt'] = { amountDollars: staged('debt'), termQuarters: staged('debtTerm') ?? 40 };
+      }
+      for (const key of ['draw', 'repay', 'inject', 'distribute'] as const) {
+        if (staged(key)) body[key] = staged(key);
+      }
 
       const res = await fetch(`/api/sessions/${view.id}/turn`, {
         method: 'POST',
@@ -64,6 +85,7 @@ export function GameClient({ initial }: { initial: GameView }) {
         setHires({});
         setAssumes({});
         setAssumeOpen(undefined);
+        setMoves({});
       }
     } finally {
       setBusy(false);
@@ -101,6 +123,26 @@ export function GameClient({ initial }: { initial: GameView }) {
         ...assumes,
         [stage.assumptionId]: { value: stage.value, evidence: assumes[stage.assumptionId]?.evidence ?? '' },
       });
+    } else {
+      const g = (n: number): string => groupDigits(String(Math.round(n)));
+      const stagedMoves: Record<string, string> = { ...moves };
+      if (stage.type === 'expand') {
+        stagedMoves['expandUnits'] = g(stage.units);
+        stagedMoves['expandCost'] = g(stage.cost);
+      } else if (stage.type === 'upgrade') {
+        stagedMoves['upgradePct'] = g(stage.pct);
+        stagedMoves['upgradeCost'] = g(stage.cost);
+      } else if (stage.type === 'territory') {
+        stagedMoves['territoryPct'] = g(stage.pct);
+        stagedMoves['territoryCost'] = g(stage.cost);
+      } else if (stage.type === 'debt') {
+        stagedMoves['debt'] = g(stage.amount);
+        if (stage.quarters) stagedMoves['debtTerm'] = g(stage.quarters);
+      } else {
+        stagedMoves[stage.type] = g(stage.amount);
+      }
+      setMoves(stagedMoves);
+      setMore(true);
     }
   };
 
@@ -327,6 +369,30 @@ export function GameClient({ initial }: { initial: GameView }) {
         />
       )}
 
+      {more && !view.over && (
+        <div className="morebar">
+          <MoveInput label={`Expand (+${view.moves.expandNoun}, cost $)`} pair
+            a={moves['expandUnits'] ?? ''} onA={(v) => move('expandUnits', v)}
+            b={moves['expandCost'] ?? ''} onB={(v) => move('expandCost', v)} />
+          <MoveInput label="Upgrade (% better, cost $)" pair
+            a={moves['upgradePct'] ?? ''} onA={(v) => move('upgradePct', v)}
+            b={moves['upgradeCost'] ?? ''} onB={(v) => move('upgradeCost', v)} />
+          {view.moves.territory && (
+            <MoveInput label="New territory (% more market, cost $)" pair
+              a={moves['territoryPct'] ?? ''} onA={(v) => move('territoryPct', v)}
+              b={moves['territoryCost'] ?? ''} onB={(v) => move('territoryCost', v)} />
+          )}
+          <MoveInput label="Term loan ($, quarters)" pair
+            a={moves['debt'] ?? ''} onA={(v) => move('debt', v)}
+            b={moves['debtTerm'] ?? ''} onB={(v) => move('debtTerm', v)} />
+          {view.moves.revolver && (
+            <MoveInput label="Draw revolver ($)" a={moves['draw'] ?? ''} onA={(v) => move('draw', v)} />
+          )}
+          <MoveInput label="Repay debt ($)" a={moves['repay'] ?? ''} onA={(v) => move('repay', v)} />
+          <MoveInput label="Inject ($)" a={moves['inject'] ?? ''} onA={(v) => move('inject', v)} />
+          <MoveInput label="Distribute ($)" a={moves['distribute'] ?? ''} onA={(v) => move('distribute', v)} />
+        </div>
+      )}
       <footer className="actionbar">
         <div className="control">
           <label htmlFor="price">Price ({view.price.per})</label>
@@ -370,11 +436,18 @@ export function GameClient({ initial }: { initial: GameView }) {
               Share with QA
             </button>
           )}
-          <button onClick={() => runQuarter(3)} disabled={busy}>
+          {!view.over && (
+            <button onClick={() => setMore(!more)}>{more ? 'Fewer moves' : 'More moves'}</button>
+          )}
+          <button onClick={() => runQuarter(3)} disabled={busy || view.status === 'CLOSED'}>
             Skip year
           </button>
-          <button className="primary" onClick={() => runQuarter(0)} disabled={busy}>
-            {busy ? 'Running…' : 'Run quarter'}
+          <button
+            className="primary"
+            onClick={() => runQuarter(0)}
+            disabled={busy || view.status === 'CLOSED'}
+          >
+            {view.status === 'CLOSED' ? 'Closed' : busy ? 'Running…' : 'Run quarter'}
           </button>
         </div>
       </footer>
@@ -549,6 +622,35 @@ function AdvisorFeed({
         <button className="primary" onClick={onAsk} disabled={!available || asking || msg.trim() === ''}>
           {asking ? '…' : 'Send'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** One occasional-move control: a labelled input, or a pair for (size, cost). */
+function MoveInput({
+  label,
+  a,
+  onA,
+  b,
+  onB,
+  pair,
+}: {
+  label: string;
+  a: string;
+  onA: (v: string) => void;
+  b?: string;
+  onB?: (v: string) => void;
+  pair?: boolean;
+}) {
+  return (
+    <div className="control">
+      <label>{label}</label>
+      <div className="pair">
+        <input inputMode="numeric" value={a} onChange={(e) => onA(groupDigits(e.target.value))} />
+        {pair && onB && (
+          <input inputMode="numeric" value={b ?? ''} onChange={(e) => onB(groupDigits(e.target.value))} />
+        )}
       </div>
     </div>
   );

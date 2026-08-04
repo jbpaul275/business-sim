@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { shareRun } from '@bizsim/sim-cli';
-import { getSession } from '../../../../../server/store';
+import { getSession, persistGame } from '../../../../../server/store';
 
 /**
  * The per-session QA share. Consent is the POST itself — the client shows the
@@ -25,6 +25,7 @@ export async function POST(
       return NextResponse.json({ error: result.skipped ?? 'not configured' }, { status: 503 });
     }
     session.sharedAs = result.reference ?? session.id;
+    persistGame(session);
     return NextResponse.json({ reference: session.sharedAs });
   } catch {
     return NextResponse.json({ error: 'QA endpoint unreachable' }, { status: 502 });

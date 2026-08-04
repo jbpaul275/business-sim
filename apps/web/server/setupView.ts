@@ -68,6 +68,45 @@ export interface SetupView {
 
 const NOTES_SHOWN = 3;
 
+/**
+ * The archetype in words a player recognises. The enum is engine vocabulary —
+ * a live draft card showed a plumber "PROJECT_BACKLOG" as a chip and then the
+ * rationale said it again, which is the picker's old "metadata is not
+ * information" bug recommitted. The same mapping scrubs the enum out of the
+ * model-written rationale, since drafts from before the prompt learned this
+ * rule still carry it.
+ */
+const ARCHETYPE_WORDS: Record<string, string> = {
+  TRAFFIC: 'walk-in demand',
+  UTILIZATION: 'billable hours',
+  UNITS_CAC: 'paid customer acquisition',
+  SUBSCRIPTION: 'recurring subscribers',
+  OCCUPANCY: 'occupied units',
+  PROJECT_BACKLOG: 'work won job by job',
+};
+
+/**
+ * Engine vocabulary that reaches player-facing prose, in words. The warning
+ * strings serve two audiences — they are repair instructions to the model,
+ * where enum names are exact — so the translation happens here at the view,
+ * not at the source. Spec section references get dropped for the same
+ * reason: "(§4.2)" is a citation into a document the player has never seen.
+ */
+const ENGINE_WORDS: Record<string, string> = {
+  ...ARCHETYPE_WORDS,
+  VARIABLE_REVENUE: 'the percent-of-revenue class',
+  VARIABLE_ACTIVITY: 'the per-unit class',
+  STEP_FIXED: 'the staffed-capacity class',
+  FIXED_PERIOD: 'the fixed-contract class',
+};
+
+const inWords = (archetype: string): string => ARCHETYPE_WORDS[archetype] ?? archetype;
+
+const scrubEnums = (text: string): string =>
+  Object.entries(ENGINE_WORDS)
+    .reduce((out, [enumName, words]) => out.replaceAll(enumName, words), text)
+    .replace(/\s*\(§[\d.]+\)/g, '');
+
 export function toSetupView(session: SetupSession): SetupView {
   const view: SetupView = {
     id: session.id,
@@ -88,9 +127,9 @@ export function toSetupView(session: SetupSession): SetupView {
     view.draft = {
       businessName: draft.businessName,
       summary: draft.summary,
-      archetype: draft.stream.archetype,
-      archetypeRationale: draft.stream.archetypeRationale.split(/(?<=\.)\s+/)[0] ?? '',
-      openNotes: draft.openNotes.slice(0, NOTES_SHOWN),
+      archetype: inWords(draft.stream.archetype),
+      archetypeRationale: scrubEnums(draft.stream.archetypeRationale.split(/(?<=\.)\s+/)[0] ?? ''),
+      openNotes: draft.openNotes.slice(0, NOTES_SHOWN).map(scrubEnums),
       hiddenNotes: Math.max(0, draft.openNotes.length - NOTES_SHOWN),
       synthetic: draft.seedTemplateId === null,
     };
@@ -99,11 +138,17 @@ export function toSetupView(session: SetupSession): SetupView {
   if (session.phase === 'FUNDING' && session.proposal) {
     const p = session.proposal;
     const money = (m: Money): string => toDisplay(m, { showCents: false });
+    // The proposal deliberately rounds above bare opening costs — the excess
+    // opens as cash, the cheapest runway there is. A plan that puts in more
+    // than the stated need without saying why reads as a mistake, so the
+    // line carries its own explanation.
+    const cushion = p.proposedLoan === 0n && p.proposedEquity > p.needed ? p.proposedEquity - p.needed : 0n;
     const plan =
       p.proposedLoan > 0n
         ? `${money(p.proposedEquity)} of your own plus a ${money(p.proposedLoan)} SBA 7(a)` +
           (p.proposedRevolver > 0n ? `, and a ${money(p.proposedRevolver)} revolver` : '')
-        : `${money(p.proposedEquity)} of your own, no debt needed`;
+        : `${money(p.proposedEquity)} of your own, no debt needed` +
+          (cushion > 0n ? ` — the ${money(cushion)} above opening costs starts as cash runway` : '');
     view.funding = {
       needed: money(p.needed),
       investable: money(p.investable),
@@ -145,7 +190,7 @@ export function toSetupView(session: SetupSession): SetupView {
       confidence: `${(confidence * 100).toFixed(1)}%`,
       register,
       arguable: arguableAssumptions(model.assumptions).map((a) => a.id),
-      notes: session.notes,
+      notes: session.notes.map(scrubEnums),
     };
   }
 

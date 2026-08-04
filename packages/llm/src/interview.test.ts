@@ -984,6 +984,41 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('outsourcing its job');
   });
 
+  it('market rates fail the reversal test even when the question says "your"', () => {
+    // Live: a plumber who had just moved to Toledo was asked "what does a
+    // typical service call bill at in your area?" — with a range attached,
+    // which made an unaskable question feel askable. The rate is the model's
+    // benchmark; the player-owned half of pricing is positioning.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Market rates are yours, not theirs');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('service call bill');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('positioning');
+  });
+
+  it('mechanics must not crowd out the questions about the person', () => {
+    // Live: a Toledo plumbing shop drafted after four questions of pure
+    // mechanics — work mix, crew, ticket price — with not one about
+    // differentiation, ambition, or owner intent. For a well-understood
+    // trade the mechanics are the estimable half; the person is not.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('crowd out the questions about the person');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('What makes customers choose them');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Stay small, or build toward something');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pocket the earnings, or reinvest');
+  });
+
+  it('the readiness offer reads as an offer, not a door closing', () => {
+    // "That's everything I need" frames continuing as overstaying, which
+    // quietly defeats player-paced depth.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('The offer must read as an offer');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Ending the interview is their move');
+  });
+
+  it('never says an archetype enum to the player', () => {
+    // Live: "a plumbing shop is usually PROJECT_BACKLOG" — metadata wearing
+    // a word costume, said to a plumber.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('never see in conversation');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('metadata wearing a word costume');
+  });
+
   it('orders forks coarse-to-fine, with the vending case named', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Brand comes after category comes after concept');
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pepsi or Coke');
@@ -1377,5 +1412,33 @@ describe('staged synthesis', () => {
     const transport = stagedTransport(draft(), { breakCosts: 2 });
     const interview = new ConceptInterview({ transport });
     await expect(interview.send('build it')).rejects.toBeInstanceOf(MalformedDraftError);
+  });
+});
+
+describe('labor lines and statement lines agree', () => {
+  it('flags wages posted anywhere but LABOR', () => {
+    // Live: a plumbing shop's income statement showed Labor $0 while paying
+    // $60k/quarter of visible wage blocks — the wage lines carried
+    // statementLine G&A, so labor vanished into overhead and the statement
+    // misread top to bottom.
+    const d = draft();
+    d.costLines.push({
+      label: 'Apprentice plumber wages',
+      class: 'STEP_FIXED',
+      statementLine: 'G&A',
+      value: 12_000,
+      isLabor: true,
+      accruable: false,
+      capacityPerBlock: 20_000,
+      minimumBlocks: 1,
+      sourceNote: 'One apprentice.',
+      provenance: 'LLM_ESTIMATE',
+    });
+    const issues = draftIssues(d);
+    expect(issues.some((i) => i.includes('marked as labor but posts to G&A'))).toBe(true);
+  });
+
+  it('accepts wages on LABOR and non-labor lines elsewhere', () => {
+    expect(draftIssues(draft()).some((i) => i.includes('marked as labor'))).toBe(false);
   });
 });
