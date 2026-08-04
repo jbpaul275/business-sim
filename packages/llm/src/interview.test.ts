@@ -987,6 +987,30 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pepsi or Coke');
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('widest fork');
   });
+
+  it('one question is one question mark, and no throat-clearing', () => {
+    // "Do you have a property in mind — a listing, an asking price, a size?"
+    // is four questions impersonating one; details are the next turn's
+    // questions. "First question:" is words without substance.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('One question is one question mark');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('four questions impersonate');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('no throat-clearing');
+  });
+
+  it('the game is set now — no hypothetical futures, no era question', () => {
+    // A moon hotel is the first real one at today's costs, the way anyone
+    // asking Claude about a moon hotel means it. Modeling improved-economics
+    // futures is a quagmire the game deliberately refuses.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('The game is set now');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Never ask which era');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('present-day prices');
+  });
+
+  it('carries the three worked openers', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('hotel on the moon');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('typical San Antonio hotel');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('dolphin-themed');
+  });
 });
 
 describe('the prompt carries D-5', () => {
