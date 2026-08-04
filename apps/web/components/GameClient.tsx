@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { AttributionView, GameView, Row } from '../server/view';
+import { groupDigits, groupMoney, ungroup } from './format';
 
 /**
  * The three-pane shell (architecture §7): turn log · statements · register,
@@ -42,8 +43,8 @@ export function GameClient({ initial }: { initial: GameView }) {
         .filter(([, a]) => a.value.trim() !== '')
         .map(([assumptionId, a]) => ({ assumptionId, value: a.value, evidence: a.evidence }));
       const body: Record<string, unknown> = { skip, hire, fire, assume };
-      if (price.trim() !== '') body['price'] = Number(price);
-      if (marketing.trim() !== '') body['marketingPerQuarter'] = Number(marketing);
+      if (price.trim() !== '') body['price'] = ungroup(price);
+      if (marketing.trim() !== '') body['marketingPerQuarter'] = ungroup(marketing);
 
       const res = await fetch(`/api/sessions/${view.id}/turn`, {
         method: 'POST',
@@ -261,9 +262,9 @@ export function GameClient({ initial }: { initial: GameView }) {
           <input
             id="price"
             inputMode="decimal"
-            placeholder={String(view.price.value)}
+            placeholder={view.price.value.toLocaleString('en-US')}
             value={price}
-            onChange={(e) => setPrice(e.target.value)}
+            onChange={(e) => setPrice(groupMoney(e.target.value))}
           />
         </div>
         <div className="control">
@@ -271,9 +272,9 @@ export function GameClient({ initial }: { initial: GameView }) {
           <input
             id="marketing"
             inputMode="numeric"
-            placeholder={String(view.marketingPerQuarter)}
+            placeholder={view.marketingPerQuarter.toLocaleString('en-US')}
             value={marketing}
-            onChange={(e) => setMarketing(e.target.value)}
+            onChange={(e) => setMarketing(groupDigits(e.target.value))}
           />
         </div>
         {view.staffing.map((s) => (

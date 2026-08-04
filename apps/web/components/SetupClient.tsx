@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { SetupView } from '../server/setupView';
 import type { RegisterRowView } from '../server/view';
+import { groupDigits, ungroup } from './format';
 
 /**
  * §9.1 Phases 0–4 in the browser: capital, the concept conversation, the
@@ -29,7 +30,7 @@ export function SetupClient() {
   // the picker. It seeds the interview; it never skips it.
   const seed = useSearchParams().get('seed') ?? undefined;
   const [view, setView] = useState<SetupView | undefined>();
-  const [capital, setCapital] = useState('500000');
+  const [capital, setCapital] = useState('500,000');
   const [error, setError] = useState<string | undefined>();
   const [keyMissing, setKeyMissing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,7 +53,7 @@ export function SetupClient() {
     setBusy(true);
     setError(undefined);
     try {
-      const res = await post('/api/setup', { capital: Number(capital), ...(seed ? { seed } : {}) });
+      const res = await post('/api/setup', { capital: ungroup(capital), ...(seed ? { seed } : {}) });
       const data = (await res.json()) as SetupView & { error?: string };
       if (!res.ok) {
         setError(data.error ?? 'Could not start.');
@@ -131,7 +132,7 @@ export function SetupClient() {
             id="capital"
             inputMode="numeric"
             value={capital}
-            onChange={(e) => setCapital(e.target.value.replace(/[^0-9]/g, ''))}
+            onChange={(e) => setCapital(groupDigits(e.target.value))}
           />
         </div>
         {error && <p className="share-error">{error}</p>}
@@ -291,7 +292,7 @@ function FundingPanel({
 }) {
   const f = view.funding!;
   const [custom, setCustom] = useState(false);
-  const [equity, setEquity] = useState(String(f.proposedEquityDollars));
+  const [equity, setEquity] = useState(groupDigits(String(f.proposedEquityDollars)));
   const [quote, setQuote] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -339,7 +340,7 @@ function FundingPanel({
     const res = await fetch(`/api/setup/${view.id}/fund`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ quoteOnly: true, equity: Number(equity) }),
+      body: JSON.stringify({ quoteOnly: true, equity: ungroup(equity) }),
     });
     const data = (await res.json()) as {
       quote?: {
@@ -394,12 +395,12 @@ function FundingPanel({
             <input
               inputMode="numeric"
               value={equity}
-              onChange={(e) => setEquity(e.target.value.replace(/[^0-9]/g, ''))}
+              onChange={(e) => setEquity(groupDigits(e.target.value))}
               onBlur={() => void getQuote()}
             />
             <div className="say-buttons">
               <button onClick={() => void getQuote()}>Quote</button>
-              <button className="primary" disabled={busy} onClick={() => void fund({ equity: Number(equity) })}>
+              <button className="primary" disabled={busy} onClick={() => void fund({ equity: ungroup(equity) })}>
                 {busy ? 'Asking the lender…' : 'Fund it'}
               </button>
             </div>
