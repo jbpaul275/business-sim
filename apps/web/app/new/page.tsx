@@ -1,5 +1,10 @@
+import { Suspense } from 'react';
 import { SetupClient } from '../../components/SetupClient';
 
 export default function NewGamePage() {
-  return <SetupClient />;
+  return (
+    <Suspense>
+      <SetupClient />
+    </Suspense>
+  );
 }

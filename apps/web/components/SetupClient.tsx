@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { SetupView } from '../server/setupView';
 import type { RegisterRowView } from '../server/view';
@@ -25,9 +25,13 @@ type ChallengeReply = {
 
 export function SetupClient() {
   const router = useRouter();
+  // The template this conversation starts from, when the player chose one on
+  // the picker. It seeds the interview; it never skips it.
+  const seed = useSearchParams().get('seed') ?? undefined;
   const [view, setView] = useState<SetupView | undefined>();
   const [capital, setCapital] = useState('500000');
   const [error, setError] = useState<string | undefined>();
+  const [keyMissing, setKeyMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState('thinking');
   const [message, setMessage] = useState('');
@@ -48,10 +52,36 @@ export function SetupClient() {
     setBusy(true);
     setError(undefined);
     try {
-      const res = await post('/api/setup', { capital: Number(capital) });
+      const res = await post('/api/setup', { capital: Number(capital), ...(seed ? { seed } : {}) });
       const data = (await res.json()) as SetupView & { error?: string };
-      if (!res.ok) setError(data.error ?? 'Could not start.');
-      else setView(data);
+      if (!res.ok) {
+        setError(data.error ?? 'Could not start.');
+        setKeyMissing(res.status === 503);
+      } else setView(data);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * No model, but the player still gets a game: the calibrated reference
+   * build for the chosen template, named as what it is — a pre-built
+   * demonstration, not their business.
+   */
+  const openReference = async (): Promise<void> => {
+    if (!seed) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ scenario: seed }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { id: string };
+        router.push(`/play/${data.id}`);
+        return;
+      }
     } finally {
       setBusy(false);
     }
@@ -86,10 +116,14 @@ export function SetupClient() {
   if (!view) {
     return (
       <main className="picker">
-        <h1>Describe your own</h1>
+        <h1>{seed ? 'Make it yours' : 'Describe your own'}</h1>
         <p className="sub">
-          A sentence is enough to start. The model asks what it needs, estimates the rest, and you
-          argue with every number before anything is committed.
+          {seed
+            ? 'The template brings a calibrated cost structure — what the business actually is ' +
+              'stays yours to decide. Say where it is, who it serves, and what makes it ' +
+              'different; you argue with every number before anything is committed.'
+            : 'A sentence is enough to start. The model asks what it needs, estimates the rest, ' +
+              'and you argue with every number before anything is committed.'}
         </p>
         <div className="control" style={{ maxWidth: 240 }}>
           <label htmlFor="capital">Starting capital ($)</label>
@@ -101,8 +135,20 @@ export function SetupClient() {
           />
         </div>
         {error && <p className="share-error">{error}</p>}
+        {keyMissing && seed && (
+          <p className="quiet" style={{ maxWidth: '62ch' }}>
+            Without a model key the conversation cannot run, but you can open the calibrated
+            reference build for this template instead — a pre-built demonstration business, not one
+            you designed. Decisions still work; the concept was chosen for you.
+          </p>
+        )}
         <div className="share-actions" style={{ marginTop: 12 }}>
           <button onClick={() => router.push('/')}>Back</button>
+          {keyMissing && seed && (
+            <button onClick={() => void openReference()} disabled={busy}>
+              Open the reference build
+            </button>
+          )}
           <button className="primary" onClick={start} disabled={busy}>
             {busy ? 'Opening…' : 'Start the conversation'}
           </button>

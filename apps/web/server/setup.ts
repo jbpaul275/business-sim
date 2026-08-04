@@ -62,9 +62,17 @@ export interface ChatEntry {
 
 export type SetupPhase = 'INTERVIEW' | 'FUNDING' | 'REVIEW' | 'DEAD';
 
+export interface SeedChoice {
+  scenario: string;
+  templateId: string;
+  label: string;
+}
+
 export interface SetupSession {
   id: string;
   phase: SetupPhase;
+  /** The template the player chose to start from, when they chose one. */
+  seed?: SeedChoice | undefined;
   transport: ConceptTransport;
   interview: ConceptInterview;
   calls: CallRecord[];
@@ -108,6 +116,7 @@ export function createSetup(
   // Injected in tests so the whole flow runs without a key or a network —
   // the same seam `RunSetupOptions.transport` gives the CLI.
   injectedTransport?: ConceptTransport,
+  seed?: SeedChoice,
 ): SetupSession {
   const capital = fromDisplay(capitalDollars);
   const calls: CallRecord[] = [];
@@ -135,13 +144,18 @@ export function createSetup(
     }),
     calls,
     events,
+    ...(seed ? { seed } : {}),
     chat: [
       {
         who: 'model',
-        text:
-          'Describe it however you like — a sentence is enough to start. I will ask ' +
-          'what I need and estimate the rest, and you will see every number before ' +
-          'anything is committed.',
+        text: seed
+          ? `${seed.label}, then — the calibrated cost structure is ready to ` +
+            'borrow. Now make it yours: where is it, who is it for, and what makes yours ' +
+            'different from the one down the street? Describe the concept and I will draft ' +
+            'the numbers — you will argue with every one before anything is committed.'
+          : 'Describe it however you like — a sentence is enough to start. I will ask ' +
+            'what I need and estimate the rest, and you will see every number before ' +
+            'anything is committed.',
       },
     ],
     capital,
@@ -173,7 +187,15 @@ export async function say(session: SetupSession, text: string): Promise<void> {
     session.proposal = undefined;
     session.chat.push({ who: 'you', text });
 
-    let reply = text;
+    // The seed rides the first message as a stated preference — the same
+    // sentence a player would type themselves ("start from your coffee shop
+    // template"), so the interview prompt needs no second channel and the
+    // model still owns the fit judgement (D-5: it uses a template only when
+    // the cost structure genuinely fits what was described).
+    let reply =
+      session.seed && session.turns === 0
+        ? `${text}\n\n(Start from the "${session.seed.label}" template — ${session.seed.templateId} — where its cost structure fits.)`
+        : text;
     let pendingRepair: string | undefined;
 
     for (;;) {

@@ -221,6 +221,38 @@ describe('the web setup state machine', () => {
     expect(ticket!.provenance).toBe('PLAYER_ASSUMED');
   });
 
+  it('a template seed rides the first message as a stated preference', async () => {
+    /**
+     * A template SEEDS the conversation, never replaces it. The player who
+     * clicked "Coffee shop" still says what the business actually is; the
+     * choice reaches the model as a sentence in the first message, so the
+     * fit judgement stays the model's (D-5) and the transcript stays honest.
+     */
+    const transport = scripted();
+    const session = createSetup(500_000, transport, {
+      scenario: 'coffee',
+      templateId: 'coffee_shop',
+      label: 'Coffee shop',
+    });
+    expect(session.chat[0]!.text).toContain('Coffee shop');
+    expect(session.chat[0]!.text).toContain('make it yours');
+
+    await say(session, 'a slow-bar espresso place by the university');
+    const first = transport.seen[0]!.messages.at(-1)!.content;
+    expect(first).toContain('a slow-bar espresso place');
+    expect(first).toContain('coffee_shop');
+    // The visible chat carries only what the player typed.
+    expect(session.chat.find((c) => c.who === 'you')!.text).toBe(
+      'a slow-bar espresso place by the university',
+    );
+
+    // The seed is a preference for the FIRST message only — later turns are
+    // the conversation itself.
+    await say(session, 'twelve seats, no food program');
+    const second = transport.seen.at(-1)!.messages.at(-1)!.content;
+    expect(second).not.toContain('coffee_shop');
+  });
+
   it('undo takes back the last exchange in chat and transcript alike', async () => {
     const session = createSetup(500_000, scripted());
     await say(session, 'telescope rentals');
