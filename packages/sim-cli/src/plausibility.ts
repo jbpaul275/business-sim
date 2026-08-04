@@ -244,10 +244,17 @@ export function revenueRealityIssues(draft: ConceptDraft): string[] {
   if (p.ratio >= TOO_LOW && p.ratio <= TOO_HIGH) return [];
 
   const direction = p.ratio < TOO_LOW ? 'far below' : 'far above';
+  // "off by 0.00x" reached a live screen: a $1,600-vs-$600,000 draft rounded
+  // its own magnitude to zero, so the most alarming warning quantified itself
+  // as nothing. Tiny ratios get said in words instead.
+  const size =
+    p.ratio >= 0.01
+      ? `${p.ratio.toFixed(2)}x the stated figure`
+      : `under 1% of the stated figure`;
   return [
     `The volume and price you drafted produce ${toDisplay(p.matureAnnualRevenue, { showCents: false })} ` +
       `in a mature year, ${direction} the ${toDisplay(p.expectedAnnualRevenue, { showCents: false })} ` +
-      `you said this business should do — off by ${p.ratio.toFixed(2)}x. The cost lines are sized ` +
+      `you said this business should do — ${size}. The cost lines are sized ` +
       `for the business you described, so one of the two is wrong. Either correct the volume ` +
       `parameters so they reach the revenue you stated, or restate the revenue this business ` +
       `actually does at the scale you have drafted.`,

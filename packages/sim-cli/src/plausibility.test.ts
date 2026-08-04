@@ -117,7 +117,16 @@ describe('does the draft build the business the draft says it is building', () =
     // It says which way, and by how much, because "check your numbers" is not
     // something a model can act on.
     expect(issues[0]).toContain('far below');
-    expect(issues[0]).toMatch(/off by 0\.\d+x/);
+    expect(issues[0]).toMatch(/0\.\d+x the stated figure/);
+  });
+
+  it('says a tiny ratio in words instead of rounding it to zero', () => {
+    // Live: a $1,600-vs-$600,000 draft printed "off by 0.00x" — the most
+    // alarming warning on the screen quantifying itself as nothing.
+    const issues = revenueRealityIssues(mcdonalds(360_000_000));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('under 1% of the stated figure');
+    expect(issues[0]).not.toContain('0.00x');
   });
 
   it('says nothing when the drafted volume reaches the stated revenue', () => {

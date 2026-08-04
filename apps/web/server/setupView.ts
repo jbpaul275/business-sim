@@ -85,13 +85,27 @@ const ARCHETYPE_WORDS: Record<string, string> = {
   PROJECT_BACKLOG: 'work won job by job',
 };
 
+/**
+ * Engine vocabulary that reaches player-facing prose, in words. The warning
+ * strings serve two audiences — they are repair instructions to the model,
+ * where enum names are exact — so the translation happens here at the view,
+ * not at the source. Spec section references get dropped for the same
+ * reason: "(§4.2)" is a citation into a document the player has never seen.
+ */
+const ENGINE_WORDS: Record<string, string> = {
+  ...ARCHETYPE_WORDS,
+  VARIABLE_REVENUE: 'the percent-of-revenue class',
+  VARIABLE_ACTIVITY: 'the per-unit class',
+  STEP_FIXED: 'the staffed-capacity class',
+  FIXED_PERIOD: 'the fixed-contract class',
+};
+
 const inWords = (archetype: string): string => ARCHETYPE_WORDS[archetype] ?? archetype;
 
 const scrubEnums = (text: string): string =>
-  Object.entries(ARCHETYPE_WORDS).reduce(
-    (out, [enumName, words]) => out.replaceAll(enumName, words),
-    text,
-  );
+  Object.entries(ENGINE_WORDS)
+    .reduce((out, [enumName, words]) => out.replaceAll(enumName, words), text)
+    .replace(/\s*\(§[\d.]+\)/g, '');
 
 export function toSetupView(session: SetupSession): SetupView {
   const view: SetupView = {
@@ -115,7 +129,7 @@ export function toSetupView(session: SetupSession): SetupView {
       summary: draft.summary,
       archetype: inWords(draft.stream.archetype),
       archetypeRationale: scrubEnums(draft.stream.archetypeRationale.split(/(?<=\.)\s+/)[0] ?? ''),
-      openNotes: draft.openNotes.slice(0, NOTES_SHOWN),
+      openNotes: draft.openNotes.slice(0, NOTES_SHOWN).map(scrubEnums),
       hiddenNotes: Math.max(0, draft.openNotes.length - NOTES_SHOWN),
       synthetic: draft.seedTemplateId === null,
     };
@@ -176,7 +190,7 @@ export function toSetupView(session: SetupSession): SetupView {
       confidence: `${(confidence * 100).toFixed(1)}%`,
       register,
       arguable: arguableAssumptions(model.assumptions).map((a) => a.id),
-      notes: session.notes,
+      notes: session.notes.map(scrubEnums),
     };
   }
 
