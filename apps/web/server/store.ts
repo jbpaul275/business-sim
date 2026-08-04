@@ -99,6 +99,35 @@ export function getSession(id: string): GameSession | undefined {
   return sessions.get(id);
 }
 
+/**
+ * Open a game from a committed setup world — the web equivalent of the CLI
+ * handing `runSetup`'s world to `play`. The setup's journal events carry over,
+ * so a QA share of the resulting run includes the interview, the draft and
+ * every challenge that shaped the model.
+ */
+export function createSessionFromWorld(
+  world: WorldState,
+  label: string,
+  priorEvents: JournalEvent[],
+): GameSession {
+  const businessId = world.businesses[0]?.id;
+  if (!businessId) throw new Error('committed world has no business');
+  const first = tick(world, [], { throwOnAssertionFailure: false });
+  const session: GameSession = {
+    id: randomUUID(),
+    scenario: label,
+    world: first.state,
+    businessId,
+    last: first,
+    priorStatements: first.statements,
+    attributions: [],
+    log: [logEntry(first, [])],
+    events: [...priorEvents, quarterEvent(first, [])],
+  };
+  sessions.set(session.id, session);
+  return session;
+}
+
 /** Advance one quarter with the queued actions, then `skip` more without any. */
 export function advanceSession(session: GameSession, actions: Action[], skip = 0): GameSession {
   const quarters = 1 + Math.max(0, Math.min(skip, 40));

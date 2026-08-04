@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fromDisplay } from '@bizsim/money';
 import type { Action } from '@bizsim/schemas';
 import { advanceSession, getSession } from '../../../../../server/store';
+import { parseAssumptionValue } from '../../../../../server/setup';
 import { toView } from '../../../../../server/view';
 
 /**
@@ -18,6 +19,8 @@ interface TurnRequest {
   marketingPerQuarter?: number;
   hire?: { costId: string; blocks: number }[];
   fire?: { costId: string; blocks: number }[];
+  /** The in-game revision lever: `ADJUST_ASSUMPTION`, applied next tick. */
+  assume?: { assumptionId: string; value: string; evidence?: string }[];
   skip?: number;
 }
 
@@ -58,6 +61,24 @@ export async function POST(
     if (typeof f.costId === 'string' && Number.isInteger(f.blocks) && f.blocks > 0) {
       actions.push({ kind: 'REMOVE_STEP_BLOCK', costId: f.costId, blocks: f.blocks });
     }
+  }
+  for (const a of body.assume ?? []) {
+    if (typeof a.assumptionId !== 'string' || typeof a.value !== 'string') continue;
+    const target = business?.assumptions.byId[a.assumptionId];
+    if (!target) continue;
+    // Same parsing as the setup challenge form: money as dollars, "35%" and
+    // "0.35" both a rate. The engine's ADJUST_ASSUMPTION does the write-through
+    // and the §10.5 re-test when the tick applies it.
+    const newValue = parseAssumptionValue(target, a.value);
+    if (newValue === undefined) continue;
+    actions.push({
+      kind: 'ADJUST_ASSUMPTION',
+      assumptionId: a.assumptionId,
+      newValue,
+      ...(typeof a.evidence === 'string' && a.evidence.trim() !== ''
+        ? { evidence: a.evidence.trim() }
+        : {}),
+    });
   }
 
   const skip = typeof body.skip === 'number' && Number.isInteger(body.skip) ? body.skip : 0;

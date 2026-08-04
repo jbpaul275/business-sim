@@ -20,6 +20,9 @@ export function GameClient({ initial }: { initial: GameView }) {
   const [price, setPrice] = useState('');
   const [marketing, setMarketing] = useState('');
   const [hires, setHires] = useState<Record<string, number>>({});
+  // Staged assumption revisions — the in-game `assume` lever, applied next tick.
+  const [assumes, setAssumes] = useState<Record<string, { value: string; evidence: string }>>({});
+  const [assumeOpen, setAssumeOpen] = useState<string | undefined>();
 
   const runQuarter = async (skip: number): Promise<void> => {
     setBusy(true);
@@ -30,7 +33,10 @@ export function GameClient({ initial }: { initial: GameView }) {
       const fire = Object.entries(hires)
         .filter(([, n]) => n < 0)
         .map(([costId, blocks]) => ({ costId, blocks: -blocks }));
-      const body: Record<string, unknown> = { skip, hire, fire };
+      const assume = Object.entries(assumes)
+        .filter(([, a]) => a.value.trim() !== '')
+        .map(([assumptionId, a]) => ({ assumptionId, value: a.value, evidence: a.evidence }));
+      const body: Record<string, unknown> = { skip, hire, fire, assume };
       if (price.trim() !== '') body['price'] = Number(price);
       if (marketing.trim() !== '') body['marketingPerQuarter'] = Number(marketing);
 
@@ -44,6 +50,8 @@ export function GameClient({ initial }: { initial: GameView }) {
         setPrice('');
         setMarketing('');
         setHires({});
+        setAssumes({});
+        setAssumeOpen(undefined);
       }
     } finally {
       setBusy(false);
@@ -166,7 +174,44 @@ export function GameClient({ initial }: { initial: GameView }) {
                   {a.provenance.toLowerCase().replace(/_/g, ' ')}
                 </span>
                 {a.deviation && <span className="deviation">{a.deviation}</span>}
+                <button
+                  className="share-link"
+                  onClick={() => setAssumeOpen(assumeOpen === a.id ? undefined : a.id)}
+                >
+                  {assumes[a.id]?.value ? 'staged' : 'revise'}
+                </button>
               </div>
+              {assumeOpen === a.id && (
+                <div className="challenge-form">
+                  <div className="say-row">
+                    <input
+                      placeholder="new value"
+                      value={assumes[a.id]?.value ?? ''}
+                      onChange={(e) =>
+                        setAssumes({
+                          ...assumes,
+                          [a.id]: { value: e.target.value, evidence: assumes[a.id]?.evidence ?? '' },
+                        })
+                      }
+                    />
+                    <input
+                      placeholder="evidence (optional)"
+                      value={assumes[a.id]?.evidence ?? ''}
+                      onChange={(e) =>
+                        setAssumes({
+                          ...assumes,
+                          [a.id]: { value: assumes[a.id]?.value ?? '', evidence: e.target.value },
+                        })
+                      }
+                      style={{ flex: 2 }}
+                    />
+                  </div>
+                  <div className="assume-note">
+                    Applies when the quarter runs. Without evidence it is recorded as your
+                    assertion, ranked below the model&apos;s own estimate.
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </section>

@@ -2,7 +2,13 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['packages/*/src/**/*.test.ts', 'packages/*/test/**/*.test.ts'],
+    include: [
+      'packages/*/src/**/*.test.ts',
+      'packages/*/test/**/*.test.ts',
+      // The web app's server-side state machines — the client is layout, but
+      // setup/store/view are logic and test like any package.
+      'apps/web/server/**/*.test.ts',
+    ],
     // Runs before every test file. Keeps the suite out of the real journal —
     // see vitest.setup.ts for what it was doing to the corpus.
     setupFiles: ['./vitest.setup.ts'],

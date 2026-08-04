@@ -35,6 +35,10 @@ export default function Home() {
         index. {templateCount} calibrated templates.
       </p>
       <div className="scenario-grid">
+        <a className="scenario-card" href="/new" style={{ textDecoration: 'none' }}>
+          <div className="name">Describe your own</div>
+          <div className="kind">a conversation — any business you can put in a sentence</div>
+        </a>
         {scenarios.map((key) => (
           <StartButton key={key} scenario={key} name={LABELS[key]!.name} kind={LABELS[key]!.kind} />
         ))}

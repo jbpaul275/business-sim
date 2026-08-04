@@ -329,7 +329,7 @@ const toLogView = (l: TurnLogEntry): TurnLogView => ({
   attributions: l.attributions.map(toAttributionView),
 });
 
-function toRegisterRow(a: Assumption): RegisterRowView {
+export function toRegisterRow(a: Assumption): RegisterRowView {
   const value =
     typeof a.value === 'bigint'
       ? money(a.value)

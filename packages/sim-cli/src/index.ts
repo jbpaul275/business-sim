@@ -13,6 +13,27 @@ export { buildBriefing, describeAttribution, type BriefingContext } from './brie
 export { postmortem, runPoint, type RunPoint } from './postmortem.js';
 export { priceUnits } from './pricing.js';
 export { journalActions, type Journal, type JournalEvent } from './journal.js';
+export { argueAssumption, arguableAssumptions, type ArgueOutcome, type ArgueRequest } from './argue.js';
+export {
+  proposeFunding,
+  quoteForEquity,
+  revolverFor,
+  buildCandidate,
+  equityForShare,
+  type FundingContext,
+  type FundingProposal,
+  type LoanQuote,
+  type CandidatePlan,
+  type CandidateResult,
+} from './funding.js';
+export {
+  buildabilityIssues,
+  capacityCeilingIssues,
+  capitalIntensityNote,
+  revenueRealityIssues,
+  staffingRealismIssues,
+} from './plausibility.js';
+export { spendLine } from './spend.js';
 export {
   shareNotice,
   shareRun,

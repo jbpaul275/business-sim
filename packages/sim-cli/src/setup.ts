@@ -10,7 +10,6 @@ import {
   underwrite,
   computeMonthZeroOutlays,
   createWorld,
-  setAtPath,
   createWorldConfig,
   tick,
   validateBusinessModel,
@@ -28,13 +27,13 @@ import {
   type SeedTemplate,
   type WorldState,
 } from '@bizsim/schemas';
-import { findCatalogItem, listSeedTemplates } from '@bizsim/seeds';
+import { listSeedTemplates } from '@bizsim/seeds';
 import {
-  adjudicate,
   reverseChallenge,
   type AdjudicationTransport,
   type ConceptTransport,
 } from '@bizsim/llm';
+import { argueAssumption, arguableAssumptions } from './argue.js';
 import { ask, parseMoney, parseNumber, type LineSource } from './input.js';
 import {
   conceptKeyVar,
@@ -390,8 +389,8 @@ export const isThin = (cash: Money, firstQuarterBurn: Money): boolean =>
  * This is the number behind "putting in $X more prices the loan lower" — a
  * hint is only useful if the figure it names actually lands in the tier.
  */
-export const equityForShare = (needed: Money, share: number, feePct: number): Money =>
-  mulRate(needed, (1 - share) / (share * (1 - feePct) + 1 - share));
+export { equityForShare } from './funding.js';
+import { equityForShare } from './funding.js';
 
 function firstQuarterBurn(world: WorldState): Money {
   const result = tick(world, [], { throwOnAssertionFailure: false });
@@ -419,26 +418,8 @@ async function challengeLoop(
   model: BusinessModel,
   transport?: ConceptTransport,
 ): Promise<string | undefined> {
-  /**
-   * Worth arguing with first: furthest out of band, then the biggest money.
-   *
-   * The tiebreak used to be alphabetical, which on a synthetic concept — no
-   * benchmark bands, so EVERY deviation is zero — meant the whole list was
-   * alphabetical: a $4M model led with "Accounting & legal $1,500" while a
-   * $3.26M capex estimate sat below the fold, unshown and unchallenged.
-   * Dollar magnitude is the honest second sort: the numbers most worth
-   * arguing with are the ones that move the model most.
-   */
-  const dollars = (a: Assumption): number => (typeof a.value === 'bigint' ? Number(a.value) : 0);
-  const arguable = [...model.assumptions]
-    .filter((a) => a.outsideBenchmark || !isWellSourced(a.provenance))
-    .sort(
-      (a, b) =>
-        Math.abs(b.benchmarkDeviation ?? 0) - Math.abs(a.benchmarkDeviation ?? 0) ||
-        dollars(b) - dollars(a) ||
-        a.label.localeCompare(b.label),
-    )
-    .slice(0, 12);
+  // Selection shared with the web register — docs in `arguableAssumptions`.
+  const arguable = arguableAssumptions(model.assumptions);
   if (arguable.length === 0) return undefined;
 
   console.log(
@@ -489,39 +470,16 @@ async function challengeLoop(
     }
 
     const basis = basisWords.join(' ').trim();
-    const asNumber = (v: number | bigint): number => (typeof v === 'bigint' ? Number(v) / 100 : v);
-    const catalog = findCatalogItem(target.label);
-    const settled = await adjudicate(transport ? adjudicationOf(transport) : undefined, {
-      assumption: {
-        label: target.label,
-        value: asNumber(target.value),
-        unit: target.unit,
-        range: { low: asNumber(target.range.low), high: asNumber(target.range.high) },
-        sourceNote: target.sourceNote,
-        provenance: target.provenance,
-        benchmarkBand: target.benchmarkBand
-          ? { low: target.benchmarkBand.low, high: target.benchmarkBand.high }
-          : null,
-      },
-      playerClaim: {
-        assertedValue: asNumber(asserted as number | bigint),
-        statedBasis: basis === '' ? null : basis,
-        evidenceUrl: null,
-      },
-      businessContext: {
-        archetype: model.streams[0]?.archetype ?? 'TRAFFIC',
-        summary: model.businessName,
-      },
-      catalogEntry: catalog
-        ? {
-            label: catalog.label,
-            low: catalog.low,
-            high: catalog.high,
-            tiers: catalog.tiers,
-            source: catalog.source,
-          }
-        : null,
+    const outcome = await argueAssumption({
+      transport: transport ? adjudicationOf(transport) : undefined,
+      target,
+      writeTo: model,
+      asserted: asserted as number | bigint,
+      basis,
+      archetype: model.streams[0]?.archetype ?? 'TRAFFIC',
+      businessName: model.businessName,
     });
+    const settled = outcome.settlement;
 
     console.log(`  ${RULING_COLOUR[settled.ruling]}${settled.ruling}${RESET}  ${wrapText(settled.reasoning, 70, '        ')}`);
     if (settled.clarifyingQuestion) {
@@ -531,25 +489,12 @@ async function challengeLoop(
       console.log(`  ${DIM}↳ ${wrapText(settled.secondOrderEffect, 70, '    ')}${RESET}`);
     }
 
-    if (settled.provenance === 'UNCHANGED') continue;
-
-    const landed = target.isMoney ? fromDisplay(settled.value) : settled.value;
-    // The register is a record OF the model, so both move or neither does.
-    if (!setAtPath(model, target.path, landed)) {
+    if (outcome.pathBroken) {
       console.log(`  ${RED}${target.label} is registered at ${target.path}, which no longer resolves.${RESET}`);
       continue;
     }
-    target.challengeHistory.push({
-      period: 0,
-      priorValue: target.value,
-      assertedValue: asserted as number | bigint,
-      statedBasis: basis === '' ? null : basis,
-      ruling: settled.ruling,
-      resultingValue: landed,
-      reasoning: settled.reasoning,
-    });
-    target.value = landed;
-    target.provenance = settled.provenance;
+    if (!outcome.applied) continue;
+    const landed = outcome.resultingValue;
     console.log(
       `  ${DIM}${target.label} → ${target.isMoney ? toDisplay(landed as bigint, { showCents: false }) : landed}` +
         ` · ${settled.provenance}${settled.clamped ? ' (held at the edge of its range)' : ''}${RESET}`,
