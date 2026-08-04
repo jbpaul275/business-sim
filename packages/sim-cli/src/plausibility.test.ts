@@ -4,6 +4,7 @@ import {
   buildabilityIssues,
   capacityCeilingIssues,
   capitalIntensityNote,
+  duplicateOverheadIssues,
   projectMatureRevenue,
   revenueRealityIssues,
   staffingRealismIssues,
@@ -339,5 +340,52 @@ describe('a ceiling below the floor', () => {
 
   it('says nothing about a business that can clear its own costs', () => {
     expect(capacityCeilingIssues(mcdonalds(1_900_000))).toEqual([]);
+  });
+});
+
+describe('duplicateOverheadIssues', () => {
+  it('flags a custom line that duplicates a set overhead field', () => {
+    // Live: "Accounting & legal" AND "Accounting, legal, and compliance" at
+    // $2,500 each; "Software, POS & subscriptions" beside "Recruiting
+    // software stack"; "Owner compensation" beside a "Founder salary" block.
+    const draft = mcdonalds(3_600_000);
+    draft.costLines.push({
+      label: 'Accounting, legal, and compliance',
+      class: 'FIXED_PERIOD',
+      statementLine: 'G&A',
+      value: 2_500,
+      isLabor: false,
+      accruable: true,
+      capacityPerBlock: null,
+      minimumBlocks: null,
+      sourceNote: 'Retained firm.',
+      provenance: 'LLM_ESTIMATE',
+    });
+    draft.overheads.accountingAndLegalPerYear = 6_000;
+    const issues = duplicateOverheadIssues(draft);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('pay twice');
+    expect(issues[0]).toContain('Accounting, legal, and compliance');
+  });
+
+  it('says nothing when the overhead field is zeroed', () => {
+    const draft = mcdonalds(3_600_000);
+    draft.costLines.push({
+      label: 'Founder salary (sole recruiter)',
+      class: 'STEP_FIXED',
+      statementLine: 'LABOR',
+      value: 32_500,
+      isLabor: true,
+      accruable: false,
+      capacityPerBlock: 840,
+      minimumBlocks: 1,
+      sourceNote: 'The founder on the tools.',
+      provenance: 'LLM_ESTIMATE',
+    });
+    draft.overheads.ownerCompPerYear = 0;
+    expect(duplicateOverheadIssues(draft)).toHaveLength(0);
+    // And fires when it is not.
+    draft.overheads.ownerCompPerYear = 60_000;
+    expect(duplicateOverheadIssues(draft)).toHaveLength(1);
   });
 });

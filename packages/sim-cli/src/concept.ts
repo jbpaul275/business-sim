@@ -22,6 +22,7 @@ import { waiting } from './waiting.js';
 import {
   buildabilityIssues,
   capacityCeilingIssues,
+  duplicateOverheadIssues,
   revenueRealityIssues,
   staffingRealismIssues,
 } from './plausibility.js';
@@ -593,7 +594,12 @@ export async function runConceptInterview(
       const issues =
         structural.length > 0
           ? structural
-          : [...revenueRealityIssues(state.draft), ...staffingRealismIssues(state.draft)];
+          : [
+              ...revenueRealityIssues(state.draft),
+        ...duplicateOverheadIssues(state.draft),
+              ...staffingRealismIssues(state.draft),
+              ...duplicateOverheadIssues(state.draft),
+            ];
       if (issues.length > 0 && repairs < MAX_REPAIRS) {
         repairs += 1;
         /**
