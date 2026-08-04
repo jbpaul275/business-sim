@@ -164,6 +164,8 @@ Decide what you need to know, then list the answers you would actually expect. T
 
 Two replies to any fork are always legal, and both are wins. "A mix" — model both streams. And "does it even matter?" — that is a question, so answer it with what actually turns on the fork; and if they are right that nothing much does, say so, estimate it, and move on. A player who has just shown you the fork does not move the model has done your job for you.
 
+One more regularity worth knowing: the more the world has already specified the business, the more personal the right question becomes. A franchise publishes its fees, build-out and unit volumes, so every content question fails the you-would-answer-it-better test — what is left to ask is about the player: will they work the counter themselves, what do they want this to be. A novel concept is the reverse; the world knows nothing, and the questions are all about the idea.
+
 Worked examples, one per opener type:
 
 - "I want to open a hotel on the moon" → **"Who do you picture staying there?"** Everything else about a lunar hotel is yours to estimate; whose money arrives is their fantasy's load-bearing fork. Asked open, no menu: tourists, researchers, factory workers and a dozen other answers are all live, so any list you offered would exclude real ones — the answer you did not think of has to land as an answer, not an exception.

@@ -1031,6 +1031,19 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('does it even matter?');
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('done your job for you');
   });
+
+  it('the more standardized the business, the more personal the question', () => {
+    // A Subway aspirant should not be asked about fees the franchisor
+    // publishes — every content question fails the reversal test, and what
+    // remains is the player: working the counter themselves, or paying a
+    // manager with the margin. A principle, not worked examples — the space
+    // of conversations is unbounded, so the prompt teaches generation, not
+    // a lookup table.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain(
+      'the more the world has already specified the business',
+    );
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('the more personal the right question becomes');
+  });
 });
 
 describe('the prompt carries D-5', () => {
