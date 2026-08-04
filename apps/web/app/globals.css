@@ -65,8 +65,8 @@ select:focus {
 /* ---------- scenario picker ---------- */
 
 .picker {
-  max-width: 720px;
-  margin: 8vh auto;
+  max-width: 1020px;
+  margin: 6vh auto;
   padding: 0 24px;
 }
 .picker h1 {
@@ -77,31 +77,137 @@ select:focus {
   color: var(--text-secondary);
   margin-top: 0;
 }
+.hero-card {
+  display: block;
+  margin-top: 20px;
+  background: linear-gradient(135deg, rgba(57, 135, 229, 0.14), var(--surface-1) 55%);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 18px 20px;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+.hero-card:hover {
+  background: linear-gradient(135deg, rgba(57, 135, 229, 0.22), var(--surface-1) 60%);
+}
+.hero-title {
+  font-weight: 700;
+  font-size: 17px;
+}
+.hero-sub {
+  color: var(--text-secondary);
+  margin-top: 4px;
+  max-width: 62ch;
+}
+.hero-go {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
 .scenario-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 10px;
-  margin-top: 20px;
 }
 .scenario-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px;
+  padding: 13px 14px;
   text-align: left;
   color: var(--text-primary);
+  text-decoration: none;
   transition: border-color 0.12s;
 }
-.scenario-card:hover {
+.scenario-card:hover,
+.scenario-card:focus-visible {
   border-color: var(--accent);
+  outline: none;
+}
+.hero-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .scenario-card .name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
 }
-.scenario-card .kind {
+.card-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+.scenario-card:hover .card-icon,
+.scenario-card:focus-visible .card-icon {
+  color: var(--accent);
+}
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-card .card-icon {
+  color: var(--accent);
+}
+.scenario-card .blurb {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+  flex: 1;
+}
+.scenario-card .facts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.scenario-card .facts span {
+  white-space: nowrap;
+}
+.scenario-card .go {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.scenario-card:hover .go,
+.scenario-card:focus-visible .go {
+  opacity: 1;
+}
+.picker-foot {
   color: var(--text-muted);
   font-size: 12px;
-  margin-top: 2px;
+  margin-top: 16px;
+  max-width: 72ch;
 }
 
 /* ---------- game shell ---------- */
@@ -449,6 +555,10 @@ select:focus {
 }
 
 .gameover {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
   padding: 10px 16px;
   background: var(--surface-2);
   border-top: 1px solid var(--critical);
@@ -707,4 +817,116 @@ select:focus {
   color: var(--warning);
   font-size: 12px;
   margin-top: 4px;
+}
+
+/* ---------- advisor pane: the turn loop on screen ---------- */
+
+.advisor-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.advisor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.advisor-feed {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 10px;
+}
+.turnlog {
+  overflow-y: auto;
+}
+
+/* The quarter's update: what happened, in words. */
+.a-update {
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--border);
+  padding: 2px 0 2px 10px;
+}
+.a-headline {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* THE question — one per quarter, and the loudest thing in the feed. */
+.a-question {
+  background: linear-gradient(135deg, rgba(57, 135, 229, 0.12), var(--surface-2) 60%);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.a-fact {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.a-ask {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Conversation. */
+.a-chat {
+  font-size: 13px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  max-width: 92%;
+  white-space: pre-wrap;
+}
+.a-chat.you {
+  align-self: flex-end;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.a-chat.advisor {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--border);
+}
+.a-chat.thinking {
+  color: var(--text-muted);
+  border-style: dashed;
+}
+.a-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.a-chips .chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--text-primary);
+}
+.a-chips .chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.advisor .say-row {
+  margin-top: 8px;
+}
+.advisor .say-row button.primary {
+  border-radius: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.advisor .say-row button:disabled {
+  opacity: 0.5;
 }

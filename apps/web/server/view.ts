@@ -7,7 +7,8 @@ import {
   type Provenance,
 } from '@bizsim/schemas';
 import { priceUnits, shareNotice, uploadTarget } from '@bizsim/sim-cli';
-import type { GameSession, TurnLogEntry } from './store';
+import { advisorAvailable } from './advisor';
+import type { AdvisorEntry, GameSession, TurnLogEntry } from './store';
 
 /**
  * The view model: everything the client renders, display-ready.
@@ -85,6 +86,14 @@ export interface GameView {
   marketingPerQuarter: number;
   attributions: AttributionView[];
   log: TurnLogView[];
+  /**
+   * The advisor feed: per-quarter update + eigen question, plus the chat.
+   * Already display-ready — entries are prose the server assembled, and the
+   * suggested moves are pre-parsed stage payloads the client applies verbatim.
+   */
+  advisor: AdvisorEntry[];
+  /** Whether the chat input works — false when no provider key is set. */
+  advisorAvailable: boolean;
   register: { confidence: string; rows: RegisterRowView[] };
   household: { cash: string; netWorth: string };
   over: boolean;
@@ -253,13 +262,18 @@ export function toView(session: GameSession): GameView {
     blockCost: compact(c.blockCostPerQuarter),
   }));
 
-  const debts = business.debts.map((d) => ({
-    label: d.label,
-    detail:
-      d.revolverLimit !== undefined
-        ? `${compact(d.outstandingPrincipal)} drawn of ${compact(d.revolverLimit)} @ ${pct(d.annualRate)}`
-        : `${compact(d.outstandingPrincipal)} outstanding @ ${pct(d.annualRate)}`,
-  }));
+  // Only facilities that still mean something: a balance, or an undrawn line
+  // that could be drawn. A twenty-year run on the crisis ladder otherwise
+  // shows every emergency loan it ever repaid, forever, at $0 each.
+  const debts = business.debts
+    .filter((d) => d.outstandingPrincipal > 0n || d.revolverLimit !== undefined)
+    .map((d) => ({
+      label: d.label,
+      detail:
+        d.revolverLimit !== undefined
+          ? `${compact(d.outstandingPrincipal)} drawn of ${compact(d.revolverLimit)} @ ${pct(d.annualRate)}`
+          : `${compact(d.outstandingPrincipal)} outstanding @ ${pct(d.annualRate)}`,
+    }));
 
   const stream = business.streams[0];
   const units = stream ? priceUnits(stream, streamPrice(stream)) : { command: 0, per: 'unit' };
@@ -286,6 +300,8 @@ export function toView(session: GameSession): GameView {
     marketingPerQuarter: stream ? Number(stream.marketingSpendPerQuarter) / 100 : 0,
     attributions: session.attributions.map(toAttributionView),
     log: [...session.log].reverse().slice(0, 24).map(toLogView),
+    advisor: session.advisor,
+    advisorAvailable: advisorAvailable(),
     register: {
       confidence: pct(business.assumptions.confidenceScore),
       rows: registerRows,

@@ -204,9 +204,14 @@ which the reference model omitted — the same reason its year three sat above b
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.
-- **The rest of the web UI.** The shell, the interview and the challenge flow are in; the advisor
-  chat pane, "show the math", free-text actions, the crisis policy editor and debt/capex controls
-  are still CLI-or-nothing, and web sessions are in-memory.
+- **The rest of the web UI.** The shell, the interview, the challenge flow and the turn loop are in.
+  The turn loop is data-then-one-question: each quarter the advisor pane posts §11.5 narration (LLM,
+  fails soft to silence) and ONE deterministic eigen question — `selectAxis` in `sim-cli/eigen.ts`
+  picks the axis by hierarchy (crisis → biggest §10.4 driver → looming constraint → idle slack) with
+  a two-quarter repetition memory, and the chat answers through the same briefing/money-guard the
+  CLI uses, with suggested commands parsed into stageable action-bar moves. Still CLI-or-nothing:
+  "show the math", the crisis policy editor and debt/capex controls; web sessions are in-memory,
+  and the CLI's own turn loop does not yet use `selectAxis`.
 - **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which
   cannot run inside a pure tick. CLONE covers the case §9.5 says should take two minutes; a genuinely
   different second business is a new run today.

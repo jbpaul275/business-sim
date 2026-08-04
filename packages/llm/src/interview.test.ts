@@ -963,6 +963,89 @@ describe('terms of art', () => {
   });
 });
 
+describe('the question policy', () => {
+  /**
+   * A question is only worth a turn when the answer is unpredictable AND
+   * consequential AND the player is the better source. The named failure is
+   * "Pepsi or Coke?" asked of a new vending operator: the model would answer
+   * it better than the player (they'd ordinarily just ask), the draft comes
+   * out the same either way, and it is a brand question asked before the
+   * category question. Coarse checks that the load-bearing phrases survive.
+   */
+  it('requires unpredictable, consequential answers', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('when you cannot predict the answer');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('produce different models');
+  });
+
+  it('carries the reversal test — never ask what you would answer better', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('"you tell me"');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('outsourcing its job');
+  });
+
+  it('orders forks coarse-to-fine, with the vending case named', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Brand comes after category comes after concept');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pepsi or Coke');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('widest fork');
+  });
+
+  it('one question is one question mark, and no throat-clearing', () => {
+    // "Do you have a property in mind — a listing, an asking price, a size?"
+    // is four questions impersonating one; details are the next turn's
+    // questions. "First question:" is words without substance.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('One question is one question mark');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('four questions impersonate');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('no throat-clearing');
+  });
+
+  it('the game is set now — no hypothetical futures, no era question', () => {
+    // A moon hotel is the first real one at today's costs, the way anyone
+    // asking Claude about a moon hotel means it. Modeling improved-economics
+    // futures is a quagmire the game deliberately refuses.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('The game is set now');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Never ask which era');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('present-day prices');
+  });
+
+  it('carries the three worked openers', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('hotel on the moon');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('typical San Antonio hotel');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('dolphin-themed');
+  });
+
+  it('the answer distribution picks the question form', () => {
+    // Predict the answers first. One answer at 95% → don't ask. Two roughly
+    // even → name them both ("is that a dog or a cat?" is right in a living
+    // room, even though it can lose to an overgrown ferret). Many live →
+    // ask openly; a closed menu excludes real answers ("worker housing for
+    // my moon factory") and an "or something else?" tail is insurance, not
+    // an option — if cutting it loses nothing, it was never doing work.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Predict the answers before you shape the question');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('95% of the probability');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('dog or a cat');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('ask openly and do not guide');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('it was never an option, it was insurance');
+  });
+
+  it('"a mix" and "does it even matter?" are wins, not resistance', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('"A mix" — model both streams');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('does it even matter?');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('done your job for you');
+  });
+
+  it('the more standardized the business, the more personal the question', () => {
+    // A Subway aspirant should not be asked about fees the franchisor
+    // publishes — every content question fails the reversal test, and what
+    // remains is the player: working the counter themselves, or paying a
+    // manager with the margin. A principle, not worked examples — the space
+    // of conversations is unbounded, so the prompt teaches generation, not
+    // a lookup table.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain(
+      'the more the world has already specified the business',
+    );
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('the more personal the right question becomes');
+  });
+});
+
 describe('the prompt carries D-5', () => {
   /**
    * The prompt is the only place the absurdity principle actually binds at

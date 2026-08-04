@@ -10,6 +10,7 @@
 export { SCENARIOS } from './scenarios.js';
 export { describeEvent } from './events.js';
 export { buildBriefing, describeAttribution, type BriefingContext } from './briefing.js';
+export { selectAxis, type EigenAxis, type EigenInput } from './eigen.js';
 export { postmortem, runPoint, type RunPoint } from './postmortem.js';
 export { priceUnits } from './pricing.js';
 export { journalActions, type Journal, type JournalEvent } from './journal.js';
