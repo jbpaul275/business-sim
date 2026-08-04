@@ -39,15 +39,15 @@ cloned to read the code uploads nothing, to no one.
 
 `supabase/migrations/0001_telemetry.sql`. Three tables.
 
-**`sessions`** — one row per run. Build, timestamps, outcome, archetype, starting capital, turn and quarter
+**`bizsim_sessions`** — one row per run. Build, timestamps, outcome, archetype, starting capital, turn and quarter
 counts, and the four quality signals (`repair_rounds`, `questions_asked`, `fabricated_figures`,
 `cancelled`). No free text: the *archetype* is here because it is one of six fixed strings and is the
 analytic dimension; the business *name* is something a person wrote and is not.
 
-**`calls`** — one row per model call, including the attempts that failed. Provider, model, effort tier,
+**`bizsim_calls`** — one row per model call, including the attempts that failed. Provider, model, effort tier,
 `ms`, four token counts, `cost_usd`, `rates_known`, `attempt`, `ok`, `failure`. Keyed `(session_id, seq)`.
 
-**`transcripts`** — `(session_id, seq, kind, payload jsonb)`. The content tier. `jsonb` rather than columns
+**`bizsim_transcripts`** — `(session_id, seq, kind, payload jsonb)`. The content tier. `jsonb` rather than columns
 because the journal's shape changes with the game, and a migration per event kind guarantees the schema lags
 what is being recorded.
 
@@ -107,7 +107,7 @@ than both, built for the exit prompt and the end-of-game wrap:
 
 **"Share this run with QA?"** — asked once, at the end of a run, only when an endpoint is configured. On
 approval, `shareRun()` uploads that one session with the transcript tier **forced on**, plus the player's
-optional note to a `feedback` table (`0002_feedback.sql`, same insert-only RLS). It deliberately ignores
+optional note to a `bizsim_feedback` table (`0002_feedback.sql`, same insert-only RLS). It deliberately ignores
 `BIZSIM_TELEMETRY*`: the explicit approval *is* the consent, and it is better consent than any standing
 flag — per-run, freshly given, and fully informed, because the player can see everything the run contains.
 Nothing about it widens any future session.
@@ -129,10 +129,28 @@ This reframes the signup question too: with a per-run share door, the account-cr
 for the **metrics tier only** — "numbers, never your words" — and standing transcript consent should not
 be offered at all. Transcripts flow through exactly one door, always deliberately.
 
-## 6. Not done
+## 6. Applied, 2026-08-04
 
-- **The migration has not been applied** (0001 or 0002). The SQL is written; pointing it at a live project
-  is a decision about a real database and is not one to take on someone's behalf.
+Both migrations are live on the shared Supabase project (`iixciekdybisdslnnxyy`, "Mosaic"). Because the
+project is shared with a production application, every table, policy and index is **`bizsim_`-prefixed** —
+the co-tenant already has its own `feedback` and `sessions`-like tables, and an unprefixed
+`create table if not exists` plus a policy change would have silently attached an anonymous-insert policy
+to someone else's production table. The RLS contract was verified against the live database by exercising
+the `anon` role directly: insert succeeds, select returns nothing, delete touches nothing.
+
+To collect, the game needs:
+
+```sh
+export SUPABASE_URL=https://iixciekdybisdslnnxyy.supabase.co
+export SUPABASE_PUBLISHABLE_KEY=<the project's publishable key>
+```
+
+## 7. Not done
+
+- **No signup/account flow exists yet**, so the metrics-tier opt-in is still environment variables in the
+  CLI and absent in the web shell. The share prompt is the consent screen that *does* exist.
+- **Deletion is a handle, not yet a process.** The reference id makes the request expressible; someone
+  still has to run the `delete` on the service role, and there is no TTL on the transcript tier.
 - **No signup/account flow exists yet**, so the metrics-tier opt-in is still environment variables in the
   CLI and absent in the web shell. The share prompt is the consent screen that *does* exist.
 - **Deletion is a handle, not yet a process.** The reference id makes the request expressible; someone

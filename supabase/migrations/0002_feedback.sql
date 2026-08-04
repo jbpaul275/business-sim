@@ -11,8 +11,8 @@
 -- The transcript itself rides the existing `transcripts` table for the same
 -- session id; the share path forces that tier on for the one approved run.
 
-create table if not exists public.feedback (
-  session_id  uuid        primary key references public.sessions(id) on delete cascade,
+create table if not exists public.bizsim_feedback (
+  session_id  uuid        primary key references public.bizsim_sessions(id) on delete cascade,
   -- What the player wanted QA to know. Empty when they shared without comment.
   note        text        not null default '',
   -- Which build the report is about — the first filter on any bug queue.
@@ -21,15 +21,15 @@ create table if not exists public.feedback (
   received_at timestamptz not null default now()
 );
 
-comment on table public.feedback is
+comment on table public.bizsim_feedback is
   'Runs a player explicitly handed to QA at end of game, with their note. '
   'Consent is per-session and independent of the ambient telemetry tiers.';
 
 -- Same rule as 0001: the client writes and cannot read.
-alter table public.feedback enable row level security;
+alter table public.bizsim_feedback enable row level security;
 
-drop policy if exists feedback_insert on public.feedback;
-create policy feedback_insert on public.feedback for insert to anon with check (true);
+drop policy if exists bizsim_feedback_insert on public.bizsim_feedback;
+create policy bizsim_feedback_insert on public.bizsim_feedback for insert to anon with check (true);
 
 -- Deliberately no select/update/delete for `anon` — their absence is the
 -- security property. The reference id shown to the player after sharing is

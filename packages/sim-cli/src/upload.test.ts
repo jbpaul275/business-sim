@@ -208,9 +208,9 @@ describe('sending it', () => {
 
     // `calls` carries a foreign key to `sessions`, so the reverse order would
     // be rejected outright.
-    expect(seen.map((s) => s.table)).toEqual(['sessions', 'calls']);
+    expect(seen.map((s) => s.table)).toEqual(['bizsim_sessions', 'bizsim_calls']);
     // No transcripts request at all under the metrics tier — not an empty one.
-    expect(seen.some((s) => s.table === 'transcripts')).toBe(false);
+    expect(seen.some((s) => s.table === 'bizsim_transcripts')).toBe(false);
     // Retry-safe, and asking for nothing back: the policies grant insert and
     // nothing else, so requesting the row would 401.
     expect(seen[0]!.prefer).toContain('ignore-duplicates');
@@ -259,8 +259,8 @@ describe('the per-session QA share', () => {
     expect(result.reference).toBe('sess-1');
     // Transcript tier forced for this run: the words go, because that is what
     // was approved.
-    expect(seen.map((s) => s.table)).toEqual(['sessions', 'calls', 'transcripts', 'feedback']);
-    expect(JSON.stringify(seen.find((s) => s.table === 'transcripts')!.rows)).toContain(SECRET);
+    expect(seen.map((s) => s.table)).toEqual(['bizsim_sessions', 'bizsim_calls', 'bizsim_transcripts', 'bizsim_feedback']);
+    expect(JSON.stringify(seen.find((s) => s.table === 'bizsim_transcripts')!.rows)).toContain(SECRET);
   });
 
   it('carries the note to the feedback table and nowhere else', async () => {
@@ -269,7 +269,7 @@ describe('the per-session QA share', () => {
       env: target,
       fetcher,
     });
-    const feedback = seen.find((s) => s.table === 'feedback')!.rows[0] as {
+    const feedback = seen.find((s) => s.table === 'bizsim_feedback')!.rows[0] as {
       session_id: string;
       note: string;
       build: string;
@@ -280,7 +280,7 @@ describe('the per-session QA share', () => {
       build: 'abc1234',
     });
     for (const { table, rows } of seen) {
-      if (table !== 'feedback') {
+      if (table !== 'bizsim_feedback') {
         expect(JSON.stringify(rows), table).not.toContain('capitulated');
       }
     }

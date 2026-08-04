@@ -298,9 +298,9 @@ export async function uploadSession(
 
   const payload = redact(readEvents(file), id, tier);
   const fetcher = options.fetcher ?? globalThis.fetch;
-  await insert(target, 'sessions', [payload.session], fetcher);
-  await insert(target, 'calls', payload.calls, fetcher);
-  await insert(target, 'transcripts', payload.transcripts, fetcher);
+  await insert(target, 'bizsim_sessions', [payload.session], fetcher);
+  await insert(target, 'bizsim_calls', payload.calls, fetcher);
+  await insert(target, 'bizsim_transcripts', payload.transcripts, fetcher);
 
   return {
     uploaded: true,
@@ -358,10 +358,10 @@ export async function shareRun(
   };
 
   const fetcher = options.fetcher ?? globalThis.fetch;
-  await insert(target, 'sessions', [payload.session], fetcher);
-  await insert(target, 'calls', payload.calls, fetcher);
-  await insert(target, 'transcripts', payload.transcripts, fetcher);
-  await insert(target, 'feedback', [feedback], fetcher);
+  await insert(target, 'bizsim_sessions', [payload.session], fetcher);
+  await insert(target, 'bizsim_calls', payload.calls, fetcher);
+  await insert(target, 'bizsim_transcripts', payload.transcripts, fetcher);
+  await insert(target, 'bizsim_feedback', [feedback], fetcher);
 
   return { shared: true, reference: id, transcripts: payload.transcripts.length };
 }
