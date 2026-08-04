@@ -53,6 +53,35 @@ describe('the eigen question in the web turn loop', () => {
   });
 });
 
+describe('the end of a run', () => {
+  it('a closed business gets the §9.4 postmortem in the feed, and stops trading', () => {
+    const session = createSession('storage');
+    advanceSession(session, [], 1);
+    // Force the closure the engine's crisis ladder reaches on a broken build
+    // (the reference scenarios are calibrated to survive, so closure is
+    // staged directly — the state is plain data).
+    const business = session.world.businesses.find((b) => b.id === session.businessId)!;
+    business.status = 'CLOSED';
+    advanceSession(session, [], 0);
+
+    const post = session.advisor.find((e) => e.headline === 'What would have had to be true');
+    expect(post).toBeDefined();
+    expect(post!.text.length).toBeGreaterThan(40);
+
+    // Frozen at the final traded quarter: advancing a corpse changes nothing,
+    // so the last real statements stay on screen for the postmortem.
+    const period = session.last.statements.period;
+    const logLength = session.log.length;
+    advanceSession(session, [], 0);
+    expect(session.last.statements.period).toBe(period);
+    expect(session.log.length).toBe(logLength);
+    // And the postmortem posts exactly once.
+    expect(
+      session.advisor.filter((e) => e.headline === 'What would have had to be true'),
+    ).toHaveLength(1);
+  });
+});
+
 describe('narration over the quarter', () => {
   it('inserts the update before that quarter\'s question — data first', async () => {
     const session = createSession('storage');

@@ -370,11 +370,15 @@ export function GameClient({ initial }: { initial: GameView }) {
               Share with QA
             </button>
           )}
-          <button onClick={() => runQuarter(3)} disabled={busy}>
+          <button onClick={() => runQuarter(3)} disabled={busy || view.status === 'CLOSED'}>
             Skip year
           </button>
-          <button className="primary" onClick={() => runQuarter(0)} disabled={busy}>
-            {busy ? 'Running…' : 'Run quarter'}
+          <button
+            className="primary"
+            onClick={() => runQuarter(0)}
+            disabled={busy || view.status === 'CLOSED'}
+          >
+            {view.status === 'CLOSED' ? 'Closed' : busy ? 'Running…' : 'Run quarter'}
           </button>
         </div>
       </footer>

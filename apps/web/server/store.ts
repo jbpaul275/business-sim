@@ -8,8 +8,11 @@ import {
   describeAttribution,
   describeEvent,
   journalActions,
+  postmortem,
+  runPoint,
   selectAxis,
   type JournalEvent,
+  type RunPoint,
 } from '@bizsim/sim-cli';
 
 /**
@@ -88,6 +91,10 @@ export interface GameSession {
   advisor: AdvisorEntry[];
   /** Axis keys already asked, oldest first — the repetition memory. */
   askedAxes: string[];
+  /** One point per quarter traded, for the §9.4 postmortem. */
+  history: RunPoint[];
+  /** The postmortem posts once — closure or milestone, whichever comes first. */
+  postmortemShown?: boolean;
   /** The quarter before the one on screen, for the narration's comparison. */
   prevQuarter?: { revenue: Money; ebitda: Money; cash: Money };
   /** Lazily created when a provider key is present; calls journal to `events`. */
@@ -138,8 +145,11 @@ export function createSession(scenario: string): GameSession {
     ],
     advisor: [],
     askedAxes: [],
+    history: [],
   };
+  recordPoint(session, first);
   pushQuestion(session);
+  pushPostmortemIfOver(session);
   sessions.set(session.id, session);
   return session;
 }
@@ -174,8 +184,11 @@ export function createSessionFromWorld(
     events: [...priorEvents, quarterEvent(first, [])],
     advisor: [],
     askedAxes: [],
+    history: [],
   };
+  recordPoint(session, first);
   pushQuestion(session);
+  pushPostmortemIfOver(session);
   sessions.set(session.id, session);
   return session;
 }
@@ -185,6 +198,11 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
   const quarters = 1 + Math.max(0, Math.min(skip, 40));
   for (let i = 0; i < quarters; i++) {
     if (session.world.currentPeriod >= session.world.config.milestonePeriod + 40) break;
+    // A closed business does not trade. Ticking past closure produced a
+    // statements pane with nothing in it — the final quarter's statements are
+    // the postmortem's evidence, and they stay on screen.
+    const standing = session.world.businesses.find((b) => b.id === session.businessId);
+    if (!standing || standing.status === 'CLOSED') break;
     const before = session.world;
     // The quarter about to be replaced becomes the narration's comparison
     // point — after a skip, that is the quarter immediately before the one
@@ -214,6 +232,7 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
       session.events.push(journalActions(result.statements.period, applied));
     }
     session.events.push(quarterEvent(result, session.attributions));
+    recordPoint(session, result);
     const business = session.world.businesses.find((b) => b.id === session.businessId);
     if (!business || business.status === 'CLOSED') {
       session.events.push({ kind: 'end', reason: 'insolvent' });
@@ -221,7 +240,42 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
     }
   }
   pushQuestion(session);
+  pushPostmortemIfOver(session);
   return session;
+}
+
+const recordPoint = (session: GameSession, result: TickResult): void => {
+  const business = session.world.businesses.find((b) => b.id === session.businessId);
+  if (!business) return;
+  const point = runPoint(result, business);
+  if (point) session.history.push(point);
+};
+
+/**
+ * §9.4's mandatory closing analysis, in the advisor feed where the player is
+ * already looking. "What would have had to be true" converts a loss into a
+ * specific, checkable claim about the real world — arithmetic on the run's
+ * own history, no model call, exactly as the CLI prints it. Posted once, at
+ * closure or the milestone, whichever comes first.
+ */
+function pushPostmortemIfOver(session: GameSession): void {
+  if (session.postmortemShown) return;
+  const business = session.world.businesses.find((b) => b.id === session.businessId);
+  if (!business || session.history.length === 0) return;
+  const over =
+    business.status === 'CLOSED' ||
+    session.last.statements.period >= session.world.config.milestonePeriod;
+  if (!over) return;
+  const analysis = postmortem(session.history, business);
+  session.postmortemShown = true;
+  session.advisor.push({
+    who: 'advisor',
+    kind: 'update',
+    period: session.last.statements.period,
+    headline:
+      analysis.verdict === 'WORKED' ? 'What it rests on' : 'What would have had to be true',
+    text: analysis.lines.filter((l) => l !== '').join('\n'),
+  });
 }
 
 /**
