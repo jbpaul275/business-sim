@@ -930,3 +930,14 @@ select:focus {
 .advisor .say-row button:disabled {
   opacity: 0.5;
 }
+
+/* The standing out: always visible, never shouting over Send. */
+.say-buttons button.finish {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: none;
+  white-space: nowrap;
+}
+.say-buttons button.finish:hover {
+  background: rgba(57, 135, 229, 0.12);
+}

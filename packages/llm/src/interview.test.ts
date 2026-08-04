@@ -1117,7 +1117,17 @@ describe('the prompt carries D-5', () => {
   });
 
   it('budgets questions against what a turn actually costs', () => {
-    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Two or three questions, then draft');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Two or three questions, then offer');
+  });
+
+  it('readiness is an offer; depth is the player-paced part', () => {
+    // The KFC-inheritance player wants projections after one message; the
+    // 256-flavour stress-tester wants forty turns on freezer costs. Both are
+    // right, so the model offers when ready, keeps asking while they keep
+    // exploring, and a standing "build it" control means nobody is trapped.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('depth is theirs to choose');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('offer to draft');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('standing "build it" control');
   });
 
   it('pushes toward drafting rather than one more useful question', () => {

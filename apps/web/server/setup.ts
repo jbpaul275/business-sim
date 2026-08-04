@@ -177,7 +177,26 @@ export function createSetup(
  * drafting call has run 85 seconds live, and the client shows that honestly
  * rather than this splitting into a polling protocol.
  */
-export async function say(session: SetupSession, text: string): Promise<void> {
+/**
+ * The interview's standing out — the "no more questions, build it" control.
+ *
+ * Depth is the player's choice: the KFC-inheritance player wants projections
+ * after one message, the 256-flavours player wants forty turns on freezer
+ * costs first, and both are right. This forces the draft with whatever has
+ * been said so far; the interview prompt already covers thin transcripts
+ * (estimate it, label it) and the register review still argues every number.
+ */
+export async function finishSetup(session: SetupSession): Promise<void> {
+  return say(session, 'No more questions — build the model with what you have and estimate the rest.', {
+    forceDraft: true,
+  });
+}
+
+export async function say(
+  session: SetupSession,
+  text: string,
+  opts: { forceDraft?: boolean } = {},
+): Promise<void> {
   if (session.phase === 'DEAD') return;
   if (session.busy) throw new Error('a model call is already running for this session');
   session.busy = true;
@@ -211,6 +230,12 @@ export async function say(session: SetupSession, text: string): Promise<void> {
             cta: '',
             draft: repaired,
           };
+        } else if (opts.forceDraft) {
+          // The player pressed the out. No conversational turn — straight to
+          // the draft call, with their instruction in the transcript so the
+          // model knows the gaps are its to estimate.
+          const forced: ConceptDraft = await session.interview.finish(reply);
+          state = { status: 'DRAFTED' as const, message: '', cta: '', draft: forced };
         } else {
           state = await session.interview.send(reply);
         }

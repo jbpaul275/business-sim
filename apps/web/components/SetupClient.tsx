@@ -114,6 +114,28 @@ export function SetupClient() {
     if (res.ok) setView((await res.json()) as SetupView);
   };
 
+  // The standing out: depth is the player's choice. Forces the draft with
+  // whatever has been said; the model estimates the rest and labels it.
+  const finish = async (): Promise<void> => {
+    if (!view) return;
+    setBusy(true);
+    setBusyLabel('building the model — this is the long call');
+    setView({
+      ...view,
+      chat: [...view.chat, { who: 'you', text: 'No more questions — build the model.' }],
+    });
+    try {
+      const res = await post(`/api/setup/${view.id}/finish`, {});
+      const data = (await res.json()) as SetupView & { error?: string };
+      if (res.ok) setView(data);
+      else setError(data.error ?? 'The draft failed — try again.');
+    } catch {
+      setError('The connection dropped mid-call. Reload to pick the conversation back up.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!view) {
     return (
       <main className="picker">
@@ -204,6 +226,15 @@ export function SetupClient() {
                 <button onClick={() => void undo()} title="Take back your last message">
                   Undo
                 </button>
+                {view.canFinish && (
+                  <button
+                    className="finish"
+                    onClick={() => void finish()}
+                    title="Skip the remaining questions — the model estimates what's missing, and you can argue every number before committing"
+                  >
+                    Build it
+                  </button>
+                )}
               </div>
             </div>
           )}

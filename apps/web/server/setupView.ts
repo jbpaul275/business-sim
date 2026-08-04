@@ -56,6 +56,12 @@ export interface SetupView {
   deadReason?: string;
   spend?: string;
   busy: boolean;
+  /**
+   * Whether "no more questions — build it" would produce something. True once
+   * the player has said anything at all (or arrived seeded, where the
+   * template itself is something); the interview estimates the rest.
+   */
+  canFinish: boolean;
 }
 
 const NOTES_SHOWN = 3;
@@ -66,6 +72,10 @@ export function toSetupView(session: SetupSession): SetupView {
     phase: session.phase,
     chat: session.chat,
     busy: session.busy,
+    canFinish:
+      session.phase === 'INTERVIEW' &&
+      !session.busy &&
+      (session.turns > 0 || session.seed !== undefined || session.chat.some((c) => c.who === 'you')),
     ...(session.deadReason ? { deadReason: session.deadReason } : {}),
     ...(spendSummary(session) ? { spend: spendSummary(session)! } : {}),
   };

@@ -215,6 +215,21 @@ export class ConceptInterview {
     return this.runDraft();
   }
 
+  /**
+   * The player's standing out: "no more questions — build it."
+   *
+   * Depth is the player's choice, not the model's. Some arrive with a
+   * purchase price and want projections after one message; others want forty
+   * turns on freezer costs before a number exists. This forces the draft
+   * with whatever the transcript holds — the prompt already tells the model
+   * to estimate what is missing and label it, so a thin transcript produces
+   * an honest draft, not an error.
+   */
+  async finish(playerMessage: string): Promise<ConceptDraft> {
+    this.transcript.push({ role: 'user', content: playerMessage });
+    return this.runDraft();
+  }
+
   private async runDraft(): Promise<ConceptDraft> {
     this.onDrafting?.();
     // A second call, with the draft schema this time. Splitting the two is what
