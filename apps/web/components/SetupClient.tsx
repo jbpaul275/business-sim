@@ -30,7 +30,8 @@ export function SetupClient() {
   // the picker. It seeds the interview; it never skips it.
   const seed = useSearchParams().get('seed') ?? undefined;
   const [view, setView] = useState<SetupView | undefined>();
-  const [capital, setCapital] = useState('500,000');
+  const [capital, setCapital] = useState('1,000,000');
+  const [custom, setCustom] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [keyMissing, setKeyMissing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -71,11 +72,17 @@ export function SetupClient() {
       body: JSON.stringify(body),
     });
 
-  const start = async (): Promise<void> => {
+  // One question up front: the tier IS the click that starts, and the amount
+  // doubles as starting net worth — the household beyond it is a stub, so the
+  // standard flow spends no ceremony on the distinction.
+  const start = async (amountDollars?: number): Promise<void> => {
     setBusy(true);
     setError(undefined);
     try {
-      const res = await post('/api/setup', { capital: ungroup(capital), ...(seed ? { seed } : {}) });
+      const res = await post('/api/setup', {
+        capital: amountDollars ?? ungroup(capital),
+        ...(seed ? { seed } : {}),
+      });
       const data = (await res.json()) as SetupView & { error?: string };
       if (!res.ok) {
         setError(data.error ?? 'Could not start.');
@@ -169,14 +176,40 @@ export function SetupClient() {
             : 'A sentence or two is enough to start. The model will ask follow-up questions, ' +
               'estimate the rest, and let you challenge any number before committing.'}
         </p>
-        <div className="control" style={{ maxWidth: 240 }}>
-          <label htmlFor="capital">Starting capital ($)</label>
-          <input
-            id="capital"
-            inputMode="numeric"
-            value={capital}
-            onChange={(e) => setCapital(groupDigits(e.target.value))}
-          />
+        <div className="control">
+          <label>How much liquid capital can you invest in this business?</label>
+          <div className="tier-row">
+            {(
+              [
+                ['$250k', 250_000],
+                ['$1M', 1_000_000],
+                ['$5M', 5_000_000],
+              ] as const
+            ).map(([label, amount]) => (
+              <button key={label} className="tier" onClick={() => void start(amount)} disabled={busy}>
+                {busy ? '…' : label}
+              </button>
+            ))}
+            <button className="tier" onClick={() => setCustom(!custom)} disabled={busy}>
+              Set your own…
+            </button>
+          </div>
+          {custom && (
+            <div className="say-row" style={{ maxWidth: 300, marginTop: 10 }}>
+              <input
+                aria-label="Custom starting capital in dollars"
+                inputMode="numeric"
+                value={capital}
+                onChange={(e) => setCapital(groupDigits(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void start();
+                }}
+              />
+              <button className="primary" onClick={() => void start()} disabled={busy}>
+                {busy ? 'Opening…' : 'Start'}
+              </button>
+            </div>
+          )}
         </div>
         {error && <p className="share-error">{error}</p>}
         {keyMissing && seed && (
@@ -193,9 +226,6 @@ export function SetupClient() {
               Open the reference build
             </button>
           )}
-          <button className="primary" onClick={start} disabled={busy}>
-            {busy ? 'Opening…' : 'Start the conversation'}
-          </button>
         </div>
       </main>
     );

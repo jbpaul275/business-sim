@@ -941,3 +941,24 @@ select:focus {
 .say-buttons button.finish:hover {
   background: rgba(57, 135, 229, 0.12);
 }
+
+/* The one question up front: capital tiers, one click to start. */
+.tier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.tier-row .tier {
+  font-family: var(--mono);
+  font-size: 15px;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.tier-row .tier:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
