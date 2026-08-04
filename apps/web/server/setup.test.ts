@@ -233,11 +233,13 @@ describe('the web setup state machine', () => {
       scenario: 'coffee',
       templateId: 'coffee_shop',
       label: 'Coffee shop',
-      question: 'Where are you putting it?',
+      question: 'Do you have a concept or theme in mind, or should we start from a classic?',
     });
     // The greeting is an acknowledgment and ONE question — the card's eigen
     // question — not a checklist of everything the interview will need.
-    expect(session.chat[0]!.text).toBe('Coffee shop it is. Where are you putting it?');
+    expect(session.chat[0]!.text).toBe(
+      'Coffee shop it is. Do you have a concept or theme in mind, or should we start from a classic?',
+    );
 
     await say(session, 'a slow-bar espresso place by the university');
     const first = transport.seen[0]!.messages.at(-1)!.content;

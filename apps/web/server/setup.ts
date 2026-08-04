@@ -152,7 +152,9 @@ export function createSetup(
         who: 'model',
         // One question, then a conversation. The template covers the
         // economics; the eigen question asks for the one thing it can't.
-        text: seed ? `${seed.label} it is. ${seed.question}` : 'What kind of business do you want to run?',
+        text: seed
+          ? `${seed.label} it is. ${seed.question}`
+          : 'What kind of business do you want to run? A half-formed idea is plenty.',
       },
     ],
     capital,

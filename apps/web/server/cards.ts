@@ -17,10 +17,16 @@ export interface CardSpec {
   /**
    * The one question the interview opens with. The template supplies the
    * economics; this asks for the single variable it can't supply — the one
-   * whose answer most constrains everything else. Location businesses get
-   * "where", identity businesses get "what you sell", expertise businesses
-   * get "what you do", persona businesses get "who pays". Everything else is
-   * a follow-up or an estimate.
+   * whose answer most constrains everything else.
+   *
+   * Two rules, both learned from play-tests. First, ask for the fantasy the
+   * player actually has, not the plan they don't: someone who clicked
+   * "Coffee shop" is picturing a capybara café from TikTok, not a lease on a
+   * corner — concept before logistics, and the model asks the logistics as
+   * follow-ups. Second, the question must visibly exhaust the possibilities,
+   * including "no idea yet": a question with no escape hatch reads as
+   * "answer or else ?" and that is where players churn. "I don't know" has
+   * to be a supported answer *in the question's own words*.
    */
   eigen: string;
 }
@@ -32,7 +38,8 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Seats × turns against a lease that escalates 3% a year.',
     matureBy: 3,
     // Check size, turns, and cuisine all fall out of the occasion.
-    eigen: 'What kind of night out are you selling?',
+    eigen:
+      'Do you have a cuisine or a concept in mind, or just the urge to run a restaurant? Either is enough to start.',
   },
   qsr: {
     templateId: 'quick_service_restaurant',
@@ -40,15 +47,17 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Counter throughput at a low ticket — the corner IS the marketing.',
     matureBy: 3,
     // The signature item sets the ticket, the food cost, and the line.
-    eigen: 'What will people line up for?',
+    eigen:
+      'What do you picture people lining up for — a signature item, a cuisine, or nothing specific yet?',
   },
   coffee: {
     templateId: 'coffee_shop',
     name: 'Coffee shop',
     blurb: 'High-frequency small tickets; labor and rent take most of every one.',
     matureBy: 3,
-    // Foot traffic is destiny; the address is the business plan.
-    eigen: 'Where are you putting it?',
+    // Concept first — location is the follow-up, and "open" is a fine answer.
+    eigen:
+      'Do you have a concept or theme in mind, or should we start from a classic neighborhood shop and make it yours from there?',
   },
   retail: {
     templateId: 'retail_shop',
@@ -56,7 +65,7 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Keystone margins on inventory that ties up cash for a season.',
     matureBy: 3,
     // The merchandise picks the margin, the customer, and the season.
-    eigen: "What's on the shelves?",
+    eigen: 'Do you know what you want to sell, or just that you want a shop? Both work.',
   },
   services: {
     templateId: 'professional_services_firm',
@@ -64,7 +73,8 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Hours you can sell — utilisation and the bench decide the year.',
     matureBy: 4,
     // The expertise sets the bill rate and who's buying.
-    eigen: 'What do clients hire you to do?',
+    eigen:
+      'What would clients hire the firm to do — or should we pick a strong market together?',
   },
   agency: {
     templateId: 'marketing_agency',
@@ -72,7 +82,8 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Sell hours, hold utilisation, flex the overflow to freelancers.',
     matureBy: 4,
     // Agencies live or die on the niche they own.
-    eigen: 'What do you want the agency to be known for?',
+    eigen:
+      'Do you know what you want the agency to be known for, or should we find the niche together?',
   },
   ecommerce: {
     templateId: 'ecommerce_dtc_brand',
@@ -80,7 +91,7 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Every order is bought — CAC inflates as spend chases growth.',
     matureBy: 5,
     // The product decides the margin that has to survive the CAC.
-    eigen: "What's the product?",
+    eigen: 'Do you have a product in mind, or just the itch to sell online? Either is a fine start.',
   },
   saas: {
     templateId: 'b2b_saas',
@@ -88,7 +99,8 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'A retained base compounding slowly against a fixed engineering payroll.',
     matureBy: 9,
     // The pain being priced sets ARPU, market size, and churn.
-    eigen: 'What problem does your software make go away?',
+    eigen:
+      'Do you know the problem your software would solve, or do you want help finding the wedge? Either works.',
   },
   gym: {
     templateId: 'gym_fitness',
@@ -96,15 +108,17 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Members churn every month; the building must be paid either way.',
     matureBy: 5,
     // The member persona sets the price point and the churn.
-    eigen: "Who's working out there?",
+    eigen:
+      'What kind of gym do you picture — boutique, big-box, one discipline? A fuzzy picture is fine; we can sharpen it.',
   },
   storage: {
     templateId: 'self_storage',
     name: 'Self-storage facility',
     blurb: 'A fixed stock of units leasing up toward stabilized occupancy.',
     matureBy: 6,
-    // Supply and demand are hyper-local; the site is the strategy.
-    eigen: 'Where are you building it?',
+    // The draw is either local knowledge or the model itself — both are starts.
+    eigen:
+      "What draws you to storage — a market you know, or the business model itself? Either is a fine start.",
   },
   contractor: {
     templateId: 'general_contractor',
@@ -112,7 +126,8 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Win bids, execute the backlog, wait out retainage.',
     matureBy: 4,
     // Residential remodels and commercial builds are different businesses.
-    eigen: 'What do you build?',
+    eigen:
+      'Do you know what you want to build — remodels, custom homes, commercial — or should we talk through the options?',
   },
   trades: {
     templateId: 'trades_contractor',
@@ -120,7 +135,8 @@ export const CARDS: Record<string, CardSpec> = {
     blurb: 'Trucks and crews on small jobs — customer deposits fund the work.',
     matureBy: 4,
     // Plumbing, electrical, and HVAC each set their own job size and demand.
-    eigen: "What's your trade?",
+    eigen:
+      'Do you have a trade — plumbing, electrical, HVAC — or are you picking one for the economics? Both work.',
   },
 };
 
