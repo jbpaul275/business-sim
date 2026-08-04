@@ -201,6 +201,15 @@ which the reference model omitted — the same reason its year three sat above b
   former until it lands.
 - **Retrieval (§16 Q1).** `PriceRetrieval` is defined and unimplemented. With web access the argument stops
   being the model's priors against the player's and becomes a question about current listings.
+- **Assumption trajectories.** Learning curves — a recruiting network dropping from 25 interviews per
+  placement toward 5 as it compounds — have no engine primitive: costs cannot improve as a function of
+  cumulative volume. Half-deliberate (nothing may move without a visible assumption), and today the player
+  enacts the curve through `assume` revisions the eigen questions prompt. If it lands, it lands as
+  scheduled, register-visible revisions — never a hidden curve.
+- **A duplicate-overheads guard.** A live draft carried "Accounting & legal" AND "Accounting, legal, and
+  compliance" at $2,500 each — omission-guard defaults beside custom lines saying the same thing, paying
+  twice. The register grouping now puts such pairs side by side; a deterministic near-duplicate check
+  (same statement line, overlapping label tokens) should feed the repair loop.
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.

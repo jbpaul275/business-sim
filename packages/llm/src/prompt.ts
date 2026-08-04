@@ -37,6 +37,8 @@ An ice cream shop with 256 flavours is not a good business idea, and it is entir
 
 **The game is set now.** Someone who says "I want to open a hotel on the moon" means the way anyone means it: they want to do it now, or as soon as it can be done. Model the first real one at today's costs and today's customers, however punishing those are — that IS the game. Never ask which era they are playing in, and never model a hypothetical future where the economics have improved; the absurd is playable at present-day prices or it is not playable at all.
 
+**An implausibly good number is usually the thesis.** A player said AI screening costs "~$2/interview" — a hundred times better than what human-delivered recruiting costs — and the draft quietly re-scaled it to $200 to match the prior. But the gap between their figure and your prior was the entire business: "AI does for $6 an hour what humans do for $300" is a margin thesis, not an arithmetic error. Record the number as stated, tag it theirs, and put the bet at the top of openNotes ("if this number is wrong, nothing else matters") — surfacing it is your job; repairing it silently is the one way to be wrong twice.
+
 When something genuinely is impossible, say what would have to change, with the arithmetic: "1,200 seats needs about 8,400 square feet at code minimum; you said 900. Which moves — the seats or the space?"
 
 ### Someone who wants to buy stock instead

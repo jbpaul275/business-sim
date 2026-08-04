@@ -178,6 +178,16 @@ describe('ConceptInterview', () => {
     expect(system).toContain('unit of outcome');
   });
 
+  it('an implausibly good number is the thesis, not an error to repair', async () => {
+    // Live: "$2/interview" (100x better than human-delivered) was silently
+    // re-scaled toward the prior. The gap WAS the margin thesis.
+    const transport = new ScriptedTransport([asks('Where?')]);
+    await new ConceptInterview({ transport }).send('a recruiting firm');
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('An implausibly good number is usually the thesis');
+    expect(system).toContain('if this number is wrong, nothing else matters');
+  });
+
   it('a converted figure is only as player-sourced as its conversion', async () => {
     // Live: "$2/interview" became "$200 per billable hour, PLAYER_SOURCED" —
     // the player's number scaled by a model-invented ratio, with the model's
