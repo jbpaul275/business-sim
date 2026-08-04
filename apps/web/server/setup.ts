@@ -66,6 +66,8 @@ export interface SeedChoice {
   scenario: string;
   templateId: string;
   label: string;
+  /** The card's eigen question — the one thing the greeting asks. */
+  question: string;
 }
 
 export interface SetupSession {
@@ -148,15 +150,9 @@ export function createSetup(
     chat: [
       {
         who: 'model',
-        text: seed
-          ? `${seed.label} it is. The template covers the typical costs for this kind of ` +
-            'business, so we can spend our time on your concept. Tell me about the one you ' +
-            'have in mind: the location, the customers you want to serve, and anything that ' +
-            "would set it apart. I'll draft the starting numbers from your description, and " +
-            "you'll be able to review and challenge every one of them before the game begins."
-          : "Tell me about the business you'd like to run. A sentence or two is plenty to " +
-            "start; I'll ask follow-up questions where I need to and estimate the rest. " +
-            "You'll see every number, and you can challenge any of them before the game begins.",
+        // One question, then a conversation. The template covers the
+        // economics; the eigen question asks for the one thing it can't.
+        text: seed ? `${seed.label} it is. ${seed.question}` : 'What kind of business do you want to run?',
       },
     ],
     capital,

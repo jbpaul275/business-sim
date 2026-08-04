@@ -233,9 +233,11 @@ describe('the web setup state machine', () => {
       scenario: 'coffee',
       templateId: 'coffee_shop',
       label: 'Coffee shop',
+      question: 'Where are you putting it?',
     });
-    expect(session.chat[0]!.text).toContain('Coffee shop');
-    expect(session.chat[0]!.text).toContain('Tell me about the one you have in mind');
+    // The greeting is an acknowledgment and ONE question — the card's eigen
+    // question — not a checklist of everything the interview will need.
+    expect(session.chat[0]!.text).toBe('Coffee shop it is. Where are you putting it?');
 
     await say(session, 'a slow-bar espresso place by the university');
     const first = transport.seen[0]!.messages.at(-1)!.content;

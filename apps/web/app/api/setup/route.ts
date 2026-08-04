@@ -23,7 +23,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const card = typeof body.seed === 'string' ? CARDS[body.seed] : undefined;
   const seed =
     card && typeof body.seed === 'string'
-      ? { scenario: body.seed, templateId: card.templateId, label: card.name }
+      ? { scenario: body.seed, templateId: card.templateId, label: card.name, question: card.eigen }
       : undefined;
   return NextResponse.json(toSetupView(createSetup(capital, undefined, seed)));
 }

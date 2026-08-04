@@ -120,9 +120,8 @@ export function SetupClient() {
         <h1>{seed ? 'Make it yours' : 'Describe your own'}</h1>
         <p className="sub">
           {seed
-            ? 'The template supplies a realistic cost structure, but the business itself is ' +
-              'yours to invent. Describe what you have in mind, and challenge any number you ' +
-              'disagree with before committing.'
+            ? 'The template supplies a realistic cost structure; the business itself is yours ' +
+              'to invent. You can challenge any number before committing.'
             : 'A sentence or two is enough to start. The model will ask follow-up questions, ' +
               'estimate the rest, and let you challenge any number before committing.'}
         </p>
