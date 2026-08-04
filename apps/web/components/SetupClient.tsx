@@ -261,11 +261,15 @@ export function SetupClient() {
           {error && <div className="share-error">{error}</div>}
           <div ref={chatEnd} />
 
-          {view.phase === 'INTERVIEW' && !busy && (
+          {(view.phase === 'INTERVIEW' || view.phase === 'FUNDING') && !busy && (
             <div className="say-row">
               <textarea
                 rows={2}
-                placeholder="Describe the business, or answer the question…"
+                placeholder={
+                  view.phase === 'FUNDING'
+                    ? 'Argue with the plan or the budget — a message reopens the conversation and redrafts…'
+                    : 'Describe the business, or answer the question…'
+                }
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
@@ -454,8 +458,21 @@ function FundingPanel({
     <div className="setup-card">
       <div className="card-title">Funding</div>
       <div className="card-line">
-        Opening costs {f.needed} — buildout, deposits and the first quarter of fixed costs before
-        any revenue lands. You have {f.investable}.
+        Opening costs {f.needed} before any revenue lands. You have {f.investable}.
+      </div>
+      {/* Itemized so it can be argued with: the player who opened a real firm
+          for $5k needs to see WHICH line invented an office. The chat below
+          stays open — a message about any of these reopens the conversation. */}
+      <div className="budget">
+        {f.budget.map((line) => (
+          <div className="budget-line" key={line.label}>
+            <span>{line.label}</span>
+            <span className="num">{line.amount}</span>
+          </div>
+        ))}
+      </div>
+      <div className="card-line quiet">
+        Wrong for your business? Say so in the chat — the model redrafts from your correction.
       </div>
       {!custom ? (
         <>

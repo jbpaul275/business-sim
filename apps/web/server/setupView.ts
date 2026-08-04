@@ -24,6 +24,12 @@ export interface DraftView {
 export interface FundingView {
   needed: string;
   investable: string;
+  /**
+   * The opening budget, itemized — the lines the aggregate is made of, so
+   * the player can point at the one that is wrong for THEIR business and
+   * argue with it in the chat.
+   */
+  budget: { label: string; amount: string }[];
   /** The worked plan, as one sentence. */
   planLine: string;
   /** Nonempty when even the capped plan cannot cover opening. */
@@ -149,9 +155,25 @@ export function toSetupView(session: SetupSession): SetupView {
           (p.proposedRevolver > 0n ? `, and a ${money(p.proposedRevolver)} revolver` : '')
         : `${money(p.proposedEquity)} of your own, no debt needed` +
           (cushion > 0n ? ` — the ${money(cushion)} above opening costs starts as cash runway` : '');
+    const budgetLines: [string, Money][] = [
+      ['Buildout & equipment', p.outlays.buildoutAndEquipment],
+      ['Lease signing — first, last & security', p.outlays.leaseSigning],
+      ['Opening inventory', p.outlays.initialInventory],
+      ['Pre-opening payroll & training', p.outlays.preOpeningPayroll],
+      ['Pre-opening marketing', p.outlays.preOpeningMarketing],
+      ['Permits & legal', p.outlays.permitsAndLegal],
+      ['Prepaid insurance', p.outlays.prepaidInsurance],
+      ['Loan origination fees', p.outlays.debtOriginationFees],
+      ['Revolver commitment fee', p.outlays.revolverCommitmentFees],
+      ['First quarter of fixed costs', p.quarterOfFixed],
+    ];
     view.funding = {
       needed: money(p.needed),
       investable: money(p.investable),
+      budget: budgetLines
+        .filter(([, amount]) => amount > 0n)
+        .sort(([, a], [, b]) => (b > a ? 1 : b < a ? -1 : 0))
+        .map(([label, amount]) => ({ label, amount: money(amount) })),
       planLine: plan,
       ...(p.shortBy > 0n ? { shortBy: money(p.shortBy) } : {}),
       equityFloor: money(p.equityFloor),

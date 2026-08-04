@@ -981,3 +981,21 @@ select:focus {
 .morebar .pair input {
   width: 90px;
 }
+
+/* The opening budget, itemized so it can be argued with. */
+.budget {
+  margin: 8px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.budget-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.budget-line .num {
+  font-family: var(--mono);
+}

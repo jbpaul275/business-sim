@@ -148,6 +148,12 @@ describe('the web setup state machine', () => {
     expect(session.concept?.draft.businessName).toBe('Telescope rental by the hour');
     expect(session.proposal).toBeDefined();
 
+    // The funding screen's budget is itemized, so a single aggregate can be
+    // argued line by line ("$5k, not $128k — you invented an office").
+    const fundingView = toSetupView(session).funding!;
+    expect(fundingView.budget.length).toBeGreaterThanOrEqual(4);
+    expect(fundingView.budget.some((l) => l.label === 'Buildout & equipment')).toBe(true);
+
     const outcome = fund(session, { proposed: true });
     expect(outcome.ok).toBe(true);
     expect(session.phase).toBe('REVIEW');
