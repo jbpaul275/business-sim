@@ -999,3 +999,27 @@ select:focus {
 .budget-line .num {
   font-family: var(--mono);
 }
+
+/* The register, clustered: ~9 categories, expand to see the lines. */
+.reg-group {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+}
+.reg-group summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 0;
+  list-style-position: inside;
+}
+.reg-group .reg-meta {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.reg-group .assumption {
+  margin-left: 10px;
+}

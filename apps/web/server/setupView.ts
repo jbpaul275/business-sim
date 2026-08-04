@@ -3,7 +3,7 @@ import { computeMonthZeroOutlays } from '@bizsim/engine';
 import { computeConfidenceScore } from '@bizsim/schemas';
 import { arguableAssumptions, type CandidateResult } from '@bizsim/sim-cli';
 import { spendSummary, type ChatEntry, type SetupPhase, type SetupSession } from './setup';
-import { toRegisterRow, type RegisterRowView } from './view';
+import { groupRegister, type RegisterGroupView } from './view';
 
 /**
  * Everything the setup client renders, display-ready — same rule as the game
@@ -46,7 +46,8 @@ export interface ReviewView {
   outside?: string;
   debtLine?: string;
   confidence: string;
-  register: RegisterRowView[];
+  registerCount: number;
+  register: RegisterGroupView[];
   /** Ids worth arguing with first, in order. */
   arguable: string[];
   notes: string[];
@@ -199,9 +200,7 @@ export function toSetupView(session: SetupSession): SetupView {
 
     const byId = Object.fromEntries(model.assumptions.map((a) => [a.id, a]));
     const confidence = computeConfidenceScore({ byId, byPath: {}, confidenceScore: 0 });
-    const register = [...model.assumptions]
-      .sort((a, b) => (a.outsideBenchmark === b.outsideBenchmark ? a.label.localeCompare(b.label) : a.outsideBenchmark ? -1 : 1))
-      .map(toRegisterRow);
+    const register = groupRegister(model.assumptions);
 
     view.review = {
       monthZero: money(cMonthZero(c)),
@@ -210,6 +209,7 @@ export function toSetupView(session: SetupSession): SetupView {
       ...(plan.outsideCapital > 0n ? { outside: money(plan.outsideCapital) } : {}),
       ...(debtLine ? { debtLine } : {}),
       confidence: `${(confidence * 100).toFixed(1)}%`,
+      registerCount: model.assumptions.length,
       register,
       arguable: arguableAssumptions(model.assumptions).map((a) => a.id),
       notes: session.notes.map(scrubEnums),

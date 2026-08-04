@@ -279,59 +279,85 @@ export function GameClient({ initial }: { initial: GameView }) {
         <section className="pane" aria-label="Assumption register">
           <h2>Assumption register</h2>
           <div className="register-head">
-            <span>{view.register.rows.length} assumptions</span>
+            <span>{view.register.count} assumptions</span>
             <span>model confidence {view.register.confidence}</span>
           </div>
-          {view.register.rows.map((a) => (
-            <div className="assumption" key={a.id} title={a.sourceNote}>
-              <div className="row1">
-                <span>{a.label}</span>
-                <span className="val">{a.value}</span>
-              </div>
-              <div className="row2">
-                <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
-                  {a.provenance.toLowerCase().replace(/_/g, ' ')}
+          {view.register.groups.map((g) => (
+            <details className="reg-group" key={g.label} open={g.deviations > 0}>
+              <summary>
+                <span>{g.label}</span>
+                <span className="reg-meta">
+                  {g.count}
+                  {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
                 </span>
-                {a.deviation && <span className="deviation">{a.deviation}</span>}
-                <button
-                  className="share-link"
-                  onClick={() => setAssumeOpen(assumeOpen === a.id ? undefined : a.id)}
-                >
-                  {assumes[a.id]?.value ? 'staged' : 'revise'}
-                </button>
-              </div>
-              {assumeOpen === a.id && (
-                <div className="challenge-form">
-                  <div className="say-row">
-                    <input
-                      placeholder="new value"
-                      value={assumes[a.id]?.value ?? ''}
-                      onChange={(e) =>
-                        setAssumes({
-                          ...assumes,
-                          [a.id]: { value: e.target.value, evidence: assumes[a.id]?.evidence ?? '' },
-                        })
-                      }
-                    />
-                    <input
-                      placeholder="evidence (optional)"
-                      value={assumes[a.id]?.evidence ?? ''}
-                      onChange={(e) =>
-                        setAssumes({
-                          ...assumes,
-                          [a.id]: { value: assumes[a.id]?.value ?? '', evidence: e.target.value },
-                        })
-                      }
-                      style={{ flex: 2 }}
-                    />
+              </summary>
+              {g.rows.map((a) => (
+                <div className="assumption" key={a.id} title={a.sourceNote}>
+                  <div className="row1">
+                    <span>{a.label}</span>
+                    <span className="val">{a.value}</span>
                   </div>
-                  <div className="assume-note">
-                    Applies when the quarter runs. Without evidence it is recorded as your
-                    assertion, ranked below the model&apos;s own estimate.
+                  <div className="row2">
+                    <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
+                      {a.provenance.toLowerCase().replace(/_/g, ' ')}
+                    </span>
+                    {a.escalator && a.escalatorId && (
+                      <button
+                        className="share-link"
+                        title="Annual escalator — click to revise it"
+                        onClick={() =>
+                          setAssumeOpen(assumeOpen === a.escalatorId ? undefined : a.escalatorId)
+                        }
+                      >
+                        esc {a.escalator}/yr
+                      </button>
+                    )}
+                    {a.deviation && <span className="deviation">{a.deviation}</span>}
+                    <button
+                      className="share-link"
+                      onClick={() => setAssumeOpen(assumeOpen === a.id ? undefined : a.id)}
+                    >
+                      {assumes[a.id]?.value ? 'staged' : 'revise'}
+                    </button>
                   </div>
+                  {(assumeOpen === a.id || (a.escalatorId !== undefined && assumeOpen === a.escalatorId)) &&
+                    (() => {
+                      const fid = assumeOpen!;
+                      return (
+                        <div className="challenge-form">
+                          <div className="say-row">
+                            <input
+                              placeholder={fid === a.escalatorId ? 'new escalator (e.g. 3%)' : 'new value'}
+                              value={assumes[fid]?.value ?? ''}
+                              onChange={(e) =>
+                                setAssumes({
+                                  ...assumes,
+                                  [fid]: { value: e.target.value, evidence: assumes[fid]?.evidence ?? '' },
+                                })
+                              }
+                            />
+                            <input
+                              placeholder="evidence (optional)"
+                              value={assumes[fid]?.evidence ?? ''}
+                              onChange={(e) =>
+                                setAssumes({
+                                  ...assumes,
+                                  [fid]: { value: assumes[fid]?.value ?? '', evidence: e.target.value },
+                                })
+                              }
+                              style={{ flex: 2 }}
+                            />
+                          </div>
+                          <div className="assume-note">
+                            Applies when the quarter runs. Without evidence it is recorded as your
+                            assertion, ranked below the model&apos;s own estimate.
+                          </div>
+                        </div>
+                      );
+                    })()}
                 </div>
-              )}
-            </div>
+              ))}
+            </details>
           ))}
         </section>
       </div>

@@ -66,6 +66,111 @@ export interface RegisterRowView {
   provenance: Provenance;
   sourceNote: string;
   deviation?: string;
+  /**
+   * The line's annual escalator, folded in as a column rather than its own
+   * row — "Accounting & legal — annual escalator 2.0%" as a separate line
+   * doubled the register's length while saying almost nothing. The id keeps
+   * the escalator challengeable.
+   */
+  escalator?: string;
+  escalatorId?: string;
+}
+
+/**
+ * The register, clustered — a 57-row flat list is unreadable and most rows
+ * are $75 line items or catalog escalators. At most ~9 fixed categories,
+ * collapsed by default, groups with out-of-benchmark rows open.
+ */
+export interface RegisterGroupView {
+  label: string;
+  count: number;
+  deviations: number;
+  rows: RegisterRowView[];
+}
+
+const GROUP_ORDER = [
+  'Revenue & demand',
+  'Marketing',
+  'Staffing & payroll',
+  'Facilities & equipment',
+  'Software & tools',
+  'Insurance',
+  'Professional & compliance',
+  'Working capital & terms',
+  'Other expenses',
+] as const;
+
+function categorize(a: Assumption): (typeof GROUP_ORDER)[number] {
+  const l = a.label.toLowerCase();
+  if (/marketing|saturation spend|max lift/.test(l)) return 'Marketing';
+  if (a.path.startsWith('streams.')) return 'Revenue & demand';
+  if (
+    a.path.startsWith('workingCapital.') ||
+    /\b(dso|dpo|dio)\b|deposit|prepaid insurance months/.test(l)
+  ) {
+    return 'Working capital & terms';
+  }
+  if (/payroll|salary|wages|owner compensation|per block|staff/.test(l)) return 'Staffing & payroll';
+  if (/insurance/.test(l)) return 'Insurance';
+  if (/software|subscription|compute|hosting|stack|\bpos\b/.test(l)) return 'Software & tools';
+  if (/rent|office|coworking|utilit|furniture|workstation|equipment|repairs|maintenance|buildout/.test(l)) {
+    return 'Facilities & equipment';
+  }
+  if (/accounting|legal|permit|licen|compliance|tax/.test(l)) return 'Professional & compliance';
+  if (/price|rate|ticket|hours|utilization|realization|seasonality|elasticity|ramp|churn|capture|traffic|demand/.test(l)) {
+    return 'Revenue & demand';
+  }
+  return 'Other expenses';
+}
+
+export function groupRegister(assumptions: readonly Assumption[]): RegisterGroupView[] {
+  // Escalators fold onto the line they escalate, matched by model path.
+  const escalators = new Map<string, Assumption>();
+  const bases: Assumption[] = [];
+  for (const a of assumptions) {
+    if (a.path.endsWith('.annualEscalatorPct')) {
+      escalators.set(a.path.replace(/\.annualEscalatorPct$/, ''), a);
+    } else {
+      bases.push(a);
+    }
+  }
+  const matched = new Set<string>();
+  const rows = bases.map((a) => {
+    const basePath = a.path.replace(
+      /\.(amountPerQuarter|blockCostPerQuarter|costPerUnit|pctOfRevenue)$/,
+      '',
+    );
+    const esc = escalators.get(basePath);
+    const row = toRegisterRow(a);
+    if (!esc) return row;
+    matched.add(esc.id);
+    return { ...row, escalator: pct(esc.value as number), escalatorId: esc.id };
+  });
+  // An escalator with no matchable base keeps its own row — folded away
+  // silently it would become unchallengeable.
+  for (const esc of escalators.values()) {
+    if (!matched.has(esc.id)) rows.push(toRegisterRow(esc));
+  }
+
+  const byGroup = new Map<string, RegisterRowView[]>();
+  for (const row of rows) {
+    const assumption = assumptions.find((a) => a.id === row.id)!;
+    const group = categorize(assumption);
+    byGroup.set(group, [...(byGroup.get(group) ?? []), row]);
+  }
+  return GROUP_ORDER.filter((g) => byGroup.has(g)).map((g) => {
+    const groupRows = byGroup
+      .get(g)!
+      .sort((a, b) =>
+        a.deviation && !b.deviation ? -1 : !a.deviation && b.deviation ? 1 : a.label.localeCompare(b.label),
+      );
+    return {
+      label: g,
+      count: groupRows.length,
+      deviations: groupRows.filter((r) => r.deviation).length,
+      rows: groupRows,
+    };
+  });
 }
 
 export interface GameView {
@@ -96,7 +201,7 @@ export interface GameView {
   advisor: AdvisorEntry[];
   /** Whether the chat input works — false when no provider key is set. */
   advisorAvailable: boolean;
-  register: { confidence: string; rows: RegisterRowView[] };
+  register: { confidence: string; count: number; groups: RegisterGroupView[] };
   household: { cash: string; netWorth: string };
   over: boolean;
   /**
@@ -281,9 +386,8 @@ export function toView(session: GameSession): GameView {
   const stream = business.streams[0];
   const units = stream ? priceUnits(stream, streamPrice(stream)) : { command: 0, per: 'unit' };
 
-  const registerRows = Object.values(business.assumptions.byId)
-    .map((a) => toRegisterRow(a))
-    .sort((a, b) => (a.deviation && !b.deviation ? -1 : !a.deviation && b.deviation ? 1 : a.label.localeCompare(b.label)));
+  const assumptions = Object.values(business.assumptions.byId);
+  const registerGroups = groupRegister(assumptions);
 
   return {
     id: session.id,
@@ -314,7 +418,8 @@ export function toView(session: GameSession): GameView {
     advisorAvailable: advisorAvailable(),
     register: {
       confidence: pct(business.assumptions.confidenceScore),
-      rows: registerRows,
+      count: assumptions.length,
+      groups: registerGroups,
     },
     household: {
       cash: compact(world.household.cash),

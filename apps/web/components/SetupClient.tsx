@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { SetupView } from '../server/setupView';
-import type { RegisterRowView } from '../server/view';
 import { groupDigits, ungroup } from './format';
 
 /**
@@ -539,14 +538,14 @@ function ReviewPanel({
   const [busy, setBusy] = useState(false);
   const [commitError, setCommitError] = useState<string | undefined>();
 
-  const challenge = async (row: RegisterRowView): Promise<void> => {
+  const challenge = async (assumptionId: string): Promise<void> => {
     setBusy(true);
     setRuling(undefined);
     try {
       const res = await fetch(`/api/setup/${view.id}/challenge`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ assumptionId: row.id, value, basis }),
+        body: JSON.stringify({ assumptionId, value, basis }),
       });
       const data = (await res.json()) as { result?: ChallengeReply; view?: SetupView; error?: string };
       if (data.result) setRuling(data.result);
@@ -583,11 +582,20 @@ function ReviewPanel({
         </div>
       ))}
       <div className="register-head" style={{ marginTop: 10 }}>
-        <span>{r.register.length} assumptions</span>
+        <span>{r.registerCount} assumptions</span>
         <span>model confidence {r.confidence}</span>
       </div>
       <div className="review-register">
-        {r.register.map((a) => (
+        {r.register.map((g) => (
+        <details className="reg-group" key={g.label} open={g.deviations > 0}>
+          <summary>
+            <span>{g.label}</span>
+            <span className="reg-meta">
+              {g.count}
+              {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
+            </span>
+          </summary>
+        {g.rows.map((a) => (
           <div key={a.id} className={`assumption${r.arguable.includes(a.id) ? ' arguable' : ''}`}>
             <div className="row1">
               <span>{a.label}</span>
@@ -597,6 +605,20 @@ function ReviewPanel({
               <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
                 {a.provenance.toLowerCase().replace(/_/g, ' ')}
               </span>
+              {a.escalator && a.escalatorId && (
+                <button
+                  className="share-link"
+                  title="Annual escalator — click to challenge it"
+                  onClick={() => {
+                    setOpen(open === a.escalatorId ? undefined : a.escalatorId);
+                    setValue('');
+                    setBasis('');
+                    setRuling(undefined);
+                  }}
+                >
+                  esc {a.escalator}/yr
+                </button>
+              )}
               {a.deviation && <span className="deviation">{a.deviation}</span>}
               <button
                 className="share-link"
@@ -610,7 +632,7 @@ function ReviewPanel({
                 challenge
               </button>
             </div>
-            {open === a.id && (
+            {(open === a.id || (a.escalatorId !== undefined && open === a.escalatorId)) && (
               <div className="challenge-form">
                 <div className="quiet" title={a.sourceNote}>
                   {a.sourceNote}
@@ -630,7 +652,7 @@ function ReviewPanel({
                   <button
                     className="primary"
                     disabled={busy || value.trim() === ''}
-                    onClick={() => void challenge(a)}
+                    onClick={() => void challenge(open ?? a.id)}
                   >
                     {busy ? 'Arguing…' : 'Argue it'}
                   </button>
@@ -655,6 +677,8 @@ function ReviewPanel({
               </div>
             )}
           </div>
+        ))}
+        </details>
         ))}
       </div>
 

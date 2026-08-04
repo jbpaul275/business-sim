@@ -160,7 +160,14 @@ describe('the web setup state machine', () => {
     expect(session.candidate!.openingCash).toBeGreaterThanOrEqual(0n);
 
     const view = toSetupView(session);
-    expect(view.review!.register.length).toBeGreaterThan(10);
+    // The register arrives clustered (≤9 fixed categories) with escalators
+    // folded onto their lines as a column; the count still reflects every
+    // assumption underneath.
+    expect(view.review!.register.length).toBeLessThanOrEqual(9);
+    expect(view.review!.registerCount).toBeGreaterThan(10);
+    const allRows = view.review!.register.flatMap((g) => g.rows);
+    expect(allRows.some((r) => r.escalator !== undefined)).toBe(true);
+    expect(allRows.some((r) => r.label.includes('annual escalator'))).toBe(false);
     expect(view.review!.arguable.length).toBeGreaterThan(0);
     expect(view.draft!.openNotes[0]).toContain('Capture rate');
 
