@@ -27,6 +27,7 @@ import {
   buildabilityIssues,
   capacityCeilingIssues,
   capitalIntensityNote,
+  projectMatureRevenue,
   proposeFunding,
   quoteForEquity,
   revenueRealityIssues,
@@ -401,6 +402,40 @@ export async function say(
     session.busy = false;
     session.progress.text = undefined;
   }
+}
+
+/**
+ * The one thing commit refuses: a model that contradicts itself. D-5 protects
+ * businesses — the moon hotel gets modeled — but a draft stating one revenue
+ * while its parameters produce under a tenth (or over ten times) of it is a
+ * self-contradiction no in-game decision can close: a live one opened,
+ * fire-sold its vans, and closed inside period 0, before the player's first
+ * turn. Any challenge touching the stream lifts the block — a ruling may
+ * legitimately move either side of the contradiction — and mild mismatches
+ * stay warnings. Returns the sentence to show, or undefined when commit may
+ * proceed.
+ */
+export function commitBlocker(session: SetupSession): string | undefined {
+  const draft = session.concept?.draft;
+  if (!draft || !session.candidate) return undefined;
+  const projection = projectMatureRevenue(draft);
+  if (!projection) return undefined;
+  const ratio = Number(projection.matureAnnualRevenue) / 100 / draft.stream.expectedAnnualRevenue;
+  if (ratio >= 0.1 && ratio <= 10) return undefined;
+  const streamTouched = session.candidate.model.assumptions.some(
+    (a) => a.path.startsWith('streams.') && a.challengeHistory.length > 0,
+  );
+  if (streamTouched) return undefined;
+  const stated = toDisplay(BigInt(Math.round(draft.stream.expectedAnnualRevenue)) * 100n, {
+    showCents: false,
+  });
+  const produced = toDisplay(projection.matureAnnualRevenue, { showCents: false });
+  return (
+    `This draft says the business does ${stated} a year, but its own volume and price ` +
+    `parameters produce ${produced} — a self-contradiction, not a plan, and no in-game ` +
+    `decision can close it. Challenge the volume numbers in the register until they reach ` +
+    `the revenue you stated, or use "Something structural to change?" to redraft.`
+  );
 }
 
 export function undo(session: SetupSession): boolean {

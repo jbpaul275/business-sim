@@ -31,6 +31,7 @@ export {
   buildabilityIssues,
   capacityCeilingIssues,
   capitalIntensityNote,
+  projectMatureRevenue,
   revenueRealityIssues,
   staffingRealismIssues,
 } from './plausibility.js';

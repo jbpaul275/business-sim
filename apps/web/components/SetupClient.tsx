@@ -520,6 +520,7 @@ function ReviewPanel({
   const [ruling, setRuling] = useState<ChallengeReply | undefined>();
   const [objection, setObjection] = useState('');
   const [busy, setBusy] = useState(false);
+  const [commitError, setCommitError] = useState<string | undefined>();
 
   const challenge = async (row: RegisterRowView): Promise<void> => {
     setBusy(true);
@@ -540,10 +541,12 @@ function ReviewPanel({
 
   const commit = async (): Promise<void> => {
     setBusy(true);
+    setCommitError(undefined);
     try {
       const res = await fetch(`/api/setup/${view.id}/commit`, { method: 'POST' });
-      const data = (await res.json()) as { playId?: string };
+      const data = (await res.json()) as { playId?: string; error?: string };
       if (data.playId) onCommitted(data.playId);
+      else setCommitError(data.error ?? 'Commit failed — nothing was opened.');
     } finally {
       setBusy(false);
     }
@@ -658,6 +661,11 @@ function ReviewPanel({
         </div>
       </div>
 
+      {commitError && (
+        <div className="share-error" style={{ marginTop: 10 }}>
+          {commitError}
+        </div>
+      )}
       <div className="share-actions" style={{ marginTop: 14 }}>
         <button className="primary" disabled={busy} onClick={() => void commit()}>
           Commit and open — the model freezes after this

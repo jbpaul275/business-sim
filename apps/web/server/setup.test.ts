@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ScriptedTransport, type Adjudication, type ConceptDraft } from '@bizsim/llm';
-import { challenge, createSetup, finishSetup, fund, say, undo } from './setup';
+import { challenge, commitBlocker, createSetup, finishSetup, fund, say, undo } from './setup';
 import { toSetupView } from './setupView';
 import { advanceSession, createSessionFromWorld } from './store';
 import { toView } from './view';
@@ -192,6 +192,41 @@ describe('the web setup state machine', () => {
       true,
     );
     expect(toSetupView(session).canFinish).toBe(false);
+  });
+
+  it('commit refuses a self-contradicting model until the stream is engaged', async () => {
+    /**
+     * Live: a draft stated $600k and wired parameters producing $1,600; the
+     * player committed past the warning and the shop fire-sold its vans and
+     * closed inside period 0, before their first turn. D-5 protects absurd
+     * businesses, not arithmetic that contradicts itself.
+     */
+    const session = createSetup(500_000, scripted());
+    await say(session, 'telescope rentals by the hour on a dark-sky ridge');
+    await say(session, '24 scopes in a 1,400 sq ft unit');
+    fund(session, { proposed: true });
+    expect(session.phase).toBe('REVIEW');
+
+    // The fixture is coherent — commit is open.
+    expect(commitBlocker(session)).toBeUndefined();
+
+    // The same parameters against a 100x revenue claim are a contradiction.
+    session.concept!.draft.stream.expectedAnnualRevenue = 48_000_000;
+    const blocked = commitBlocker(session);
+    expect(blocked).toContain('self-contradiction');
+
+    // Engaging the stream numbers through a challenge lifts the block — a
+    // ruling may legitimately move either side of the contradiction.
+    const streamAssumption = session.candidate!.model.assumptions.find((a) =>
+      a.path.startsWith('streams.'),
+    )!;
+    streamAssumption.challengeHistory.push({
+      round: 1,
+      playerClaim: 'the ticket is wrong',
+      ruling: 'CONCEDE',
+      resultingValue: 52,
+    } as never);
+    expect(commitBlocker(session)).toBeUndefined();
   });
 
   it('adjudicates a challenge and writes the ruling through to the model', async () => {

@@ -1414,3 +1414,31 @@ describe('staged synthesis', () => {
     await expect(interview.send('build it')).rejects.toBeInstanceOf(MalformedDraftError);
   });
 });
+
+describe('labor lines and statement lines agree', () => {
+  it('flags wages posted anywhere but LABOR', () => {
+    // Live: a plumbing shop's income statement showed Labor $0 while paying
+    // $60k/quarter of visible wage blocks — the wage lines carried
+    // statementLine G&A, so labor vanished into overhead and the statement
+    // misread top to bottom.
+    const d = draft();
+    d.costLines.push({
+      label: 'Apprentice plumber wages',
+      class: 'STEP_FIXED',
+      statementLine: 'G&A',
+      value: 12_000,
+      isLabor: true,
+      accruable: false,
+      capacityPerBlock: 20_000,
+      minimumBlocks: 1,
+      sourceNote: 'One apprentice.',
+      provenance: 'LLM_ESTIMATE',
+    });
+    const issues = draftIssues(d);
+    expect(issues.some((i) => i.includes('marked as labor but posts to G&A'))).toBe(true);
+  });
+
+  it('accepts wages on LABOR and non-labor lines elsewhere', () => {
+    expect(draftIssues(draft()).some((i) => i.includes('marked as labor'))).toBe(false);
+  });
+});

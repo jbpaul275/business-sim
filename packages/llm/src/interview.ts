@@ -570,6 +570,21 @@ export function draftIssues(draft: ConceptDraft): string[] {
           `give the block its real quarterly cost.`,
       );
     }
+    /**
+     * Wages that never reach the Labor line.
+     *
+     * Live: a plumbing shop's income statement showed Labor $0 while paying
+     * $60k a quarter of visible wage blocks — the wage lines carried
+     * `statementLine: 'G&A'`, so labor cost vanished into overhead and the
+     * statement misread top to bottom. `isLabor` and `statementLine` state
+     * the same fact twice; when they disagree, the draft is wrong somewhere.
+     */
+    if (line.isLabor && line.statementLine !== 'LABOR') {
+      issues.push(
+        `'${line.label}' is marked as labor but posts to ${line.statementLine} — wages belong ` +
+          `on the LABOR statement line, or the line is not labor. Make the two agree.`,
+      );
+    }
     if (line.class === 'STEP_FIXED' && (line.minimumBlocks ?? 0) > 1) {
       issues.push(
         `'${line.label}' has a minimum of ${line.minimumBlocks} blocks, which says the business ` +

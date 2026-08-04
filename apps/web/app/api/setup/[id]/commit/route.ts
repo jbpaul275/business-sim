@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { toDisplay, type Money } from '@bizsim/money';
 import { computeMonthZeroOutlays } from '@bizsim/engine';
-import { getSetup } from '../../../../../server/setup';
+import { commitBlocker, getSetup } from '../../../../../server/setup';
 import { createSessionFromWorld } from '../../../../../server/store';
 
 /**
@@ -18,6 +18,9 @@ export async function POST(
   if (session.phase !== 'REVIEW' || !session.candidate) {
     return NextResponse.json({ error: 'nothing to commit yet' }, { status: 409 });
   }
+
+  const blocker = commitBlocker(session);
+  if (blocker) return NextResponse.json({ error: blocker }, { status: 409 });
 
   const { model, world } = session.candidate;
   session.events.push({
