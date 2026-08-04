@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Assumption } from '@bizsim/schemas';
-import { statementTab, tabRegister } from './view';
+import { statementTab, tabRegister, toRegisterRow } from './view';
 
 /**
  * The tab split answers a play-test: category clusters alone still mixed a
@@ -70,6 +70,26 @@ describe('statementTab', () => {
         assumption({ category: 'REVENUE', path: 'streams.0.params.hoursOpenPerQuarter', unit: 'hours', isMoney: false, value: 700 }),
       ),
     ).toBe('descriptive');
+  });
+});
+
+describe('register value display', () => {
+  it('money reads to the dollar — an estimate does not get to claim cents', () => {
+    // Live: "$13,000.00" cost-per-block rows sat beside a bare "11,000"
+    // capacity count and the register read as two different documents.
+    expect(toRegisterRow(assumption({ value: 1_300_000n })).value).toBe('$13,000');
+    expect(toRegisterRow(assumption({ value: -1_300_000n })).value).toBe('-$13,000');
+    // Rounded, not truncated.
+    expect(toRegisterRow(assumption({ value: 1_300_050n })).value).toBe('$13,001');
+  });
+
+  it('counts stay grouped and durations carry their unit', () => {
+    expect(
+      toRegisterRow(assumption({ unit: 'count', isMoney: false, value: 11_000 })).value,
+    ).toBe('11,000');
+    expect(toRegisterRow(assumption({ unit: 'hours', isMoney: false, value: 700 })).value).toBe(
+      '700 hours',
+    );
   });
 });
 

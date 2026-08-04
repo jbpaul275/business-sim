@@ -534,13 +534,26 @@ const toLogView = (l: TurnLogEntry): TurnLogView => ({
   attributions: l.attributions.map(toAttributionView),
 });
 
+/**
+ * Register money reads to the dollar, not the cent. Assumptions are estimates
+ * — "$13,000.00" wears a precision no estimate has, and next to a bare
+ * "11,000" count it made the register look like two different documents.
+ * (Statements still tie to the cent; that precision is theirs to claim.)
+ */
+const wholeDollars = (m: Money): string => {
+  const rounded = m < 0n ? -((-m + 50n) / 100n) : (m + 50n) / 100n;
+  return toDisplay(rounded * 100n, { showCents: false });
+};
+
 export function toRegisterRow(a: Assumption): RegisterRowView {
   const value =
     typeof a.value === 'bigint'
-      ? money(a.value)
+      ? wholeDollars(a.value)
       : a.unit === 'pct'
         ? pct(a.value)
-        : a.value.toLocaleString();
+        : a.unit === 'hours' || a.unit === 'days' || a.unit === 'years'
+          ? `${a.value.toLocaleString()} ${a.unit}`
+          : a.value.toLocaleString();
   const deviation = a.outsideBenchmark ? deviationLabel(a) : undefined;
   return {
     id: a.id,

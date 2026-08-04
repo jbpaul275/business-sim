@@ -1070,6 +1070,10 @@ select:focus {
 .reg-table .rt-val {
   width: 18%;
   font-family: var(--mono);
+  /* Explicit, not inherited: browsers shrink generic-monospace fallbacks
+     rendered at an inherited size, which made money and count cells look
+     like two different documents. */
+  font-size: 13px;
   text-align: right;
   white-space: nowrap;
 }
