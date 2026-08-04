@@ -6,11 +6,15 @@ import { useState } from 'react';
 export function StartButton({
   scenario,
   name,
-  kind,
+  blurb,
+  facts,
 }: {
   scenario: string;
   name: string;
-  kind: string;
+  /** The binding constraint in plain words — never the archetype enum. */
+  blurb: string;
+  /** Short computed facts: cost to open, the calibrated earning band. */
+  facts: string[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -34,7 +38,8 @@ export function StartButton({
   return (
     <button className="scenario-card" onClick={start} disabled={busy}>
       <div className="name">{busy ? 'Opening…' : name}</div>
-      <div className="kind">{kind}</div>
+      <div className="blurb">{blurb}</div>
+      <div className="facts">{facts.join(' · ')}</div>
     </button>
   );
 }
