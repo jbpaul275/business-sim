@@ -253,13 +253,18 @@ export function toView(session: GameSession): GameView {
     blockCost: compact(c.blockCostPerQuarter),
   }));
 
-  const debts = business.debts.map((d) => ({
-    label: d.label,
-    detail:
-      d.revolverLimit !== undefined
-        ? `${compact(d.outstandingPrincipal)} drawn of ${compact(d.revolverLimit)} @ ${pct(d.annualRate)}`
-        : `${compact(d.outstandingPrincipal)} outstanding @ ${pct(d.annualRate)}`,
-  }));
+  // Only facilities that still mean something: a balance, or an undrawn line
+  // that could be drawn. A twenty-year run on the crisis ladder otherwise
+  // shows every emergency loan it ever repaid, forever, at $0 each.
+  const debts = business.debts
+    .filter((d) => d.outstandingPrincipal > 0n || d.revolverLimit !== undefined)
+    .map((d) => ({
+      label: d.label,
+      detail:
+        d.revolverLimit !== undefined
+          ? `${compact(d.outstandingPrincipal)} drawn of ${compact(d.revolverLimit)} @ ${pct(d.annualRate)}`
+          : `${compact(d.outstandingPrincipal)} outstanding @ ${pct(d.annualRate)}`,
+    }));
 
   const stream = business.streams[0];
   const units = stream ? priceUnits(stream, streamPrice(stream)) : { command: 0, per: 'unit' };

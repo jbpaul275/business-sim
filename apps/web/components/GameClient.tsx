@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { AttributionView, GameView, Row } from '../server/view';
 
@@ -11,10 +12,14 @@ import type { AttributionView, GameView, Row } from '../server/view';
  */
 
 export function GameClient({ initial }: { initial: GameView }) {
+  const router = useRouter();
   const [view, setView] = useState(initial);
   const [tab, setTab] = useState<'is' | 'bs' | 'cf'>('is');
   const [busy, setBusy] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // The milestone banner is a scoreboard, not a wall — "keep playing" is a
+  // real choice and dismissing the banner is how it is made.
+  const [playingOn, setPlayingOn] = useState(false);
 
   // Pending decisions. Empty string = leave unchanged this quarter.
   const [price, setPrice] = useState('');
@@ -217,18 +222,25 @@ export function GameClient({ initial }: { initial: GameView }) {
         </section>
       </div>
 
-      {view.over ? (
+      {view.over && !playingOn ? (
         <div className="gameover">
-          {view.status === 'CLOSED'
-            ? 'The business is insolvent and closed. Start another run from the picker.'
-            : 'Ten-year milestone reached — keep playing, or start another run.'}
+          <span>
+            {view.status === 'CLOSED'
+              ? 'The business is insolvent and closed.'
+              : 'Ten-year milestone reached.'}
+          </span>
+          {view.status !== 'CLOSED' && (
+            <button className="share-link" onClick={() => setPlayingOn(true)}>
+              Keep playing
+            </button>
+          )}
+          <button className="share-link" onClick={() => router.push('/')}>
+            Start another run
+          </button>
           {view.share && !view.share.sharedAs && (
-            <>
-              {' '}
-              <button className="share-link" onClick={() => setSharing(true)}>
-                Share this run with QA
-              </button>
-            </>
+            <button className="share-link" onClick={() => setSharing(true)}>
+              Share this run with QA
+            </button>
           )}
         </div>
       ) : null}
