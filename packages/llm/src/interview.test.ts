@@ -178,6 +178,17 @@ describe('ConceptInterview', () => {
     expect(system).toContain('unit of outcome');
   });
 
+  it('a converted figure is only as player-sourced as its conversion', async () => {
+    // Live: "$2/interview" became "$200 per billable hour, PLAYER_SOURCED" —
+    // the player's number scaled by a model-invented ratio, with the model's
+    // guess laundered through the player's provenance tag.
+    const transport = new ScriptedTransport([asks('Where?')]);
+    await new ConceptInterview({ transport }).send('a recruiting firm');
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('only as player-sourced as its conversion');
+    expect(system).toContain('if you supplied the ratio, the result is LLM_ESTIMATE');
+  });
+
   it('offers templates only when there are templates to offer', async () => {
     const transport = new ScriptedTransport([asks('Where is it?')]);
     const interview = new ConceptInterview({
