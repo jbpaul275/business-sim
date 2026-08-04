@@ -1,0 +1,149 @@
+{
+  "id": "marketing_agency",
+  "label": "Marketing agency",
+  "naicsCode": "541810",
+  "defaultArchetypes": [
+    "UTILIZATION"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "freelancers",
+      "label": "Freelancers & white-label vendors",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.12,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.05,
+        "high": 0.22,
+        "source": "RMA Annual Statement Studies 5418 — outside creative, media ops and dev placed per-project"
+      },
+      "sourceNote": "Overflow design, video and dev bought by the project. Agencies flex this line instead of hiring for peaks."
+    },
+    {
+      "lineId": "delivery_staff",
+      "label": "Account & creative staff",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 23000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "BILLABLE_HOURS",
+      "capacityPerBlock": 460,
+      "minimumBlocks": 1,
+      "sourceNote": "One delivery head at $92k/yr — a blend of account managers, designers and media buyers — logging 460 billable hours a quarter."
+    },
+    {
+      "lineId": "principal",
+      "label": "Agency principal",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 27000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Non-billable founder-principal; sells the work and runs the shop regardless of utilisation."
+    },
+    {
+      "lineId": "rent",
+      "label": "Studio rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 10500,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "1,600 sq ft of creative-district office at $26/sq ft/yr; agencies buy address and light, not square footage."
+    }
+  ],
+  "streamParamDefaults": {
+    "blendedHourlyRate": 140,
+    "demandHoursPerQuarter": 3400,
+    "targetUtilization": 0.68,
+    "realizationRate": 0.88,
+    "billableHoursPerHeadPerQuarter": 460
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.5,
+    "rampConstant": 3.0,
+    "marketingMaxLift": 0.3,
+    "halfSaturationSpend": 10000,
+    "priceElasticity": 0.9,
+    "baseMarketingSpendPerQuarter": 10000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 48,
+    "dioDays": 0,
+    "dpoDays": 24,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 2,
+    "customerDepositPct": 0.1
+  },
+  "payrollLoadPct": 0.2515,
+  "workersCompPct": 0.008,
+  "offersBenefits": true,
+  "seasonality": [
+    1.02,
+    1.05,
+    0.92,
+    1.01
+  ],
+  "monthlySeasonalWeight": [
+    1.0,
+    1.02,
+    1.04,
+    1.05,
+    1.06,
+    1.04,
+    0.95,
+    0.86,
+    0.95,
+    1.02,
+    1.03,
+    0.98
+  ],
+  "typicalCapex": [
+    {
+      "label": "Workstations, displays & cameras",
+      "category": "EQUIPMENT",
+      "cost": 50000,
+      "usefulLifeYears": 4
+    },
+    {
+      "label": "Studio fit-out",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 45000,
+      "usefulLifeYears": 10
+    }
+  ],
+  "plausibility": {
+    "laborPctOfRevenue": {
+      "low": 0.45,
+      "high": 0.62,
+      "source": "RMA Annual Statement Studies 5418 — delivery plus principal; the industry's own rule of thumb caps loaded delivery labor at 55% of AGI"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.08,
+      "high": 0.2,
+      "source": "RMA Annual Statement Studies 5418 — small independent agencies; the often-quoted 20%+ figures are AGI-margin on shops that pass media through"
+    }
+  },
+  "monthlyRent": 3500,
+  "preOpening": {
+    "payrollAndTraining": 25000,
+    "marketing": 10000,
+    "permitsAndLegal": 7000
+  },
+  "generalLiabilityInsurancePerYear": 7000,
+  "propertyInsurancePerYear": 1200,
+  "accountingAndLegalPerYear": 12000,
+  "softwareAndPosPerYear": 18000,
+  "permitsAndLicensesPerYear": 1500,
+  "utilitiesPerQuarter": 2000,
+  "ownerCompPerYear": 108000,
+  "badDebtPctOfRevenue": 0.008,
+  "repairsPctOfRevenue": 0.002,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.15,
+  "volumeNoun": "billable hours"
+}

@@ -1,0 +1,175 @@
+{
+  "id": "coffee_shop",
+  "label": "Coffee shop",
+  "naicsCode": "722515",
+  "defaultArchetypes": [
+    "TRAFFIC"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "beverage_and_food_cost",
+      "label": "Beverage, food & paper cost",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.32,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.28,
+        "high": 0.38,
+        "source": "Specialty Coffee Association operating benchmark survey — beans, dairy, pastry wholesale and cups together"
+      },
+      "sourceNote": "Espresso pulls cheap; milk, alternative milks, wholesale pastry and the cup itself are what carry this line. Drink-heavy mix runs the low end, food-heavy the high."
+    },
+    {
+      "lineId": "baristas",
+      "label": "Baristas",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 10500,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "TRANSACTIONS",
+      "capacityPerBlock": 9000,
+      "minimumBlocks": 1,
+      "sourceNote": "One block ≈ 1.5 barista FTEs at $16/hr plus tips-topped shifts covering open-to-close; ~100 drinks per barista-day through a two-group machine."
+    },
+    {
+      "lineId": "shift_lead",
+      "label": "Shift lead / manager",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 10000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Working manager at $40k/yr; opens, orders, schedules — required at any volume."
+    },
+    {
+      "lineId": "rent",
+      "label": "Rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 14100,
+      "isMoney": true,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 7500,
+        "high": 30000,
+        "source": "IBISWorld 72251 — quarterly rent for 1,000-1,800 sq ft of foot-traffic retail"
+      },
+      "sourceNote": "1,400 sq ft at $40/sq ft/yr NNN on a walkable corridor. A coffee shop lives or dies on the corner it rents.",
+      "annualEscalatorPct": 0.03
+    }
+  ],
+  "streamParamDefaults": {
+    "captureRate": 0.038,
+    "avgTicket": 7.5,
+    "operatingDaysPerQuarter": 91,
+    "turnsPerDay": 12,
+    "peakConcentration": 0.55,
+    "baselineSkuCount": 30,
+    "skuCount": 30,
+    "seats": 32,
+    "floorAreaSqFt": 1400,
+    "addressableTrafficPerQuarter": 650000
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.45,
+    "rampConstant": 2.5,
+    "marketingMaxLift": 0.3,
+    "halfSaturationSpend": 4000,
+    "priceElasticity": 1.1,
+    "baseMarketingSpendPerQuarter": 4000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 1,
+    "dioDays": 8,
+    "dpoDays": 18,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 1,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.1315,
+  "workersCompPct": 0.025,
+  "offersBenefits": false,
+  "seasonality": [
+    1.0,
+    0.98,
+    0.98,
+    1.04
+  ],
+  "monthlySeasonalWeight": [
+    1.02,
+    1.0,
+    0.98,
+    0.98,
+    0.97,
+    0.99,
+    0.96,
+    0.97,
+    1.01,
+    1.02,
+    1.04,
+    1.06
+  ],
+  "typicalCapex": [
+    {
+      "label": "Espresso machine, grinders & brew equipment",
+      "category": "EQUIPMENT",
+      "cost": 80000,
+      "usefulLifeYears": 7
+    },
+    {
+      "label": "Buildout — bar, plumbing, electrical",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 150000,
+      "usefulLifeYears": 12
+    },
+    {
+      "label": "Seating, fixtures & POS",
+      "category": "FF&E",
+      "cost": 40000,
+      "usefulLifeYears": 7
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.28,
+      "high": 0.38,
+      "source": "Specialty Coffee Association operating benchmark survey"
+    },
+    "laborPctOfRevenue": {
+      "low": 0.26,
+      "high": 0.38,
+      "source": "Specialty Coffee Association operating benchmark survey — labor is the largest line in a coffee shop P&L"
+    },
+    "occupancyPctOfRevenue": {
+      "low": 0.08,
+      "high": 0.16,
+      "source": "IBISWorld 72251 — full OCCUPANCY line; small-format food service pays proportionally more per foot"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.06,
+      "high": 0.17,
+      "source": "Specialty Coffee Association operating benchmark survey — a well-run independent lands low-teens; the median shop is thinner"
+    }
+  },
+  "monthlyRent": 4700,
+  "preOpening": {
+    "payrollAndTraining": 18000,
+    "marketing": 8000,
+    "permitsAndLegal": 9000
+  },
+  "generalLiabilityInsurancePerYear": 4000,
+  "propertyInsurancePerYear": 2500,
+  "accountingAndLegalPerYear": 6000,
+  "softwareAndPosPerYear": 5000,
+  "permitsAndLicensesPerYear": 2400,
+  "utilitiesPerQuarter": 4000,
+  "ownerCompPerYear": 60000,
+  "badDebtPctOfRevenue": 0.001,
+  "repairsPctOfRevenue": 0.014,
+  "cardProcessingRate": 0.029,
+  "cardMixPct": 0.9,
+  "volumeNoun": "orders"
+}

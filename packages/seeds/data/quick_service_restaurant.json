@@ -1,0 +1,175 @@
+{
+  "id": "quick_service_restaurant",
+  "label": "Quick-service restaurant",
+  "naicsCode": "722513",
+  "defaultArchetypes": [
+    "TRAFFIC"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "food_and_packaging",
+      "label": "Food & packaging cost",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.32,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.28,
+        "high": 0.35,
+        "source": "NRA Restaurant Operations Report — limited-service; includes disposables and packaging, which full-service excludes"
+      },
+      "sourceNote": "Food plus cups, wraps and bags. Packaging adds 2-3 points over the sit-down equivalent because every order leaves in it."
+    },
+    {
+      "lineId": "counter_crew",
+      "label": "Counter & kitchen crew",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 10000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "TRANSACTIONS",
+      "capacityPerBlock": 3800,
+      "minimumBlocks": 1,
+      "sourceNote": "One block ≈ 1.7 crew FTEs at $15.50/hr across the service week; QSR runs a combined line, not separate FOH/BOH."
+    },
+    {
+      "lineId": "management",
+      "label": "Store manager",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 13000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Salaried store manager at $52k/yr; required regardless of volume."
+    },
+    {
+      "lineId": "rent",
+      "label": "Rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 28500,
+      "isMoney": true,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 15000,
+        "high": 55000,
+        "source": "IBISWorld 72251 — quarterly rent for 1,800-2,500 sq ft; QSR pays corner-visibility rates"
+      },
+      "sourceNote": "2,200 sq ft at $52/sq ft/yr NNN. QSR trades kitchen depth for frontage: the rent per foot runs above full-service because the location IS the marketing.",
+      "annualEscalatorPct": 0.03
+    }
+  ],
+  "streamParamDefaults": {
+    "captureRate": 0.045,
+    "avgTicket": 12,
+    "operatingDaysPerQuarter": 91,
+    "turnsPerDay": 10.5,
+    "peakConcentration": 0.5,
+    "baselineSkuCount": 25,
+    "skuCount": 25,
+    "seats": 44,
+    "floorAreaSqFt": 2200,
+    "addressableTrafficPerQuarter": 700000
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.5,
+    "rampConstant": 2.5,
+    "marketingMaxLift": 0.35,
+    "halfSaturationSpend": 6000,
+    "priceElasticity": 1.6,
+    "baseMarketingSpendPerQuarter": 6000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 1,
+    "dioDays": 5,
+    "dpoDays": 21,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 1,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.1315,
+  "workersCompPct": 0.035,
+  "offersBenefits": false,
+  "seasonality": [
+    0.96,
+    1.02,
+    1.05,
+    0.97
+  ],
+  "monthlySeasonalWeight": [
+    0.92,
+    0.96,
+    1.0,
+    1.0,
+    1.02,
+    1.04,
+    1.04,
+    1.06,
+    1.05,
+    1.02,
+    0.96,
+    0.93
+  ],
+  "typicalCapex": [
+    {
+      "label": "Kitchen & counter equipment",
+      "category": "EQUIPMENT",
+      "cost": 200000,
+      "usefulLifeYears": 7
+    },
+    {
+      "label": "Leasehold improvements & buildout",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 220000,
+      "usefulLifeYears": 15
+    },
+    {
+      "label": "Signage, seating & POS",
+      "category": "FF&E",
+      "cost": 60000,
+      "usefulLifeYears": 7
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.28,
+      "high": 0.35,
+      "source": "NRA Restaurant Operations Report — limited-service"
+    },
+    "laborPctOfRevenue": {
+      "low": 0.25,
+      "high": 0.33,
+      "source": "NRA Restaurant Operations Report — limited-service runs 4-6 points under full-service on labor"
+    },
+    "occupancyPctOfRevenue": {
+      "low": 0.06,
+      "high": 0.14,
+      "source": "IBISWorld 72251 — full OCCUPANCY line (rent, utilities, property insurance, repairs)"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.1,
+      "high": 0.2,
+      "source": "IBISWorld 72251 — independent limited-service store level; franchise stores land lower after 6-8% royalty and ad-fund, which an independent does not pay"
+    }
+  },
+  "monthlyRent": 9500,
+  "preOpening": {
+    "payrollAndTraining": 30000,
+    "marketing": 12000,
+    "permitsAndLegal": 12000
+  },
+  "generalLiabilityInsurancePerYear": 6000,
+  "propertyInsurancePerYear": 4000,
+  "accountingAndLegalPerYear": 7000,
+  "softwareAndPosPerYear": 6000,
+  "permitsAndLicensesPerYear": 3000,
+  "utilitiesPerQuarter": 7500,
+  "ownerCompPerYear": 85000,
+  "badDebtPctOfRevenue": 0.001,
+  "repairsPctOfRevenue": 0.015,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.9,
+  "volumeNoun": "orders"
+}

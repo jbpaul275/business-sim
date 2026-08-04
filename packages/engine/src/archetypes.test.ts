@@ -380,8 +380,8 @@ describe('seed template coverage (§4.7)', () => {
     );
   });
 
-  it('ships at least six templates on the way to the twelve §4.7 asks for', () => {
-    expect(listSeedTemplates().length).toBeGreaterThanOrEqual(6);
+  it('ships the twelve templates §4.7 asks for', () => {
+    expect(listSeedTemplates().length).toBeGreaterThanOrEqual(12);
   });
 });
 
@@ -405,6 +405,12 @@ describe('benchmark plausibility across every template (§13.3)', () => {
     b2b_saas: 8,
     self_storage: 5,
     general_contractor: 3,
+    quick_service_restaurant: 2,
+    coffee_shop: 2,
+    retail_shop: 2,
+    marketing_agency: 3,
+    trades_contractor: 3,
+    gym_fitness: 4,
   };
 
   const CAPITALISATION: Record<string, { equity: number; household: number }> = {
@@ -414,6 +420,12 @@ describe('benchmark plausibility across every template (§13.3)', () => {
     b2b_saas: { equity: 5_000_000, household: 5_400_000 },
     self_storage: { equity: 4_700_000, household: 5_100_000 },
     general_contractor: { equity: 900_000, household: 1_300_000 },
+    quick_service_restaurant: { equity: 700_000, household: 1_100_000 },
+    coffee_shop: { equity: 450_000, household: 800_000 },
+    retail_shop: { equity: 500_000, household: 900_000 },
+    marketing_agency: { equity: 350_000, household: 750_000 },
+    trades_contractor: { equity: 700_000, household: 1_100_000 },
+    gym_fitness: { equity: 1_400_000, household: 1_800_000 },
   };
 
   it.each(listSeedTemplates())('$label lands in band at maturity', (template) => {

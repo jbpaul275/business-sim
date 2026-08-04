@@ -1,0 +1,175 @@
+{
+  "id": "retail_shop",
+  "label": "Retail shop",
+  "naicsCode": "458110",
+  "defaultArchetypes": [
+    "TRAFFIC"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "merchandise_cost",
+      "label": "Merchandise cost",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.5,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.45,
+        "high": 0.55,
+        "source": "IBISWorld 45811 — keystone markup less markdowns and shrink is where independent soft-goods retail actually lands"
+      },
+      "sourceNote": "Landed cost of goods sold at roughly keystone pricing, after the markdowns that clear seasonal stock and 1-2% shrink."
+    },
+    {
+      "lineId": "sales_associates",
+      "label": "Sales associates",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 8500,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "TRANSACTIONS",
+      "capacityPerBlock": 2200,
+      "minimumBlocks": 1,
+      "sourceNote": "One block ≈ 1.3 associate FTEs at $15/hr covering floor hours; a sale takes minutes of help, not seconds."
+    },
+    {
+      "lineId": "store_manager",
+      "label": "Store manager",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 11000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Salaried manager-buyer at $44k/yr; the buying calendar exists whether or not anyone walks in."
+    },
+    {
+      "lineId": "rent",
+      "label": "Rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 15750,
+      "isMoney": true,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 9000,
+        "high": 33000,
+        "source": "IBISWorld 45811 — quarterly rent for 1,200-2,500 sq ft of neighborhood retail"
+      },
+      "sourceNote": "1,800 sq ft at $35/sq ft/yr NNN in a neighborhood shopping district.",
+      "annualEscalatorPct": 0.03
+    }
+  ],
+  "streamParamDefaults": {
+    "captureRate": 0.034,
+    "avgTicket": 52,
+    "operatingDaysPerQuarter": 85,
+    "turnsPerDay": 3,
+    "peakConcentration": 0.35,
+    "baselineSkuCount": 800,
+    "skuCount": 800,
+    "seats": 40,
+    "floorAreaSqFt": 1800,
+    "addressableTrafficPerQuarter": 120000
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.45,
+    "rampConstant": 3.0,
+    "marketingMaxLift": 0.35,
+    "halfSaturationSpend": 5000,
+    "priceElasticity": 1.4,
+    "baseMarketingSpendPerQuarter": 5000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 1,
+    "dioDays": 100,
+    "dpoDays": 40,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 2,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.1315,
+  "workersCompPct": 0.015,
+  "offersBenefits": false,
+  "seasonality": [
+    0.85,
+    0.95,
+    0.95,
+    1.25
+  ],
+  "monthlySeasonalWeight": [
+    0.8,
+    0.85,
+    0.9,
+    0.94,
+    0.95,
+    0.96,
+    0.96,
+    0.94,
+    0.95,
+    1.05,
+    1.3,
+    1.4
+  ],
+  "typicalCapex": [
+    {
+      "label": "Fixtures, shelving & display",
+      "category": "FF&E",
+      "cost": 70000,
+      "usefulLifeYears": 7
+    },
+    {
+      "label": "Storefront buildout",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 90000,
+      "usefulLifeYears": 12
+    },
+    {
+      "label": "POS & security systems",
+      "category": "EQUIPMENT",
+      "cost": 15000,
+      "usefulLifeYears": 5
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.45,
+      "high": 0.55,
+      "source": "IBISWorld 45811"
+    },
+    "laborPctOfRevenue": {
+      "low": 0.12,
+      "high": 0.2,
+      "source": "IBISWorld 45811 — independent specialty retail, all store labor"
+    },
+    "occupancyPctOfRevenue": {
+      "low": 0.07,
+      "high": 0.14,
+      "source": "IBISWorld 45811 — full OCCUPANCY line (rent, utilities, property insurance, repairs)"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.04,
+      "high": 0.12,
+      "source": "IBISWorld 45811 — independent store level, after a market-rate owner salary"
+    }
+  },
+  "monthlyRent": 5250,
+  "preOpening": {
+    "payrollAndTraining": 12000,
+    "marketing": 10000,
+    "permitsAndLegal": 6000
+  },
+  "generalLiabilityInsurancePerYear": 3500,
+  "propertyInsurancePerYear": 3000,
+  "accountingAndLegalPerYear": 6000,
+  "softwareAndPosPerYear": 4800,
+  "permitsAndLicensesPerYear": 1500,
+  "utilitiesPerQuarter": 3000,
+  "ownerCompPerYear": 70000,
+  "badDebtPctOfRevenue": 0.002,
+  "repairsPctOfRevenue": 0.006,
+  "cardProcessingRate": 0.029,
+  "cardMixPct": 0.95,
+  "volumeNoun": "sales"
+}

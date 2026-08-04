@@ -6,7 +6,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 |---|---|---|
 | **M0 — Scaffold** | ✅ Done | pnpm workspace, strict TS, `@bizsim/money`, zod schemas, pre-push verification, boundary enforcement, `sim` CLI |
 | **M1 — Core engine (TRAFFIC)** | ✅ Done | Full tick, all four cost classes, working capital, tax, debt, three statements, 12 articulation assertions, crisis ladder, insolvency, provenance trace |
-| **M2 — Archetypes + seeds** | 🟡 Mostly | All six archetypes property-tested at 1,000 cases each; 6 of 12+ templates calibrated and in band |
+| **M2 — Archetypes + seeds** | ✅ Done | All six archetypes property-tested at 1,000 cases each; all 12 §4.7 templates calibrated and in band |
 | **M3 — LLM concept path** | 🟡 Mostly | `packages/llm` interviews, drafts and maps into `buildModelFromTemplate`; wired into `pnpm sim --new`. Governed by [D-5](./04-risks-and-decisions.md#d-5--the-absurdity-principle--the-ai-pushes-back-on-impossibility-never-on-implausibility). No live-call test yet |
 | **M4 — Challenge loop** | 🟡 Mostly | The §11.3 contract, isolated from the thread, with rules 1 and 6 enforced in code rather than requested. Adversarial fixtures and the sycophancy regression are in the suite. `ADJUST_ASSUMPTION` now writes through to the model, which it never did. Reverse challenge (§11.3.1) fires on out-of-band assumptions. Cost catalog at 146 items with word-boundary keyword routing — labor, equipment, licences, services and COGS bands across the played business types. Authored ranges, not retrieved ones (below) |
 | **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` (§11.5) narrates every pause — headline, narrative and suggested questions over the engine's screen, money-guarded like the advisor, silent when it cannot pass the guard. `attributions` deferred (below). `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
@@ -53,7 +53,7 @@ the books stop tying looks exactly like a run where they don't, until someone ch
 ## M2 status
 
 All six archetypes hold every §8.4 invariant across 1,000 randomized parameter sets × 40 quarters each.
-Six templates are calibrated and land in band at maturity:
+All twelve §4.7 templates are calibrated and land in band at maturity:
 
 | Template | Archetype | Maturity | EBITDA margin | Band |
 |---|---|---|---|---|
@@ -63,6 +63,21 @@ Six templates are calibrated and land in band at maturity:
 | B2B SaaS | SUBSCRIPTION | Y9 | −11.7% at Y8 | −15–30% |
 | Self-storage facility | OCCUPANCY | Y6 | 28.8% | 18–45% |
 | General contractor | PROJECT_BACKLOG | Y4 | 6.7% | 3–12% |
+| Quick-service restaurant | TRAFFIC | Y3 | 17.1% | 10–20% |
+| Coffee shop | TRAFFIC | Y3 | 16.4% | 6–17% |
+| Retail shop | TRAFFIC | Y3 | 10.7% | 4–12% |
+| Marketing agency | UTILIZATION | Y4 | 13.3% | 8–20% |
+| Trades contractor | PROJECT_BACKLOG | Y4 | 16.2% | 8–18% |
+| Gym / fitness studio | SUBSCRIPTION | Y5 | 15.6% | 10–25% |
+
+The second six reuse archetypes the first six proved, so each was authored as JSON and calibrated
+from the CLI — which is what §4.7 predicted authoring-as-data would buy. The two that fought back:
+the trades contractor opened capacity-bound (flat revenue at its own execution ceiling — the fix was
+headroom, not margin), and the gym is a SUBSCRIPTION business whose first draft ramped like a SaaS,
+burning $2.2M of rent before members stabilised. The calibrated gym front-loads acquisition
+(presale-style ramp floor), churns at a realistic 13%/quarter, and prices at $55/month — the
+CAC-drip toward steady state is exactly the dynamic that kills real gyms, and the template now
+survives it with a peak cash need of $1.6M against $2.0M raised.
 
 Two bands were widened from the initial guess, with the reason recorded in the template's own
 `source` string rather than silently: self-storage because the published 60%+ figures are
@@ -174,8 +189,6 @@ which the reference model omitted — the same reason its year three sat above b
 
 ## What is deliberately not built
 
-- **Six more seed templates**, to reach the twelve §4.7 asks for: quick-service food, retail shop, coffee
-  shop, marketing agency, trades contractor, gym/fitness studio.
 - **The rest of the cost catalog, and its verification.** 146 items of D-2's ~500 — the trades, equipment,
   licences and rate bands the played business types actually hit. Two honest caveats. Coverage accretes:
   until an item exists, rule 1 still clamps against the draft's own estimated range. And the ranges are
