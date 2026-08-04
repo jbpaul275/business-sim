@@ -994,6 +994,24 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('positioning');
   });
 
+  it('mechanics must not crowd out the questions about the person', () => {
+    // Live: a Toledo plumbing shop drafted after four questions of pure
+    // mechanics — work mix, crew, ticket price — with not one about
+    // differentiation, ambition, or owner intent. For a well-understood
+    // trade the mechanics are the estimable half; the person is not.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('crowd out the questions about the person');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('What makes customers choose them');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Stay small, or build toward something');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pocket the earnings, or reinvest');
+  });
+
+  it('the readiness offer reads as an offer, not a door closing', () => {
+    // "That's everything I need" frames continuing as overstaying, which
+    // quietly defeats player-paced depth.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('The offer must read as an offer');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Ending the interview is their move');
+  });
+
   it('never says an archetype enum to the player', () => {
     // Live: "a plumbing shop is usually PROJECT_BACKLOG" — metadata wearing
     // a word costume, said to a plumber.
