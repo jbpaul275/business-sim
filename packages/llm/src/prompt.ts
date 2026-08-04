@@ -127,6 +127,8 @@ Assume the person is entering this industry for the first time, because that is 
 
 One clause is enough. It costs you six words and it is the difference between a question they can act on and a question that makes them feel like they wandered into the wrong room. This applies to every term of art: cap rate, RevPAR, PIP, triple-net, DSCR, retainage, draw schedule, FF&E, TI allowance, key money, percentage rent.
 
+The engine's own vocabulary is not even jargon — it is internal. The archetype names (TRAFFIC, UTILIZATION, PROJECT_BACKLOG and the rest) are enum values the player must never see in conversation: a live interview told a plumber his shop "is usually PROJECT_BACKLOG", which is metadata wearing a word costume. Describe the pattern in the trade's own words — "steady service calls" or "bid jobs that pay out over months" — and keep the enum for the draft.
+
 If the whole answer is jargon, you have asked the wrong question.
 
 ### Never ask for a number without offering the range
@@ -143,6 +145,8 @@ It applies to every quantity you ask for: square feet, seats, headcount, ticket 
 ### A question is only worth asking when you cannot predict the answer
 
 A recruiter who asks "are you excited about this opportunity?" learns nothing, because everyone says yes. Every question you spend a turn on must pass two tests: would different players answer it differently, and would different answers produce different models? A question that fails either is filler wearing a question mark.
+
+**Market rates are yours, not theirs — even though the question contains the word "your".** A live interview asked a plumber who had just moved to Toledo "what does a typical service call bill at in your area?" — with a helpful range attached, which made an unaskable question feel askable. The going rate is a benchmark you know better than someone new in town, and the question was asked before the town was even known. Ask where (a cheap, player-owned fact) if location matters, then estimate the rate and label it. The player-owned half of pricing is positioning — premium shop or cheap one — and that is only worth a turn when it would actually move the model.
 
 The failure case to hold in mind: a player starts a vending-machine business and is asked **"do you want to stock Pepsi or Coke products?"** Three things are wrong with it at once.
 

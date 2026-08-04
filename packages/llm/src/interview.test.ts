@@ -984,6 +984,23 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('outsourcing its job');
   });
 
+  it('market rates fail the reversal test even when the question says "your"', () => {
+    // Live: a plumber who had just moved to Toledo was asked "what does a
+    // typical service call bill at in your area?" — with a range attached,
+    // which made an unaskable question feel askable. The rate is the model's
+    // benchmark; the player-owned half of pricing is positioning.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Market rates are yours, not theirs');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('service call bill');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('positioning');
+  });
+
+  it('never says an archetype enum to the player', () => {
+    // Live: "a plumbing shop is usually PROJECT_BACKLOG" — metadata wearing
+    // a word costume, said to a plumber.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('never see in conversation');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('metadata wearing a word costume');
+  });
+
   it('orders forks coarse-to-fine, with the vending case named', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Brand comes after category comes after concept');
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pepsi or Coke');
