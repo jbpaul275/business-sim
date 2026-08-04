@@ -31,6 +31,11 @@ export const WEB_COMMANDS: readonly string[] = [
   'marketing <amount> — set marketing spend per quarter; diminishing returns',
   'assume <id> <value> — revise a model assumption by id: a COGS rate, a revenue share, a cost per unit. This is how supplier switches and renegotiated terms are recorded',
   'hire <line> [n] / fire <line> [n] — add or remove staffed blocks; cost lands now, capacity next quarter',
+  'expand <units> <cost> — more capacity at the current site; two-quarter buildout',
+  'market <pct> <cost> — open a new territory: more addressable demand, not more capacity; two quarters. Only where demand is territorial (traffic or billable-hours businesses)',
+  'upgrade <pct> <cost> — a better product: raises what customers will pay; two quarters',
+  'debt <amount> [quarters] — raise a term loan (fee now, proceeds next quarter); draw <amount> — draw the revolver; repay <amount> — pay principal down on the largest balance',
+  'inject <amount> — move household cash into the business; distribute <amount> — take cash out to the household',
   'skip <n> — run quarters unattended',
 ];
 
@@ -218,6 +223,53 @@ export function parseSuggestion(command: string, business: Business): SuggestedM
       const n = num(tokens[2]) ?? 1;
       if (!Number.isInteger(n) || n < 1 || n > 5) return undefined;
       return { type: 'staff', costId: cost.id, delta: verb === 'hire' ? n : -n };
+    }
+    const pctOf = (raw: string | undefined): number | undefined => {
+      const value = num(raw?.replace('%', ''));
+      return value !== undefined && value > 0 ? value : undefined;
+    };
+    if (verb === 'expand') {
+      const units = num(tokens[1]);
+      const cost = num(tokens[2]);
+      if (units === undefined || units <= 0 || cost === undefined || cost <= 0) return undefined;
+      return { type: 'expand', units, cost };
+    }
+    if (verb === 'upgrade' || verb === 'renovate') {
+      const pct = pctOf(tokens[1]);
+      const cost = num(tokens[2]);
+      if (pct === undefined || pct > 100 || cost === undefined || cost <= 0) return undefined;
+      return { type: 'upgrade', pct, cost };
+    }
+    if (verb === 'market') {
+      const pct = pctOf(tokens[1]);
+      const cost = num(tokens[2]);
+      const kind = business.streams[0]?.params.kind;
+      if (kind !== 'UTILIZATION' && kind !== 'TRAFFIC') return undefined;
+      if (pct === undefined || cost === undefined || cost <= 0) return undefined;
+      return { type: 'territory', pct, cost };
+    }
+    if (verb === 'debt') {
+      const amount = num(tokens[1]);
+      if (amount === undefined || amount <= 0) return undefined;
+      const quarters = num(tokens[2]);
+      return { type: 'debt', amount, ...(quarters && quarters > 0 ? { quarters } : {}) };
+    }
+    if (verb === 'draw') {
+      const amount = num(tokens[1]);
+      if (amount === undefined || amount <= 0) return undefined;
+      if (!business.debts.some((d) => d.kind === 'REVOLVER')) return undefined;
+      return { type: 'draw', amount };
+    }
+    if (verb === 'repay') {
+      const amount = num(tokens[1]);
+      if (amount === undefined || amount <= 0) return undefined;
+      if (!business.debts.some((d) => d.outstandingPrincipal > 0n)) return undefined;
+      return { type: 'repay', amount };
+    }
+    if (verb === 'inject' || verb === 'distribute') {
+      const amount = num(tokens[1]);
+      if (amount === undefined || amount <= 0) return undefined;
+      return { type: verb, amount };
     }
     return undefined;
   })();

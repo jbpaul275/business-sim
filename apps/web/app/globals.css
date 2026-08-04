@@ -963,3 +963,21 @@ select:focus {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* The occasional moves: capital, growth, and owner cash, behind a toggle. */
+.morebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  padding: 8px 16px 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.morebar .pair {
+  display: flex;
+  gap: 6px;
+}
+.morebar .pair input {
+  width: 90px;
+}

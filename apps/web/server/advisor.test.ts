@@ -128,9 +128,10 @@ describe('the conversation', () => {
     expect(chat).toHaveLength(2);
     expect(chat[0]!.who).toBe('you');
     expect(chat[1]!.who).toBe('advisor');
-    // `expand` has no web control, so only the marketing chip survives.
+    // Both suggestions now map to web levers and become chips.
     expect(chat[1]!.suggested).toEqual([
       { command: 'marketing 25000', stage: { type: 'marketing', value: 25000 } },
+      { command: 'expand 100 500000', stage: { type: 'expand', units: 100, cost: 500_000 } },
     ]);
   });
 
@@ -192,9 +193,37 @@ describe('parseSuggestion', () => {
         stage: { type: 'staff', costId: line.id, delta: 2 },
       });
     }
-    expect(parseSuggestion('debt 500000', b)).toBeUndefined();
+    expect(parseSuggestion('clone 250000 second-site', b)).toBeUndefined();
     expect(parseSuggestion('assume not_a_real_id 0.4', b)).toBeUndefined();
     expect(parseSuggestion('price minus-forty', b)).toBeUndefined();
+  });
+
+  it('parses the growth and money verbs, gated by what the business has', () => {
+    const b = business();
+    expect(parseSuggestion('expand 40 200000', b)).toEqual({
+      command: 'expand 40 200000',
+      stage: { type: 'expand', units: 40, cost: 200_000 },
+    });
+    expect(parseSuggestion('upgrade 15% 250000', b)).toEqual({
+      command: 'upgrade 15% 250000',
+      stage: { type: 'upgrade', pct: 15, cost: 250_000 },
+    });
+    // Storage is OCCUPANCY — no territory to open.
+    expect(parseSuggestion('market 40% 150000', b)).toBeUndefined();
+    expect(parseSuggestion('debt 300000 20', b)).toEqual({
+      command: 'debt 300000 20',
+      stage: { type: 'debt', amount: 300_000, quarters: 20 },
+    });
+    expect(parseSuggestion('inject 50000', b)).toEqual({
+      command: 'inject 50000',
+      stage: { type: 'inject', amount: 50_000 },
+    });
+    expect(parseSuggestion('distribute 25000', b)).toEqual({
+      command: 'distribute 25000',
+      stage: { type: 'distribute', amount: 25_000 },
+    });
+    // An upgrade that more than doubles willingness to pay is a different business.
+    expect(parseSuggestion('upgrade 400% 100000', b)).toBeUndefined();
   });
 
   it('validates assume ids against the actual register', () => {

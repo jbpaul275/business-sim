@@ -47,7 +47,15 @@ export type StagedMove =
   | { type: 'price'; value: number }
   | { type: 'marketing'; value: number }
   | { type: 'assume'; assumptionId: string; value: string }
-  | { type: 'staff'; costId: string; delta: number };
+  | { type: 'staff'; costId: string; delta: number }
+  | { type: 'expand'; units: number; cost: number }
+  | { type: 'upgrade'; pct: number; cost: number }
+  | { type: 'territory'; pct: number; cost: number }
+  | { type: 'debt'; amount: number; quarters?: number }
+  | { type: 'draw'; amount: number }
+  | { type: 'repay'; amount: number }
+  | { type: 'inject'; amount: number }
+  | { type: 'distribute'; amount: number };
 
 export interface SuggestedMove {
   command: string;

@@ -84,6 +84,8 @@ export interface GameView {
   debts: { label: string; detail: string }[];
   price: { value: number; per: string };
   marketingPerQuarter: number;
+  /** Which of the occasional moves this business can express. */
+  moves: { territory: boolean; revolver: boolean; expandNoun: string };
   attributions: AttributionView[];
   log: TurnLogView[];
   /**
@@ -268,7 +270,8 @@ export function toView(session: GameSession): GameView {
   const debts = business.debts
     .filter((d) => d.outstandingPrincipal > 0n || d.revolverLimit !== undefined)
     .map((d) => ({
-      label: d.label,
+      // "SBA_7A facility" is an enum wearing a label; say it like a banker.
+      label: d.label.replace(/SBA_7A/g, 'SBA 7(a)').replace(/_/g, ' '),
       detail:
         d.revolverLimit !== undefined
           ? `${compact(d.outstandingPrincipal)} drawn of ${compact(d.revolverLimit)} @ ${pct(d.annualRate)}`
@@ -298,6 +301,13 @@ export function toView(session: GameSession): GameView {
     debts,
     price: { value: units.command, per: units.per },
     marketingPerQuarter: stream ? Number(stream.marketingSpendPerQuarter) / 100 : 0,
+    moves: {
+      // A second territory is more market, not more room — it only exists
+      // where demand is territorial (see actions.ts / play.ts `market`).
+      territory: stream?.params.kind === 'UTILIZATION' || stream?.params.kind === 'TRAFFIC',
+      revolver: business.debts.some((d) => d.kind === 'REVOLVER'),
+      expandNoun: stream?.params.kind === 'OCCUPANCY' ? 'units' : 'seats',
+    },
     attributions: session.attributions.map(toAttributionView),
     log: [...session.log].reverse().slice(0, 24).map(toLogView),
     advisor: session.advisor,
