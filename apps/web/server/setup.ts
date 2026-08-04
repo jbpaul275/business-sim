@@ -66,8 +66,6 @@ export interface SeedChoice {
   scenario: string;
   templateId: string;
   label: string;
-  /** The card's eigen question — the one thing the greeting asks. */
-  question: string;
 }
 
 export interface SetupSession {
@@ -150,10 +148,13 @@ export function createSetup(
     chat: [
       {
         who: 'model',
-        // One question, then a conversation. The template covers the
-        // economics; the eigen question asks for the one thing it can't.
+        // One question, then a conversation — and it is the question that
+        // divides the two players this game serves: the investor who arrives
+        // with research and wants it pressure-tested, and the daydreamer who
+        // arrives with a vibe and wants help turning it into a business. The
+        // options exhaust the space structurally; no reassurance tail needed.
         text: seed
-          ? `${seed.label} it is. ${seed.question}`
+          ? `${seed.label} it is. Do you have an idea in mind already, or would you like me to help you come up with one?`
           : 'What kind of business do you want to run? A half-formed idea is plenty.',
       },
     ],

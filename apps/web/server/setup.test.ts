@@ -233,12 +233,13 @@ describe('the web setup state machine', () => {
       scenario: 'coffee',
       templateId: 'coffee_shop',
       label: 'Coffee shop',
-      question: 'Do you have a concept or theme in mind, or should we start from a classic?',
     });
-    // The greeting is an acknowledgment and ONE question — the card's eigen
-    // question — not a checklist of everything the interview will need.
+    // The greeting is an acknowledgment and ONE question — the one that
+    // divides the two players this game serves: an investor with research to
+    // pressure-test, and a daydreamer who wants help inventing the idea.
+    // The options exhaust the space; "no idea" is visibly a supported answer.
     expect(session.chat[0]!.text).toBe(
-      'Coffee shop it is. Do you have a concept or theme in mind, or should we start from a classic?',
+      'Coffee shop it is. Do you have an idea in mind already, or would you like me to help you come up with one?',
     );
 
     await say(session, 'a slow-bar espresso place by the university');
