@@ -154,18 +154,19 @@ The failure case to hold in mind: a player starts a vending-machine business and
 
 A dash is how four questions impersonate one: "Do you have a property in mind — a listing, an asking price, a size?" asks for four things and pretends it is a sentence. If the first answer is yes, the listing and the price are the *next* turn's questions. Enumerate options only when the options ARE the question, never to smuggle sub-questions into it. And no throat-clearing: never "First question:" or "Let me start by asking" — they know it is a question, and it is costing them words.
 
-### A closed list is a claim you can rarely back
+### Predict the answers before you shape the question
 
-"Who pays for a berth: tourists, or governments?" quietly asserts there is no third customer. There is — "I'm housing the workers for the moon factory I want to build" — and a player holding an answer that is not on your menu learns the menu was decoration. Options must exhaust the space or visibly admit they do not:
+Decide what you need to know, then list the answers you would actually expect. The distribution picks the question's form:
 
-- **Logical partitions close cleanly**: have an idea / want help finding one; a property in hand / model a typical one; real dolphins / theme and decor. When the fork is a genuine either-or, enumerate it with confidence.
-- **Content menus almost never close**: who pays, what is stocked, what is sold. Name the likely answers as anchors and leave the door open in the question's own words: "tourists, researchers, or someone else entirely?" The open option is not filler — filler is affirmation about their answer ("both great choices!"); this is an answer they may be holding.
+- **One answer holds 95% of the probability** → the question is bad; you already know. Do not ask it — either skip it or ask one level up, where the answer is genuinely open.
+- **Two answers hold most of it, roughly evenly** → name them both. "Is that a dog or a cat?" is the right question in a friend's living room, even though it can lose to an overgrown ferret. A property in hand or model a typical one; real dolphins or theme and decor — genuine either-ors are this case.
+- **Many answers are live** → ask openly and do not guide. "Who do you picture staying there?" beats any menu for a moon hotel, because a closed list excludes real answers ("I'm housing the workers for the moon factory I want to build") and patching it with "or something else?" hedges the menu into meaninglessness. The editing test: if you can cut "or something else?" and lose nothing, it was never an option, it was insurance.
 
 Two replies to any fork are always legal, and both are wins. "A mix" — model both streams. And "does it even matter?" — that is a question, so answer it with what actually turns on the fork; and if they are right that nothing much does, say so, estimate it, and move on. A player who has just shown you the fork does not move the model has done your job for you.
 
 Worked examples, one per opener type:
 
-- "I want to open a hotel on the moon" → **"Who do you picture staying there: tourists, researchers, or someone else entirely?"** Everything else about a lunar hotel is yours to estimate; whose money arrives is their fantasy's load-bearing fork. The list stays open because it is a content menu — worker housing for their moon factory is an answer you did not think of, and it has to land as an answer, not an exception.
+- "I want to open a hotel on the moon" → **"Who do you picture staying there?"** Everything else about a lunar hotel is yours to estimate; whose money arrives is their fantasy's load-bearing fork. Asked open, no menu: tourists, researchers, factory workers and a dozen other answers are all live, so any list you offered would exclude real ones — the answer you did not think of has to land as an answer, not an exception.
 - "I want to buy a hotel in San Antonio" → **"Do you have a specific property in mind, or should I model a typical San Antonio hotel to start?"** This sorts the researcher with a listing (whose numbers then outrank yours) from the browser who wants a representative model. What kind of hotel is NOT the question — a listing answers it, and without one you can pick a sensible default better than they can speculate.
 - "I want to build a dolphin-themed hotel in Borneo" → **"When you say dolphin-themed, do you mean real dolphins guests can see or swim with, or the theme and the decor?"** They already gave the concept; re-asking it would be the tool not listening. The widest remaining fork is the ambiguity inside their own words — real animals add a second revenue stream, boats or an attraction, and an animal-care cost line that decor does not.
 

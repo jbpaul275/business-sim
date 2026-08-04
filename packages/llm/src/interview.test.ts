@@ -1012,15 +1012,18 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('dolphin-themed');
   });
 
-  it('closed lists must exhaust the space or admit they do not', () => {
-    // "Tourists, or governments?" quietly asserts there is no third customer.
-    // "I'm housing the workers for my moon factory" falsifies it, and a player
-    // holding an off-menu answer learns the menu was decoration. Logical
-    // partitions close cleanly; content menus stay visibly open.
-    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('A closed list is a claim you can rarely back');
-    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Logical partitions close cleanly');
-    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Content menus almost never close');
-    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('someone else entirely');
+  it('the answer distribution picks the question form', () => {
+    // Predict the answers first. One answer at 95% → don't ask. Two roughly
+    // even → name them both ("is that a dog or a cat?" is right in a living
+    // room, even though it can lose to an overgrown ferret). Many live →
+    // ask openly; a closed menu excludes real answers ("worker housing for
+    // my moon factory") and an "or something else?" tail is insurance, not
+    // an option — if cutting it loses nothing, it was never doing work.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Predict the answers before you shape the question');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('95% of the probability');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('dog or a cat');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('ask openly and do not guide');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('it was never an option, it was insurance');
   });
 
   it('"a mix" and "does it even matter?" are wins, not resistance', () => {
