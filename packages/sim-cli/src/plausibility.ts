@@ -483,3 +483,72 @@ function projectAtCapacity(draft: ConceptDraft): CapacityCheck | undefined {
     return undefined;
   }
 }
+
+/**
+ * A cost the business pays twice.
+ *
+ * Live: a solo recruiting firm's register carried "Accounting & legal" AND
+ * "Accounting, legal, and compliance" at $2,500 each, and "Software, POS &
+ * subscriptions" beside "Recruiting software stack" at $9,000 each — the
+ * omission-guard's standard overhead lines landing next to custom cost lines
+ * that describe the same spend, because the draft set both the overhead
+ * field and its own line. Same failure for owner comp: "Owner compensation"
+ * plus a "Founder salary" staffing block is one founder paid twice.
+ *
+ * Deterministic and label-based on purpose: the overhead fields are a fixed
+ * vocabulary, so each has a narrow keyword family, tuned to fire on the
+ * duplication rather than on a difference of opinion. Survivable-warning
+ * class — it feeds the repair loop and rides to review if unfixed — because
+ * a rare business genuinely carries both (a second office's rent beside the
+ * first), and the player is the one who knows.
+ */
+export function duplicateOverheadIssues(draft: ConceptDraft): string[] {
+  const o = draft.overheads;
+  const checks: { amount: number; field: string; pattern: RegExp }[] = [
+    {
+      amount: o.accountingAndLegalPerYear,
+      field: 'the standard accounting & legal overhead (accountingAndLegalPerYear)',
+      pattern: /account|\blegal\b|compliance|bookkeep/i,
+    },
+    {
+      amount: o.softwareAndPosPerYear,
+      field: 'the standard software & subscriptions overhead (softwareAndPosPerYear)',
+      pattern: /software|subscription|saas|\bpos\b|\bcrm\b|\bats\b/i,
+    },
+    {
+      amount: o.generalLiabilityInsurancePerYear + o.propertyInsurancePerYear,
+      field: 'the standard insurance overheads',
+      pattern: /insurance|\be&o\b|liabilit/i,
+    },
+    {
+      amount: o.permitsAndLicensesPerYear,
+      field: 'the standard permits & licenses overhead (permitsAndLicensesPerYear)',
+      pattern: /permit|licen/i,
+    },
+    {
+      amount: o.utilitiesPerQuarter,
+      field: 'the standard utilities overhead (utilitiesPerQuarter)',
+      pattern: /utilit/i,
+    },
+    // monthlyRent is deliberately absent: it drives the lease-signing outlay
+    // (§5.4) and coexists with a "Rent" cost line in every normal draft —
+    // both set is the standard shape, not a duplicate.
+    {
+      amount: o.ownerCompPerYear,
+      field: 'the standard owner compensation (ownerCompPerYear)',
+      pattern: /owner comp|owner salary|owner draw|founder salary|founder comp/i,
+    },
+  ];
+
+  const issues: string[] = [];
+  for (const line of draft.costLines) {
+    const hit = checks.find((c) => c.amount > 0 && c.pattern.test(line.label));
+    if (hit) {
+      issues.push(
+        `'${line.label}' duplicates ${hit.field}, which is also set — the business would pay ` +
+          `twice for the same thing. Zero the overhead field and keep the custom line, or drop the line.`,
+      );
+    }
+  }
+  return issues;
+}

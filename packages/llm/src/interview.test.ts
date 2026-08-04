@@ -160,6 +160,48 @@ describe('ConceptInterview', () => {
     expect(system).toContain('the business comes from what they tell you');
   });
 
+  it('borrowing a template means pruning it, and outcomes are not hours', async () => {
+    // Live: a solo contingency recruiter seeded from the services template got
+    // its freelance-overflow COGS (35% of revenue for freelancers the player
+    // had explicitly replaced with $2/interview AI) and its billable-hours
+    // vocabulary ($812.50/hr) — both survived a concept that deleted them.
+    const transport = new ScriptedTransport([asks('Where?')]);
+    const interview = new ConceptInterview({
+      transport,
+      templates: [{ id: 'professional_services_firm', label: 'Professional services firm' }],
+    });
+    await interview.send('a recruiting firm');
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('Borrowing a template means pruning it');
+    expect(system).toContain("must survive the player's own description");
+    // Live: a food truck kept a 2,000 sq ft floor-area assumption — a
+    // storefront's number on a vehicle with ~200 usable square feet.
+    expect(system).toContain('Scale parameters are lines too');
+    expect(system).toContain('Pay-per-outcome revenue is not billable hours');
+    expect(system).toContain('unit of outcome');
+  });
+
+  it('an implausibly good number is the thesis, not an error to repair', async () => {
+    // Live: "$2/interview" (100x better than human-delivered) was silently
+    // re-scaled toward the prior. The gap WAS the margin thesis.
+    const transport = new ScriptedTransport([asks('Where?')]);
+    await new ConceptInterview({ transport }).send('a recruiting firm');
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('An implausibly good number is usually the thesis');
+    expect(system).toContain('if this number is wrong, nothing else matters');
+  });
+
+  it('a converted figure is only as player-sourced as its conversion', async () => {
+    // Live: "$2/interview" became "$200 per billable hour, PLAYER_SOURCED" —
+    // the player's number scaled by a model-invented ratio, with the model's
+    // guess laundered through the player's provenance tag.
+    const transport = new ScriptedTransport([asks('Where?')]);
+    await new ConceptInterview({ transport }).send('a recruiting firm');
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('only as player-sourced as its conversion');
+    expect(system).toContain('if you supplied the ratio, the result is LLM_ESTIMATE');
+  });
+
   it('offers templates only when there are templates to offer', async () => {
     const transport = new ScriptedTransport([asks('Where is it?')]);
     const interview = new ConceptInterview({

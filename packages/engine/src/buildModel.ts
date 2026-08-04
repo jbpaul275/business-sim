@@ -19,6 +19,7 @@ import {
   type VariableRevenueCost,
   type StepFixedCost,
   type FixedPeriodCost,
+  type VolumeDriver,
 } from '@bizsim/schemas';
 import { injectOmissionGuardLines, payrollLoadPct } from './omissionGuard.js';
 
@@ -130,6 +131,21 @@ function assume(
 
   sink.out.push(assumption);
 }
+
+/**
+ * The generic word for a driver's unit, used when a cost line is gated on a
+ * different driver than the business's binding unit and the stream's own
+ * volume noun would name the wrong thing.
+ */
+const DRIVER_NOUN: Record<VolumeDriver, string> = {
+  TRANSACTIONS: 'transactions',
+  ORDERS: 'orders',
+  BILLABLE_HOURS: 'billable hours',
+  OCCUPIED_UNITS: 'units occupied',
+  SUBSCRIBERS: 'subscribers',
+  PROJECTS_ACTIVE: 'active projects',
+  REVENUE: 'revenue',
+};
 
 const humanise = (key: string): string =>
   key
@@ -559,11 +575,29 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
       sourceNote: note,
       ...(bandFor(cost.id, 'money') ? { benchmarkBand: bandFor(cost.id, 'money')! } : {}),
     });
-    assume(sink, `costs.${cost.id}.capacityPerBlock`, `${cost.label} — capacity per block`, cost.capacity.capacityPerBlock, {
-      category: 'COST',
-      unit: 'count',
-      sourceNote: 'Volume one block supports before the next step is required.',
-    });
+    // A bare "11,000" beside dollar lines reads as money — a play-tester took
+    // a crew shift's transaction capacity for a $11,000 cost. The label names
+    // what the count counts, in the trade's own word where the driver is the
+    // business's binding unit. REVENUE-driver capacity is stored in cents (see
+    // the STEP_FIXED build above) and stays unlabelled rather than wearing a
+    // noun its raw value would contradict.
+    const capacityNoun =
+      cost.capacity.driver === 'REVENUE'
+        ? undefined
+        : cost.capacity.driver === ARCHETYPE_DRIVER[archetype]
+          ? stream.volumeNoun
+          : DRIVER_NOUN[cost.capacity.driver];
+    assume(
+      sink,
+      `costs.${cost.id}.capacityPerBlock`,
+      `${cost.label} — capacity per block${capacityNoun ? ` (${capacityNoun})` : ''}`,
+      cost.capacity.capacityPerBlock,
+      {
+        category: 'COST',
+        unit: 'count',
+        sourceNote: 'Volume one block supports before the next step is required.',
+      },
+    );
   }
   for (const cost of withGuard.fixedPeriod) {
     assume(sink, `costs.${cost.id}.amountPerQuarter`, cost.label, cost.amountPerQuarter, {

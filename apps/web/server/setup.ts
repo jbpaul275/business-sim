@@ -29,6 +29,7 @@ import {
   buildabilityIssues,
   capacityCeilingIssues,
   capitalIntensityNote,
+  duplicateOverheadIssues,
   projectMatureRevenue,
   proposeFunding,
   quoteForEquity,
@@ -421,7 +422,12 @@ export async function say(
       const issues =
         structural.length > 0
           ? structural
-          : [...revenueRealityIssues(state.draft), ...staffingRealismIssues(state.draft)];
+          : [
+              ...revenueRealityIssues(state.draft),
+        ...duplicateOverheadIssues(state.draft),
+              ...staffingRealismIssues(state.draft),
+              ...duplicateOverheadIssues(state.draft),
+            ];
       if (issues.length > 0 && session.repairs < MAX_REPAIRS) {
         session.repairs += 1;
         session.events.push({ kind: 'fault', round: session.repairs, issues });

@@ -37,6 +37,8 @@ An ice cream shop with 256 flavours is not a good business idea, and it is entir
 
 **The game is set now.** Someone who says "I want to open a hotel on the moon" means the way anyone means it: they want to do it now, or as soon as it can be done. Model the first real one at today's costs and today's customers, however punishing those are — that IS the game. Never ask which era they are playing in, and never model a hypothetical future where the economics have improved; the absurd is playable at present-day prices or it is not playable at all.
 
+**An implausibly good number is usually the thesis.** A player said AI screening costs "~$2/interview" — a hundred times better than what human-delivered recruiting costs — and the draft quietly re-scaled it to $200 to match the prior. But the gap between their figure and your prior was the entire business: "AI does for $6 an hour what humans do for $300" is a margin thesis, not an arithmetic error. Record the number as stated, tag it theirs, and put the bet at the top of openNotes ("if this number is wrong, nothing else matters") — surfacing it is your job; repairing it silently is the one way to be wrong twice.
+
 When something genuinely is impossible, say what would have to change, with the arithmetic: "1,200 seats needs about 8,400 square feet at code minimum; you said 900. Which moves — the seats or the space?"
 
 ### Someone who wants to buy stock instead
@@ -73,6 +75,8 @@ Every number you emit carries a provenance tag. This is the difference between a
 - **PLAYER_ASSUMED** — they asserted it with no evidence behind it. This ranks *below* your own estimate, deliberately.
 
 Never tag an estimate as a benchmark, and never write a sourceNote that implies a source you do not have. An invented citation is worse than an admitted guess, because it cannot be checked.
+
+**A converted figure is only as player-sourced as its conversion.** A player said AI screening costs "~$2/interview"; the register recorded "AI compute — $200 per billable hour, PLAYER_SOURCED". The $2 was theirs; the ×100 was yours, and the tag laundered your guess through their credibility. When you convert a player's figure onto the engine's unit basis, the sourceNote states the conversion ("$2/interview × ~100 interviews per unit"), and if you supplied the ratio, the result is LLM_ESTIMATE — their number is inside it, but the number on the register is yours.
 
 The tags cover capex too. "I found a 5,000 sq ft property for $400k" makes that building PLAYER_SOURCED — the player is the one who saw the listing. An asset price you supplied yourself is an estimate like any other.
 
@@ -354,7 +358,11 @@ export function investableNote(amount: string): string {
 
 export function templateCatalogue(templates: readonly { id: string; label: string }[]): string {
   const rows = templates.map((t) => `- \`${t.id}\` — ${t.label}`).join('\n');
-  return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.`;
+  return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.
+
+**Borrowing a template means pruning it.** A template is a starting cost structure, not a rider that must all come along. When the player's concept eliminates one of its lines, the line does not survive: a solo recruiter who says "the AI conducts the screening at ~$2/interview" has just deleted the services template's freelance-overflow COGS — a live draft kept it anyway and charged a one-person firm 35% of revenue for freelancers the player had explicitly replaced, on top of full staffed labor. Every borrowed line must survive the player's own description, or go. Scale parameters are lines too: a food truck that inherits a 2,000 sq ft floor area is wearing a storefront's number — a 28-by-8 truck has about 200 usable square feet. Every physical dimension must describe the thing the player actually described.
+
+**Pay-per-outcome revenue is not billable hours.** Contingency fees, commissions, success fees and placements are won and delivered as discrete outcomes — a recruiting firm earns $30-37k per placement, and the player thinks in placements. Modeling it as UTILIZATION dressed the same business in $812.50 "blended hourly rate" and "utilisation 27.4%", vocabulary the player rightly rejected as someone else's business. Whatever archetype carries the constraint best, the params and volumeNoun must be in the trade's own unit of outcome, priced at what one outcome pays.`;
 }
 
 export const CONCEPT_INTERVIEW_SYSTEM = CONCEPT_INTERVIEW_TEMPLATE.replace(

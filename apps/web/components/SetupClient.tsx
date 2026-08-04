@@ -1,9 +1,8 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { SetupView } from '../server/setupView';
-import type { RegisterRowView } from '../server/view';
 import { groupDigits, ungroup } from './format';
 
 /**
@@ -261,11 +260,15 @@ export function SetupClient() {
           {error && <div className="share-error">{error}</div>}
           <div ref={chatEnd} />
 
-          {view.phase === 'INTERVIEW' && !busy && (
+          {(view.phase === 'INTERVIEW' || view.phase === 'FUNDING') && !busy && (
             <div className="say-row">
               <textarea
                 rows={2}
-                placeholder="Describe the business, or answer the question…"
+                placeholder={
+                  view.phase === 'FUNDING'
+                    ? 'Argue with the plan or the budget — a message reopens the conversation and redrafts…'
+                    : 'Describe the business, or answer the question…'
+                }
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
@@ -454,8 +457,21 @@ function FundingPanel({
     <div className="setup-card">
       <div className="card-title">Funding</div>
       <div className="card-line">
-        Opening costs {f.needed} — buildout, deposits and the first quarter of fixed costs before
-        any revenue lands. You have {f.investable}.
+        Opening costs {f.needed} before any revenue lands. You have {f.investable}.
+      </div>
+      {/* Itemized so it can be argued with: the player who opened a real firm
+          for $5k needs to see WHICH line invented an office. The chat below
+          stays open — a message about any of these reopens the conversation. */}
+      <div className="budget">
+        {f.budget.map((line) => (
+          <div className="budget-line" key={line.label}>
+            <span>{line.label}</span>
+            <span className="num">{line.amount}</span>
+          </div>
+        ))}
+      </div>
+      <div className="card-line quiet">
+        Wrong for your business? Say so in the chat — the model redrafts from your correction.
       </div>
       {!custom ? (
         <>
@@ -521,15 +537,18 @@ function ReviewPanel({
   const [objection, setObjection] = useState('');
   const [busy, setBusy] = useState(false);
   const [commitError, setCommitError] = useState<string | undefined>();
+  // Unset falls back to the first tab with an out-of-benchmark row, so the
+  // review opens where the arguments are.
+  const [regTab, setRegTab] = useState<string | undefined>();
 
-  const challenge = async (row: RegisterRowView): Promise<void> => {
+  const challenge = async (assumptionId: string): Promise<void> => {
     setBusy(true);
     setRuling(undefined);
     try {
       const res = await fetch(`/api/setup/${view.id}/challenge`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ assumptionId: row.id, value, basis }),
+        body: JSON.stringify({ assumptionId, value, basis }),
       });
       const data = (await res.json()) as { result?: ChallengeReply; view?: SetupView; error?: string };
       if (data.result) setRuling(data.result);
@@ -566,79 +585,154 @@ function ReviewPanel({
         </div>
       ))}
       <div className="register-head" style={{ marginTop: 10 }}>
-        <span>{r.register.length} assumptions</span>
+        <span>{r.registerCount} assumptions</span>
         <span>model confidence {r.confidence}</span>
       </div>
       <div className="review-register">
-        {r.register.map((a) => (
-          <div key={a.id} className={`assumption${r.arguable.includes(a.id) ? ' arguable' : ''}`}>
-            <div className="row1">
-              <span>{a.label}</span>
-              <span className="val">{a.value}</span>
-            </div>
-            <div className="row2">
-              <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
-                {a.provenance.toLowerCase().replace(/_/g, ' ')}
-              </span>
-              {a.deviation && <span className="deviation">{a.deviation}</span>}
-              <button
-                className="share-link"
-                onClick={() => {
-                  setOpen(open === a.id ? undefined : a.id);
-                  setValue('');
-                  setBasis('');
-                  setRuling(undefined);
-                }}
-              >
-                challenge
-              </button>
-            </div>
-            {open === a.id && (
-              <div className="challenge-form">
-                <div className="quiet" title={a.sourceNote}>
-                  {a.sourceNote}
-                </div>
-                <div className="say-row">
-                  <input
-                    placeholder="your number"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                  />
-                  <input
-                    placeholder="the basis — a quote, a listing, a model number (optional)"
-                    value={basis}
-                    onChange={(e) => setBasis(e.target.value)}
-                    style={{ flex: 2 }}
-                  />
+        {(() => {
+          const tabs = r.register;
+          const active =
+            tabs.find((t) => t.key === regTab) ?? tabs.find((t) => t.deviations > 0) ?? tabs[0];
+          if (!active) return null;
+          return (
+            <>
+              <div className="reg-tabs" role="tablist">
+                {tabs.map((t) => (
                   <button
-                    className="primary"
-                    disabled={busy || value.trim() === ''}
-                    onClick={() => void challenge(a)}
+                    key={t.key}
+                    role="tab"
+                    aria-selected={t.key === active.key}
+                    className={t.key === active.key ? 'active' : ''}
+                    onClick={() => setRegTab(t.key)}
                   >
-                    {busy ? 'Arguing…' : 'Argue it'}
+                    {t.label}
+                    <span className="reg-meta">
+                      {' '}
+                      {t.count}
+                      {t.deviations > 0 ? ` · ${t.deviations}⚠` : ''}
+                    </span>
                   </button>
-                </div>
-                <div className="quiet">
-                  A bare number moves it at most to the edge of its range; a real basis moves it
-                  properly.
-                </div>
-                {ruling && (
-                  <div className={`ruling ${ruling.ruling.toLowerCase()}`}>
-                    <strong>{ruling.ruling}</strong> {ruling.reasoning}
-                    {ruling.clarifyingQuestion && <div>? {ruling.clarifyingQuestion}</div>}
-                    {ruling.secondOrderEffect && <div>↳ {ruling.secondOrderEffect}</div>}
-                    {ruling.applied && (
-                      <div>
-                        → {ruling.resultingValue} · {ruling.provenance.toLowerCase().replace(/_/g, ' ')}
-                        {ruling.clamped ? ' (held at the edge of its range)' : ''}
-                      </div>
-                    )}
-                  </div>
-                )}
+                ))}
               </div>
-            )}
-          </div>
-        ))}
+              <div className="reg-hint">{active.hint}</div>
+              {active.groups.map((g) => (
+                <details className="reg-group" key={g.label} open={g.deviations > 0}>
+                  <summary>
+                    <span>{g.label}</span>
+                    <span className="reg-meta">
+                      {g.count}
+                      {g.deviations > 0 ? ` · ${g.deviations} outside benchmark` : ''}
+                    </span>
+                  </summary>
+                  <table className="reg-table">
+                    <tbody>
+                      {g.rows.map((a) => (
+                        <Fragment key={a.id}>
+                          <tr
+                            className={`assumption${r.arguable.includes(a.id) ? ' arguable' : ''}`}
+                            title={a.sourceNote}
+                          >
+                            <td className="rt-label">
+                              {a.label}
+                              {a.deviation && <span className="deviation">{a.deviation}</span>}
+                            </td>
+                            <td className="rt-val">{a.value}</td>
+                            <td className="rt-esc">
+                              {a.escalator && a.escalatorId ? (
+                                <button
+                                  className="share-link"
+                                  title="Annual escalator — click to challenge it"
+                                  onClick={() => {
+                                    setOpen(open === a.escalatorId ? undefined : a.escalatorId);
+                                    setValue('');
+                                    setBasis('');
+                                    setRuling(undefined);
+                                  }}
+                                >
+                                  {a.escalator}/yr
+                                </button>
+                              ) : (
+                                <span className="quiet">—</span>
+                              )}
+                            </td>
+                            <td className="rt-prov">
+                              <span className={`prov ${a.provenance.toLowerCase().replace(/_/g, '-')}`}>
+                                {a.provenance.toLowerCase().replace(/_/g, ' ')}
+                              </span>
+                            </td>
+                            <td className="rt-act">
+                              <button
+                                className="share-link"
+                                onClick={() => {
+                                  setOpen(open === a.id ? undefined : a.id);
+                                  setValue('');
+                                  setBasis('');
+                                  setRuling(undefined);
+                                }}
+                              >
+                                challenge
+                              </button>
+                            </td>
+                          </tr>
+                          {(open === a.id ||
+                            (a.escalatorId !== undefined && open === a.escalatorId)) && (
+                            <tr>
+                              <td colSpan={5}>
+                                <div className="challenge-form">
+                                  <div className="quiet" title={a.sourceNote}>
+                                    {a.sourceNote}
+                                  </div>
+                                  <div className="say-row">
+                                    <input
+                                      placeholder="your number"
+                                      value={value}
+                                      onChange={(e) => setValue(e.target.value)}
+                                    />
+                                    <input
+                                      placeholder="the basis — a quote, a listing, a model number (optional)"
+                                      value={basis}
+                                      onChange={(e) => setBasis(e.target.value)}
+                                      style={{ flex: 2 }}
+                                    />
+                                    <button
+                                      className="primary"
+                                      disabled={busy || value.trim() === ''}
+                                      onClick={() => void challenge(open ?? a.id)}
+                                    >
+                                      {busy ? 'Arguing…' : 'Argue it'}
+                                    </button>
+                                  </div>
+                                  <div className="quiet">
+                                    A bare number moves it at most to the edge of its range; a real
+                                    basis moves it properly.
+                                  </div>
+                                  {ruling && (
+                                    <div className={`ruling ${ruling.ruling.toLowerCase()}`}>
+                                      <strong>{ruling.ruling}</strong> {ruling.reasoning}
+                                      {ruling.clarifyingQuestion && <div>? {ruling.clarifyingQuestion}</div>}
+                                      {ruling.secondOrderEffect && <div>↳ {ruling.secondOrderEffect}</div>}
+                                      {ruling.applied && (
+                                        <div>
+                                          → {ruling.resultingValue} ·{' '}
+                                          {ruling.provenance.toLowerCase().replace(/_/g, ' ')}
+                                          {ruling.clamped ? ' (held at the edge of its range)' : ''}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              ))}
+            </>
+          );
+        })()}
       </div>
 
       <div className="card-notes" style={{ marginTop: 12 }}>

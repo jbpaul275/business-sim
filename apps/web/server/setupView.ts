@@ -3,7 +3,7 @@ import { computeMonthZeroOutlays } from '@bizsim/engine';
 import { computeConfidenceScore } from '@bizsim/schemas';
 import { arguableAssumptions, type CandidateResult } from '@bizsim/sim-cli';
 import { spendSummary, type ChatEntry, type SetupPhase, type SetupSession } from './setup';
-import { toRegisterRow, type RegisterRowView } from './view';
+import { tabRegister, type RegisterTabView } from './view';
 
 /**
  * Everything the setup client renders, display-ready — same rule as the game
@@ -24,6 +24,12 @@ export interface DraftView {
 export interface FundingView {
   needed: string;
   investable: string;
+  /**
+   * The opening budget, itemized — the lines the aggregate is made of, so
+   * the player can point at the one that is wrong for THEIR business and
+   * argue with it in the chat.
+   */
+  budget: { label: string; amount: string }[];
   /** The worked plan, as one sentence. */
   planLine: string;
   /** Nonempty when even the capped plan cannot cover opening. */
@@ -40,7 +46,8 @@ export interface ReviewView {
   outside?: string;
   debtLine?: string;
   confidence: string;
-  register: RegisterRowView[];
+  registerCount: number;
+  register: RegisterTabView[];
   /** Ids worth arguing with first, in order. */
   arguable: string[];
   notes: string[];
@@ -149,9 +156,25 @@ export function toSetupView(session: SetupSession): SetupView {
           (p.proposedRevolver > 0n ? `, and a ${money(p.proposedRevolver)} revolver` : '')
         : `${money(p.proposedEquity)} of your own, no debt needed` +
           (cushion > 0n ? ` — the ${money(cushion)} above opening costs starts as cash runway` : '');
+    const budgetLines: [string, Money][] = [
+      ['Buildout & equipment', p.outlays.buildoutAndEquipment],
+      ['Lease signing — first, last & security', p.outlays.leaseSigning],
+      ['Opening inventory', p.outlays.initialInventory],
+      ['Pre-opening payroll & training', p.outlays.preOpeningPayroll],
+      ['Pre-opening marketing', p.outlays.preOpeningMarketing],
+      ['Permits & legal', p.outlays.permitsAndLegal],
+      ['Prepaid insurance', p.outlays.prepaidInsurance],
+      ['Loan origination fees', p.outlays.debtOriginationFees],
+      ['Revolver commitment fee', p.outlays.revolverCommitmentFees],
+      ['First quarter of fixed costs', p.quarterOfFixed],
+    ];
     view.funding = {
       needed: money(p.needed),
       investable: money(p.investable),
+      budget: budgetLines
+        .filter(([, amount]) => amount > 0n)
+        .sort(([, a], [, b]) => (b > a ? 1 : b < a ? -1 : 0))
+        .map(([label, amount]) => ({ label, amount: money(amount) })),
       planLine: plan,
       ...(p.shortBy > 0n ? { shortBy: money(p.shortBy) } : {}),
       equityFloor: money(p.equityFloor),
@@ -177,9 +200,7 @@ export function toSetupView(session: SetupSession): SetupView {
 
     const byId = Object.fromEntries(model.assumptions.map((a) => [a.id, a]));
     const confidence = computeConfidenceScore({ byId, byPath: {}, confidenceScore: 0 });
-    const register = [...model.assumptions]
-      .sort((a, b) => (a.outsideBenchmark === b.outsideBenchmark ? a.label.localeCompare(b.label) : a.outsideBenchmark ? -1 : 1))
-      .map(toRegisterRow);
+    const register = tabRegister(model.assumptions);
 
     view.review = {
       monthZero: money(cMonthZero(c)),
@@ -188,6 +209,7 @@ export function toSetupView(session: SetupSession): SetupView {
       ...(plan.outsideCapital > 0n ? { outside: money(plan.outsideCapital) } : {}),
       ...(debtLine ? { debtLine } : {}),
       confidence: `${(confidence * 100).toFixed(1)}%`,
+      registerCount: model.assumptions.length,
       register,
       arguable: arguableAssumptions(model.assumptions).map((a) => a.id),
       notes: session.notes.map(scrubEnums),

@@ -66,6 +66,185 @@ export interface RegisterRowView {
   provenance: Provenance;
   sourceNote: string;
   deviation?: string;
+  /**
+   * The line's annual escalator, folded in as a column rather than its own
+   * row — "Accounting & legal — annual escalator 2.0%" as a separate line
+   * doubled the register's length while saying almost nothing. The id keeps
+   * the escalator challengeable.
+   */
+  escalator?: string;
+  escalatorId?: string;
+}
+
+/**
+ * The register, clustered — a 57-row flat list is unreadable and most rows
+ * are $75 line items or catalog escalators. At most ~9 fixed categories,
+ * collapsed by default, groups with out-of-benchmark rows open.
+ */
+export interface RegisterGroupView {
+  label: string;
+  count: number;
+  deviations: number;
+  rows: RegisterRowView[];
+}
+
+/**
+ * The register split by what each number bears on. Category clusters alone
+ * still mixed a $95k buildout, a $28 average ticket, and "2,000 sq ft" in one
+ * scroll — three different kinds of claim, checked three different ways. The
+ * tabs separate them: what it costs to open (balance sheet and investing
+ * cash flow), what sets each quarter's income statement, and the physical
+ * shape of the business — load-bearing for both, a dollar line on neither.
+ */
+export interface RegisterTabView {
+  key: RegisterTabKey;
+  label: string;
+  /** One line under the tab strip saying what lives here. */
+  hint: string;
+  count: number;
+  deviations: number;
+  groups: RegisterGroupView[];
+}
+
+export type RegisterTabKey = 'investment' | 'pnl' | 'descriptive';
+
+const TABS: readonly { key: RegisterTabKey; label: string; hint: string }[] = [
+  {
+    key: 'investment',
+    label: 'Investment',
+    hint: 'What it costs to open and carry — capex, deposits, payment terms, financing.',
+  },
+  {
+    key: 'pnl',
+    label: 'P&L',
+    hint: 'The prices, rates, and recurring amounts that set each quarter’s income statement.',
+  },
+  {
+    key: 'descriptive',
+    label: 'Descriptive',
+    hint: 'The physical shape of the business — sizes, counts, hours. These shape the money without being money.',
+  },
+];
+
+/**
+ * Deterministic, from fields the schema already carries. Investment is the
+ * category split the draft made (capex, working-capital terms, financing);
+ * descriptive is anything left that is neither a dollar amount nor a rate —
+ * square feet, seats, operating hours, staff counts.
+ */
+export function statementTab(a: Assumption): RegisterTabKey {
+  if (a.category === 'CAPEX' || a.category === 'FINANCING' || a.category === 'WORKING_CAPITAL') {
+    return 'investment';
+  }
+  if (!a.isMoney && a.unit !== 'pct') return 'descriptive';
+  return 'pnl';
+}
+
+const GROUP_ORDER = [
+  'Revenue & demand',
+  'Marketing',
+  'Staffing & payroll',
+  'Facilities & equipment',
+  'Software & tools',
+  'Insurance',
+  'Professional & compliance',
+  'Working capital & terms',
+  'Other expenses',
+] as const;
+
+function categorize(a: Assumption): (typeof GROUP_ORDER)[number] {
+  const l = a.label.toLowerCase();
+  if (/marketing|saturation spend|max lift/.test(l)) return 'Marketing';
+  if (a.path.startsWith('streams.')) return 'Revenue & demand';
+  if (
+    a.path.startsWith('workingCapital.') ||
+    /\b(dso|dpo|dio)\b|deposit|prepaid insurance months/.test(l)
+  ) {
+    return 'Working capital & terms';
+  }
+  if (/payroll|salary|wages|owner compensation|per block|staff/.test(l)) return 'Staffing & payroll';
+  if (/insurance/.test(l)) return 'Insurance';
+  if (/software|subscription|compute|hosting|stack|\bpos\b/.test(l)) return 'Software & tools';
+  if (/rent|office|coworking|utilit|furniture|workstation|equipment|repairs|maintenance|buildout/.test(l)) {
+    return 'Facilities & equipment';
+  }
+  if (/accounting|legal|permit|licen|compliance|tax/.test(l)) return 'Professional & compliance';
+  if (/price|rate|ticket|hours|utilization|realization|seasonality|elasticity|ramp|churn|capture|traffic|demand/.test(l)) {
+    return 'Revenue & demand';
+  }
+  return 'Other expenses';
+}
+
+interface FoldedRow {
+  /** The assumption the row stands for — the base, when an escalator folded onto it. */
+  assumption: Assumption;
+  row: RegisterRowView;
+}
+
+function foldEscalators(assumptions: readonly Assumption[]): FoldedRow[] {
+  // Escalators fold onto the line they escalate, matched by model path.
+  const escalators = new Map<string, Assumption>();
+  const bases: Assumption[] = [];
+  for (const a of assumptions) {
+    if (a.path.endsWith('.annualEscalatorPct')) {
+      escalators.set(a.path.replace(/\.annualEscalatorPct$/, ''), a);
+    } else {
+      bases.push(a);
+    }
+  }
+  const matched = new Set<string>();
+  const rows: FoldedRow[] = bases.map((a) => {
+    const basePath = a.path.replace(
+      /\.(amountPerQuarter|blockCostPerQuarter|costPerUnit|pctOfRevenue)$/,
+      '',
+    );
+    const esc = escalators.get(basePath);
+    const row = toRegisterRow(a);
+    if (!esc) return { assumption: a, row };
+    matched.add(esc.id);
+    return { assumption: a, row: { ...row, escalator: pct(esc.value as number), escalatorId: esc.id } };
+  });
+  // An escalator with no matchable base keeps its own row — folded away
+  // silently it would become unchallengeable.
+  for (const esc of escalators.values()) {
+    if (!matched.has(esc.id)) rows.push({ assumption: esc, row: toRegisterRow(esc) });
+  }
+  return rows;
+}
+
+function groupFolded(folded: readonly FoldedRow[]): RegisterGroupView[] {
+  const byGroup = new Map<string, RegisterRowView[]>();
+  for (const f of folded) {
+    const group = categorize(f.assumption);
+    byGroup.set(group, [...(byGroup.get(group) ?? []), f.row]);
+  }
+  return GROUP_ORDER.filter((g) => byGroup.has(g)).map((g) => {
+    const groupRows = byGroup
+      .get(g)!
+      .sort((a, b) =>
+        a.deviation && !b.deviation ? -1 : !a.deviation && b.deviation ? 1 : a.label.localeCompare(b.label),
+      );
+    return {
+      label: g,
+      count: groupRows.length,
+      deviations: groupRows.filter((r) => r.deviation).length,
+      rows: groupRows,
+    };
+  });
+}
+
+export function tabRegister(assumptions: readonly Assumption[]): RegisterTabView[] {
+  // Fold first, tab by the base — an escalator belongs wherever its line does.
+  const folded = foldEscalators(assumptions);
+  return TABS.map((t) => {
+    const groups = groupFolded(folded.filter((f) => statementTab(f.assumption) === t.key));
+    return {
+      ...t,
+      count: groups.reduce((n, g) => n + g.count, 0),
+      deviations: groups.reduce((n, g) => n + g.deviations, 0),
+      groups,
+    };
+  }).filter((t) => t.count > 0);
 }
 
 export interface GameView {
@@ -96,7 +275,7 @@ export interface GameView {
   advisor: AdvisorEntry[];
   /** Whether the chat input works — false when no provider key is set. */
   advisorAvailable: boolean;
-  register: { confidence: string; rows: RegisterRowView[] };
+  register: { confidence: string; count: number; tabs: RegisterTabView[] };
   household: { cash: string; netWorth: string };
   over: boolean;
   /**
@@ -281,9 +460,8 @@ export function toView(session: GameSession): GameView {
   const stream = business.streams[0];
   const units = stream ? priceUnits(stream, streamPrice(stream)) : { command: 0, per: 'unit' };
 
-  const registerRows = Object.values(business.assumptions.byId)
-    .map((a) => toRegisterRow(a))
-    .sort((a, b) => (a.deviation && !b.deviation ? -1 : !a.deviation && b.deviation ? 1 : a.label.localeCompare(b.label)));
+  const assumptions = Object.values(business.assumptions.byId);
+  const registerTabs = tabRegister(assumptions);
 
   return {
     id: session.id,
@@ -314,7 +492,8 @@ export function toView(session: GameSession): GameView {
     advisorAvailable: advisorAvailable(),
     register: {
       confidence: pct(business.assumptions.confidenceScore),
-      rows: registerRows,
+      count: assumptions.length,
+      tabs: registerTabs,
     },
     household: {
       cash: compact(world.household.cash),
@@ -355,13 +534,26 @@ const toLogView = (l: TurnLogEntry): TurnLogView => ({
   attributions: l.attributions.map(toAttributionView),
 });
 
+/**
+ * Register money reads to the dollar, not the cent. Assumptions are estimates
+ * — "$13,000.00" wears a precision no estimate has, and next to a bare
+ * "11,000" count it made the register look like two different documents.
+ * (Statements still tie to the cent; that precision is theirs to claim.)
+ */
+const wholeDollars = (m: Money): string => {
+  const rounded = m < 0n ? -((-m + 50n) / 100n) : (m + 50n) / 100n;
+  return toDisplay(rounded * 100n, { showCents: false });
+};
+
 export function toRegisterRow(a: Assumption): RegisterRowView {
   const value =
     typeof a.value === 'bigint'
-      ? money(a.value)
+      ? wholeDollars(a.value)
       : a.unit === 'pct'
         ? pct(a.value)
-        : a.value.toLocaleString();
+        : a.unit === 'hours' || a.unit === 'days' || a.unit === 'years'
+          ? `${a.value.toLocaleString()} ${a.unit}`
+          : a.value.toLocaleString();
   const deviation = a.outsideBenchmark ? deviationLabel(a) : undefined;
   return {
     id: a.id,

@@ -148,13 +148,33 @@ describe('the web setup state machine', () => {
     expect(session.concept?.draft.businessName).toBe('Telescope rental by the hour');
     expect(session.proposal).toBeDefined();
 
+    // The funding screen's budget is itemized, so a single aggregate can be
+    // argued line by line ("$5k, not $128k — you invented an office").
+    const fundingView = toSetupView(session).funding!;
+    expect(fundingView.budget.length).toBeGreaterThanOrEqual(4);
+    expect(fundingView.budget.some((l) => l.label === 'Buildout & equipment')).toBe(true);
+
     const outcome = fund(session, { proposed: true });
     expect(outcome.ok).toBe(true);
     expect(session.phase).toBe('REVIEW');
     expect(session.candidate!.openingCash).toBeGreaterThanOrEqual(0n);
 
     const view = toSetupView(session);
-    expect(view.review!.register.length).toBeGreaterThan(10);
+    // The register arrives tabbed by what each number bears on — investment,
+    // P&L, descriptive — with category clusters inside each tab and escalators
+    // folded onto their lines as a column; the count still reflects every
+    // assumption underneath.
+    const tabs = view.review!.register;
+    expect(tabs.map((t) => t.key)).toEqual(['investment', 'pnl', 'descriptive']);
+    // A telescope yard has real capex and deposits, dollar rates, and a
+    // physical shape (scopes, square feet) — all three tabs are populated.
+    for (const t of tabs) expect(t.count).toBeGreaterThan(0);
+    expect(view.review!.registerCount).toBeGreaterThan(10);
+    const allGroups = tabs.flatMap((t) => t.groups);
+    expect(allGroups.length).toBeLessThanOrEqual(3 * 9);
+    const allRows = allGroups.flatMap((g) => g.rows);
+    expect(allRows.some((r) => r.escalator !== undefined)).toBe(true);
+    expect(allRows.some((r) => r.label.includes('annual escalator'))).toBe(false);
     expect(view.review!.arguable.length).toBeGreaterThan(0);
     expect(view.draft!.openNotes[0]).toContain('Capture rate');
 

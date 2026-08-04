@@ -62,7 +62,7 @@ export {
   streamVariableCosts,
   type StreamVariableCosts,
 } from './costs.js';
-export { deltaNetWorkingCapital, cashConversionCycle } from './workingCapital.js';
+export { deltaNetWorkingCapital, cashConversionCycle, type MonthZeroOutlays } from './workingCapital.js';
 export type { ComputationTrace } from './context.js';
 export type { CapacityResolution } from './costs.js';
 export {

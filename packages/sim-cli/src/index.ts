@@ -31,6 +31,7 @@ export {
   buildabilityIssues,
   capacityCeilingIssues,
   capitalIntensityNote,
+  duplicateOverheadIssues,
   projectMatureRevenue,
   revenueRealityIssues,
   staffingRealismIssues,

@@ -6,6 +6,7 @@ import {
   buildModelFromTemplate,
   collateralValue,
   computeMonthZeroOutlays,
+  type MonthZeroOutlays,
   createWorld,
   openingLoanRate,
   underwrite,
@@ -46,6 +47,15 @@ export interface FundingProposal {
   /** Month zero plus one quarter of fixed costs — what opening actually takes. */
   needed: Money;
   monthZero: Money;
+  /**
+   * The itemized opening budget — what `needed` is made OF. A single
+   * aggregate cannot be argued with: a recruiter who opened a real firm for
+   * $5k needs to see the $90k "buildout" line to say the model invented an
+   * office, and the engine had the breakdown all along.
+   */
+  outlays: MonthZeroOutlays;
+  /** The runway component of `needed`, alongside the outlays. */
+  quarterOfFixed: Money;
   /** Lending value of the build's assets. */
   lendable: Money;
   /** What a lender will write in total: min(collateral, 10× the injection). */
@@ -95,7 +105,8 @@ export function proposeFunding(ctx: FundingContext): FundingProposal {
   const { model, world } = probe(ctx);
   const investable = ctx.config.startCapital;
 
-  const monthZero = computeMonthZeroOutlays(model).total;
+  const outlays = computeMonthZeroOutlays(model);
+  const monthZero = outlays.total;
   const quarterOfFixed = model.costs.fixedPeriod.reduce<Money>((a, c) => a + c.amountPerQuarter, 0n);
   const needed = monthZero + quarterOfFixed;
 
@@ -127,6 +138,8 @@ export function proposeFunding(ctx: FundingContext): FundingProposal {
   return {
     needed,
     monthZero,
+    outlays,
+    quarterOfFixed,
     lendable,
     ceiling,
     investable,
