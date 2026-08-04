@@ -139,10 +139,17 @@ select:focus {
   padding: 13px 14px;
   text-align: left;
   color: var(--text-primary);
+  text-decoration: none;
   transition: border-color 0.12s;
 }
-.scenario-card:hover {
+.scenario-card:hover,
+.scenario-card:focus-visible {
   border-color: var(--accent);
+  outline: none;
+}
+.hero-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .scenario-card .name {
   font-weight: 600;
@@ -154,10 +161,28 @@ select:focus {
   flex: 1;
 }
 .scenario-card .facts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.scenario-card .facts span {
+  white-space: nowrap;
+}
+.scenario-card .go {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.scenario-card:hover .go,
+.scenario-card:focus-visible .go {
+  opacity: 1;
 }
 .picker-foot {
   color: var(--text-muted);

@@ -107,11 +107,21 @@ export function factsFor(spec: CardSpec): CardFacts {
   });
   const toOpen = `~${toCompact(computeMonthZeroOutlays(model).total)} to open`;
   const ebitda = template.plausibility.ebitdaMarginPct;
-  const pct = (v: number): string => `${Math.round(v * 100)}%`;
   return {
     toOpen,
     ...(ebitda
-      ? { band: `${pct(ebitda.low)}–${pct(ebitda.high)} EBITDA by year ${spec.matureBy}` }
+      ? { band: `${bandText(ebitda.low, ebitda.high)} EBITDA by year ${spec.matureBy}` }
       : {}),
   };
+}
+
+/**
+ * "8–15%", one unit sign — and "−15% to 30%" when the band crosses zero,
+ * because a minus and a range dash doing different jobs four characters apart
+ * ("-15%–30%") is a puzzle, not a number.
+ */
+function bandText(low: number, high: number): string {
+  const l = Math.round(low * 100);
+  const h = Math.round(high * 100);
+  return l < 0 ? `${l}% to ${h}%` : `${l}–${h}%`;
 }

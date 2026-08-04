@@ -47,7 +47,11 @@ export default function Home() {
           <a className="scenario-card" href={`/new?seed=${scenario}`} key={scenario}>
             <div className="name">{spec.name}</div>
             <div className="blurb">{spec.blurb}</div>
-            <div className="facts">{[facts.toOpen, ...(facts.band ? [facts.band] : [])].join(' · ')}</div>
+            <div className="facts">
+              <span>{facts.toOpen}</span>
+              {facts.band && <span>{facts.band}</span>}
+            </div>
+            <div className="go">Seed the conversation →</div>
           </a>
         ))}
       </div>
