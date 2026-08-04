@@ -963,6 +963,32 @@ describe('terms of art', () => {
   });
 });
 
+describe('the question policy', () => {
+  /**
+   * A question is only worth a turn when the answer is unpredictable AND
+   * consequential AND the player is the better source. The named failure is
+   * "Pepsi or Coke?" asked of a new vending operator: the model would answer
+   * it better than the player (they'd ordinarily just ask), the draft comes
+   * out the same either way, and it is a brand question asked before the
+   * category question. Coarse checks that the load-bearing phrases survive.
+   */
+  it('requires unpredictable, consequential answers', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('when you cannot predict the answer');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('produce different models');
+  });
+
+  it('carries the reversal test — never ask what you would answer better', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('"you tell me"');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('outsourcing its job');
+  });
+
+  it('orders forks coarse-to-fine, with the vending case named', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Brand comes after category comes after concept');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Pepsi or Coke');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('widest fork');
+  });
+});
+
 describe('the prompt carries D-5', () => {
   /**
    * The prompt is the only place the absurdity principle actually binds at
