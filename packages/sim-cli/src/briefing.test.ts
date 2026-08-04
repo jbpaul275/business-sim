@@ -59,6 +59,39 @@ describe('the briefing', () => {
     expect(briefing.text).toMatch(/`assume \w+ <pct>` revises it/);
   });
 
+  it('renders §10.4 attributions as money-quotable "Why … moved" lines', () => {
+    const state = SCENARIOS['storage']!();
+    const result = tick(state, [], { throwOnAssertionFailure: true });
+    const business = result.state.businesses[0]!;
+    const briefing = buildBriefing(result.state, business, result, [], ['price'], {
+      attributions: [
+        {
+          line: 'revenue',
+          lineLabel: 'Revenue',
+          previous: 18_240_000n,
+          current: 16_990_000n,
+          delta: -1_250_000n,
+          drivers: [
+            {
+              label: 'Seasonality',
+              explanation: 'calendar Q3→Q4 (1.08→0.98)',
+              amount: -1_250_000n,
+              assumptionId: 'a12',
+              path: 'streams.s1.seasonality',
+              provenance: 'BENCHMARK',
+            },
+          ],
+        },
+      ],
+    });
+    expect(briefing.text).toContain('Why Revenue moved');
+    // The §10.4 annotation: mechanism and provenance tag, in words.
+    expect(briefing.text).toContain('Seasonality');
+    expect(briefing.text).toContain('tagged benchmark');
+    // The driver's dollars are engine money — the guard must accept them back.
+    expect(briefing.figures).toContain('$12.5k');
+  });
+
   it('lists what the deterministic advisor already said, so it is not repeated', () => {
     const { briefing } = briefed();
     expect(briefing.text).toContain('do not repeat these');

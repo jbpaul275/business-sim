@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DeltaAttribution } from '@bizsim/schemas';
 import type { Briefing } from './advice.js';
 import { NARRATION_PROMPT, narrateQuarter, type TurnNarration } from './narration.js';
 
@@ -94,6 +95,40 @@ describe('narrating a quarter', () => {
       briefing,
     );
     expect(outcome?.retriedOn).toEqual(['$250k']);
+  });
+
+  it('carries engine attributions through untouched — §11.5 without model minting', async () => {
+    /**
+     * The spec puts `attributions` on the narration output; this build refuses
+     * to let the model produce assumption IDs and provenance tags, so they are
+     * attached from §10.4's engine computation. The contract tested here is
+     * pass-through identity: what the engine computed is what the record
+     * carries, even when the narration itself needed a retry.
+     */
+    const attributions: DeltaAttribution[] = [
+      {
+        line: 'revenue',
+        lineLabel: 'Revenue',
+        previous: 18_240_000n,
+        current: 16_990_000n,
+        delta: -1_250_000n,
+        drivers: [
+          {
+            label: 'Seasonality',
+            explanation: 'calendar Q3→Q4 (1.08→0.98)',
+            amount: -1_250_000n,
+            assumptionId: 'a12',
+            path: 'streams.s1.seasonality',
+            provenance: 'BENCHMARK',
+          },
+        ],
+      },
+    ];
+    const outcome = await narrateQuarter(scripted([narration()]), briefing, () => 0, attributions);
+    expect(outcome?.attributions).toBe(attributions);
+
+    const silent = await narrateQuarter(scripted([narration()]), briefing, () => 0, []);
+    expect(silent?.attributions).toBeUndefined();
   });
 
   it('lets the model restate engine money from events and prior quarters', async () => {

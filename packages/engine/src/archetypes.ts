@@ -135,6 +135,50 @@ const APPLIES = {
   PROJECT_BACKLOG: { ramp: false, marketing: true },
 } as const;
 
+/**
+ * The shared multipliers a stream's demand carried in a given period — §10.4's
+ * raw material. Pure in (stream, period), exactly like the fragment of
+ * `computeDemand` it mirrors, so attribution can recompute last quarter's
+ * factors from last quarter's state instead of asking the tick to have saved
+ * them.
+ *
+ * `season` is 1 for PROJECT_BACKLOG because `computeDemand` never applies it
+ * there: backlog is the anti-seasonal mechanism, work signed in the busy
+ * quarter executes in the slow one. For UNITS_CAC and SUBSCRIPTION the factor
+ * touches only part of demand (repeat orders, adds), so a decomposition using
+ * these is approximate for those kinds — the residual absorbs the difference.
+ */
+export interface DemandFactors {
+  season: number;
+  ramp: number;
+  marketing: number;
+  /** The demand response to price — `priceEffect().multiplier`. */
+  priceResponse: number;
+  /** The price itself — revenue per unit moves with it directly. */
+  priceLevel: Money;
+}
+
+export function demandFactors(stream: RevenueStream, period: PeriodIndex): DemandFactors {
+  const m = stream.modifiers;
+  const applies = APPLIES[stream.params.kind];
+  const price = streamPrice(stream);
+  const pe = priceEffect(price, stream.params.referencePrice, m.priceElasticity);
+  return {
+    season:
+      stream.params.kind === 'PROJECT_BACKLOG'
+        ? 1
+        : seasonalityFactor(stream.seasonality, period),
+    ramp: applies.ramp
+      ? maturityRamp(period - stream.launchPeriod, m.rampFloor, m.rampConstant)
+      : 1,
+    marketing: applies.marketing
+      ? marketingMultiplier(stream.marketingSpendPerQuarter, m.marketingMaxLift, m.halfSaturationSpend)
+      : 1,
+    priceResponse: pe.multiplier,
+    priceLevel: price,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Demand
 // ---------------------------------------------------------------------------

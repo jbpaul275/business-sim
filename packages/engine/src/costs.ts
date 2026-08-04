@@ -196,7 +196,10 @@ export function variableWithRevenue(
 export function variableWithActivity(
   ctx: TickContext,
   business: Business,
-  outcomes: readonly RealizeResult[],
+  // Only these two fields are read, and attribution (§10.4) re-evaluates the
+  // bucket from recorded stream metrics, which cannot rebuild a full
+  // RealizeResult after the fact.
+  outcomes: readonly Pick<RealizeResult, 'streamId' | 'activity'>[],
 ): CostBucket {
   const bucket = emptyBucket();
   for (const cost of business.costs.variableWithActivity) {

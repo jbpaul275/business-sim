@@ -4,6 +4,7 @@ export * from './state.js';
 export * from './statements.js';
 export * from './events.js';
 export * from './assumptions.js';
+export * from './attribution.js';
 export * from './actions.js';
 export * from './businessModel.js';
 export * from './seed.js';

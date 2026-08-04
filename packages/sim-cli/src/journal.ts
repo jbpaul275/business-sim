@@ -103,6 +103,8 @@ export type JournalEvent =
       cash: string;
       occupancy?: number;
       events: string[];
+      /** §10.4's delta attribution, one sentence per significant move. */
+      attributions?: string[];
     }
   | { kind: 'asked'; question: string; answered: string[] }
   /**
