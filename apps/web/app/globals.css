@@ -152,7 +152,26 @@ select:focus {
   outline-offset: 2px;
 }
 .scenario-card .name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
+}
+.card-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+.scenario-card:hover .card-icon,
+.scenario-card:focus-visible .card-icon {
+  color: var(--accent);
+}
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-card .card-icon {
+  color: var(--accent);
 }
 .scenario-card .blurb {
   color: var(--text-secondary);

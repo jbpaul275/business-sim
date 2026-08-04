@@ -1,4 +1,5 @@
 import { CARDS, factsFor } from '../server/cards';
+import { CardIcon } from '../components/CardIcon';
 
 /**
  * The scenario picker. Server component: everything on a card is either
@@ -32,7 +33,9 @@ export default function Home() {
       </p>
 
       <a className="hero-card" href="/new">
-        <div className="hero-title">Describe your own business</div>
+        <div className="hero-title">
+          <CardIcon kind="describe" /> Describe your own business
+        </div>
         <div className="hero-sub">
           A sentence is enough. The model asks what it needs, drafts every number with its source —
           and you argue with any of them before a dollar is committed.
@@ -45,7 +48,9 @@ export default function Home() {
       <div className="scenario-grid">
         {cards.map(({ scenario, spec, facts }) => (
           <a className="scenario-card" href={`/new?seed=${scenario}`} key={scenario}>
-            <div className="name">{spec.name}</div>
+            <div className="name">
+              <CardIcon kind={scenario} /> {spec.name}
+            </div>
             <div className="blurb">{spec.blurb}</div>
             <div className="facts">
               <span>{facts.toOpen}</span>
