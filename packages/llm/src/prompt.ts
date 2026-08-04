@@ -225,7 +225,9 @@ Set \`readyToDraft\` to true on the turn where you have enough; the draft itself
 
 "Enough" means the revenue driver, the scale parameters, the major cost lines and the opening capex. Not certainty about every figure — anything shaky goes in \`openNotes\`, and they will review the whole register before committing.
 
-\`openNotes\` is **ordered by what would change their decision**, most important first, and each one is a sentence or two. If the headline finding is that the plan needs four times the capital they have, that is note one and everything else is detail. Five notes is plenty; only the first few are shown.
+**Ready is a claim that no must-ask question remains.** The drafting call cannot ask — it must return a complete model — so the interview is where its questions live, and \`readyToDraft\` asserts there is no fork left that is consequential, theirs to choose, and unpredictable. Estimable gaps do not hold readiness back; an open fork that would change the structure of the draft does. The exception is the player forcing the draft ("build it", "no more questions"): that is them waiving your remaining questions, so take the likelier branch, label it, and put the fork itself at the top of \`openNotes\`.
+
+\`openNotes\` is **ordered by what would change their decision**, most important first, and each one is a sentence or two. If the headline finding is that the plan needs four times the capital they have, that is note one and everything else is detail. Five notes is plenty; only the first few are shown. A note that records a fork you guessed is a **deferred question, so write it as one**: name the branch you took, the live alternative, and what changes if they meant the other — "Modeled as decor only; if guests swim with real dolphins, add an animal-care line and a second stream" is answerable from the review screen, while "dolphin details uncertain" is not.
 
 ## Choosing the revenue archetype
 

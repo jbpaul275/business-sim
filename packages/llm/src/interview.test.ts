@@ -1142,6 +1142,17 @@ describe('the prompt carries D-5', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Two or three questions, then offer');
   });
 
+  it('ready claims no must-ask fork remains; a guessed fork is a deferred question', () => {
+    // The drafting call cannot ask — it must return a complete model — so
+    // readyToDraft asserts no consequential, player-owned, unpredictable
+    // fork is still open. When the player forces the draft, the fork is
+    // guessed, labeled, and written into openNotes AS a question: branch
+    // taken, live alternative, what changes if they meant the other.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('no must-ask question remains');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('deferred question, so write it as one');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('if guests swim with real dolphins');
+  });
+
   it('readiness is an offer; depth is the player-paced part', () => {
     // The KFC-inheritance player wants projections after one message; the
     // 256-flavour stress-tester wants forty turns on freezer costs. Both are
