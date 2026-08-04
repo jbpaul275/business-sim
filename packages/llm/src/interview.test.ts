@@ -1011,6 +1011,23 @@ describe('the question policy', () => {
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('typical San Antonio hotel');
     expect(CONCEPT_INTERVIEW_SYSTEM).toContain('dolphin-themed');
   });
+
+  it('closed lists must exhaust the space or admit they do not', () => {
+    // "Tourists, or governments?" quietly asserts there is no third customer.
+    // "I'm housing the workers for my moon factory" falsifies it, and a player
+    // holding an off-menu answer learns the menu was decoration. Logical
+    // partitions close cleanly; content menus stay visibly open.
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('A closed list is a claim you can rarely back');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Logical partitions close cleanly');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('Content menus almost never close');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('someone else entirely');
+  });
+
+  it('"a mix" and "does it even matter?" are wins, not resistance', () => {
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('"A mix" — model both streams');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('does it even matter?');
+    expect(CONCEPT_INTERVIEW_SYSTEM).toContain('done your job for you');
+  });
 });
 
 describe('the prompt carries D-5', () => {
