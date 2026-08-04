@@ -12,3 +12,12 @@ export { describeEvent } from './events.js';
 export { buildBriefing, describeAttribution, type BriefingContext } from './briefing.js';
 export { postmortem, runPoint, type RunPoint } from './postmortem.js';
 export { priceUnits } from './pricing.js';
+export { journalActions, type Journal, type JournalEvent } from './journal.js';
+export {
+  shareNotice,
+  shareRun,
+  sessionIdForFile,
+  readEvents,
+  uploadTarget,
+  type ShareResult,
+} from './upload.js';

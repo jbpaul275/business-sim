@@ -36,8 +36,10 @@ import { buildBriefing, describeAttribution } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
-import type { Journal } from './journal.js';
+import { journalActions, type Journal } from './journal.js';
 import { describeEvent } from './events.js';
+import { readEvents, sessionIdForFile, shareNotice, shareRun, uploadTarget } from './upload.js';
+import { basename } from 'node:path';
 
 /**
  * The interactive turn loop — spec §9.1 Phase 5, without the LLM.
@@ -2423,6 +2425,11 @@ export async function play(
       : [];
     priorStatements = result.statements;
     state = result.state;
+    // The quarter's decisions, replay-grade. With the market seed already in
+    // the journal, a shared run is a deterministic reproduction, not a story.
+    if (actions.length > 0) {
+      options.journal?.write(journalActions(result.statements.period, actions));
+    }
     return result;
   };
 
@@ -2692,7 +2699,51 @@ export async function play(
         options.journal,
       );
     }
+    // The run is over — quit, insolvency, milestone stop or end of input all
+    // land here, which is the one moment the share question makes sense.
+    await offerShare(input, options.journal);
   } finally {
     if (!options.input) input.close();
+  }
+}
+
+/**
+ * The per-session QA share, at the only moment it means anything.
+ *
+ * This is the third consent surface, independent of the ambient telemetry
+ * tiers on purpose: a player who declined standing collection is exactly the
+ * player whose bug reports we otherwise never see, and "share THIS run" at
+ * the end of it is consent they can fully evaluate — they just played
+ * everything it contains.
+ *
+ * Deliberately quiet: no endpoint configured, no journal, or a piped
+ * transcript that has run out of lines all mean the question is never asked.
+ * The exit path stays one keypress for everyone who does not want this.
+ */
+async function offerShare(input: LineSource, journal?: Journal): Promise<void> {
+  if (!journal?.path || !uploadTarget()) return;
+  console.log(`\n${DIM}${shareNotice()}${RESET}`);
+  const answer = await input.next('Share this run with the QA team? (y/N) > ');
+  if (answer === undefined || !['y', 'yes'].includes(answer.trim().toLowerCase())) return;
+  const note = (await input.next('Anything to add for QA? (enter to skip) > ')) ?? '';
+
+  try {
+    const result = await shareRun(
+      readEvents(journal.path),
+      sessionIdForFile(basename(journal.path)),
+      note,
+    );
+    if (result.shared) {
+      console.log(
+        `${GREEN}Shared as ${result.reference}.${RESET} ` +
+          `${DIM}Keep that reference — quote it to have the run deleted.${RESET}`,
+      );
+    } else {
+      console.log(`${DIM}Nothing was shared (${result.skipped ?? 'unknown reason'}).${RESET}`);
+    }
+  } catch {
+    // A QA endpoint being down is not the player's problem; say so plainly
+    // rather than printing a stack trace over their ledger.
+    console.log(`${DIM}Could not reach the QA endpoint — nothing was shared.${RESET}`);
   }
 }

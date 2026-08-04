@@ -95,6 +95,16 @@ export type JournalEvent =
    * did, which would make the benchmark unauditable.
    */
   | { kind: 'market_seed'; seed: number }
+  /**
+   * The decisions a quarter ran with, serialised (Money as cents strings).
+   *
+   * With `market_seed` and the scenario this makes a shared run reproducible —
+   * which is what turns a QA report from "the narration felt wrong" into a
+   * deterministic replay. Content-classified in the upload deny-list: actions
+   * can carry names a player typed (a cloned business, a custom concept), so
+   * they travel only under the transcript tier or an explicit per-session share.
+   */
+  | { kind: 'actions'; period: number; actions: unknown[] }
   | {
       kind: 'quarter';
       period: number;
@@ -134,6 +144,22 @@ export interface Journal {
   /** Where it went, for telling the player once at the end. */
   readonly path: string | undefined;
 }
+
+/**
+ * A quarter's decisions as a journal event, Money rendered as cents strings
+ * (`"1234500c"`). JSON.stringify throws on bigint, and dollars-as-number would
+ * round; a cents string survives the round trip exactly, which is what makes
+ * the record replay-grade rather than merely descriptive.
+ */
+export const journalActions = (period: number, actions: readonly unknown[]): JournalEvent => ({
+  kind: 'actions',
+  period,
+  actions: JSON.parse(
+    JSON.stringify(actions, (_key, value: unknown) =>
+      typeof value === 'bigint' ? `${value.toString()}c` : value,
+    ),
+  ) as unknown[],
+});
 
 const NO_JOURNAL: Journal = { write: () => {}, path: undefined };
 

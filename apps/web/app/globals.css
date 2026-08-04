@@ -454,3 +454,62 @@ select:focus {
   border-top: 1px solid var(--critical);
   color: var(--text-secondary);
 }
+
+/* ---------- QA share ---------- */
+
+.share-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  padding: 0 4px;
+  font-size: 13px;
+}
+.share-panel {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.share-notice {
+  color: var(--text-secondary);
+  font-size: 13px;
+  max-width: 72ch;
+}
+.share-panel textarea {
+  font: inherit;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  max-width: 72ch;
+  resize: vertical;
+}
+.share-error {
+  color: var(--critical);
+  font-size: 13px;
+}
+.share-actions {
+  display: flex;
+  gap: 8px;
+}
+.share-actions button {
+  border-radius: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+.share-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.share-panel code {
+  font-family: var(--mono);
+  color: var(--accent);
+}

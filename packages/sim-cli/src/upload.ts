@@ -112,6 +112,9 @@ const CONTENT_KINDS = new Set([
   'narration',
   'narration_corrected',
   'narration_failed',
+  // Actions can carry names the player typed (a cloned business, a started
+  // concept). The replay value lives in the transcript tier with the words.
+  'actions',
 ]);
 
 /** Kinds that carry no free text and are safe under the metrics tier. */
@@ -305,6 +308,100 @@ export async function uploadSession(
     calls: payload.calls.length,
     transcripts: payload.transcripts.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The per-session QA share — the third consent surface
+// ---------------------------------------------------------------------------
+
+export interface FeedbackRow {
+  session_id: string;
+  note: string;
+  build: string;
+}
+
+export interface ShareResult {
+  shared: boolean;
+  /** The id the player quotes to have the run deleted. */
+  reference?: string;
+  transcripts: number;
+  skipped?: string;
+}
+
+/**
+ * Send ONE run to QA, because the player just said so.
+ *
+ * This deliberately ignores the ambient consent tiers: the player who opted
+ * out of standing collection is exactly the player whose bug reports we
+ * otherwise never see, and their explicit "share this run" at the exit prompt
+ * IS the consent — narrower, fresher and better-informed than any standing
+ * flag, because they can see everything the run contains. The transcript tier
+ * is forced on for this one session; nothing here widens any future session.
+ *
+ * What still applies: the target. No `SUPABASE_URL`, no upload, no default
+ * endpoint — same as the ambient path.
+ */
+export async function shareRun(
+  events: readonly JournalEvent[],
+  id: string,
+  note: string,
+  options: { env?: NodeJS.ProcessEnv; fetcher?: Fetcher } = {},
+): Promise<ShareResult> {
+  const target = uploadTarget(options.env ?? process.env);
+  if (!target) return { shared: false, transcripts: 0, skipped: 'no SUPABASE_URL set' };
+
+  const payload = redact(events, id, 'transcripts');
+  const feedback: FeedbackRow = {
+    session_id: id,
+    note: note.trim(),
+    build: payload.session.build,
+  };
+
+  const fetcher = options.fetcher ?? globalThis.fetch;
+  await insert(target, 'sessions', [payload.session], fetcher);
+  await insert(target, 'calls', payload.calls, fetcher);
+  await insert(target, 'transcripts', payload.transcripts, fetcher);
+  await insert(target, 'feedback', [feedback], fetcher);
+
+  return { shared: true, reference: id, transcripts: payload.transcripts.length };
+}
+
+/**
+ * What the player approves, in the terms of what actually leaves the machine.
+ * Shown before the share, every time — this consent is per-run, so the notice
+ * is too.
+ */
+export function shareNotice(): string {
+  return (
+    'If you approve, the full record of THIS run is shared with the QA team: ' +
+    'everything you typed in it, what the model drafted and said back, every ' +
+    'decision and every quarter. Nothing outside this run is sent, and this ' +
+    'does not opt you into anything for future sessions. You get a reference ' +
+    'id afterwards — quote it to have the run deleted.'
+  );
+}
+
+/**
+ * A stable session id from a journal filename: same file, same id, so a
+ * re-share conflicts away instead of duplicating, and the ambient upload and
+ * the QA share of the same run land on the same primary key.
+ */
+export function sessionIdForFile(name: string): string {
+  let h = 0x811c9dc5;
+  const bytes: number[] = [];
+  for (let i = 0; i < 16; i++) {
+    for (let j = 0; j < name.length; j++) {
+      h ^= name.charCodeAt(j) + i;
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    bytes.push(h & 0xff);
+  }
+  const hex = bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+  // Rendered v4-style so tooling that validates UUID versions accepts it.
+  return (
+    `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-` +
+    `8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+  );
 }
 
 /**

@@ -14,6 +14,7 @@ export function GameClient({ initial }: { initial: GameView }) {
   const [view, setView] = useState(initial);
   const [tab, setTab] = useState<'is' | 'bs' | 'cf'>('is');
   const [busy, setBusy] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   // Pending decisions. Empty string = leave unchanged this quarter.
   const [price, setPrice] = useState('');
@@ -176,8 +177,26 @@ export function GameClient({ initial }: { initial: GameView }) {
           {view.status === 'CLOSED'
             ? 'The business is insolvent and closed. Start another run from the picker.'
             : 'Ten-year milestone reached — keep playing, or start another run.'}
+          {view.share && !view.share.sharedAs && (
+            <>
+              {' '}
+              <button className="share-link" onClick={() => setSharing(true)}>
+                Share this run with QA
+              </button>
+            </>
+          )}
         </div>
       ) : null}
+
+      {view.share && (sharing || view.share.sharedAs) && (
+        <SharePanel
+          view={view}
+          onClose={() => setSharing(false)}
+          onShared={(reference) =>
+            setView({ ...view, share: { ...view.share!, sharedAs: reference } })
+          }
+        />
+      )}
 
       <footer className="actionbar">
         <div className="control">
@@ -217,6 +236,11 @@ export function GameClient({ initial }: { initial: GameView }) {
           </div>
         ))}
         <div className="run">
+          {view.share && !view.share.sharedAs && !view.over && (
+            <button className="share-link" onClick={() => setSharing(true)}>
+              Share with QA
+            </button>
+          )}
           <button onClick={() => runQuarter(3)} disabled={busy}>
             Skip year
           </button>
@@ -225,6 +249,80 @@ export function GameClient({ initial }: { initial: GameView }) {
           </button>
         </div>
       </footer>
+    </div>
+  );
+}
+
+/**
+ * The consent moment. The notice states exactly what leaves the machine; the
+ * confirmation is the consent, scoped to this run alone; the reference shown
+ * afterwards is the player's deletion handle. A player who has already shared
+ * sees the reference, not a second ask.
+ */
+function SharePanel({
+  view,
+  onClose,
+  onShared,
+}: {
+  view: GameView;
+  onClose: () => void;
+  onShared: (reference: string) => void;
+}) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  if (view.share?.sharedAs) {
+    return (
+      <div className="share-panel">
+        <div>
+          Shared as <code>{view.share.sharedAs}</code>. Keep that reference — quote it to have the
+          run deleted.
+        </div>
+        <div className="share-actions">
+          <button onClick={onClose}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  const share = async (): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const res = await fetch(`/api/sessions/${view.id}/share`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+      const data = (await res.json()) as { reference?: string; error?: string };
+      if (res.ok && data.reference) onShared(data.reference);
+      else setError(data.error ?? 'Sharing failed — nothing was sent.');
+    } catch {
+      setError('Could not reach the QA endpoint — nothing was sent.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="share-panel">
+      <div className="share-notice">{view.share?.notice}</div>
+      <textarea
+        placeholder="Anything you'd like the QA team to know? (optional)"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={3}
+      />
+      {error && <div className="share-error">{error}</div>}
+      <div className="share-actions">
+        <button onClick={onClose} disabled={busy}>
+          Cancel
+        </button>
+        <button className="primary" onClick={share} disabled={busy}>
+          {busy ? 'Sharing…' : 'Approve & share this run'}
+        </button>
+      </div>
     </div>
   );
 }

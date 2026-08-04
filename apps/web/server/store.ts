@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import { toDisplay } from '@bizsim/money';
 import { attributeQuarter, tick, type TickResult } from '@bizsim/engine';
 import type { Action, DeltaAttribution, StatementSet, WorldState } from '@bizsim/schemas';
-import { SCENARIOS, describeEvent } from '@bizsim/sim-cli';
+import {
+  SCENARIOS,
+  describeAttribution,
+  describeEvent,
+  journalActions,
+  type JournalEvent,
+} from '@bizsim/sim-cli';
 
 /**
  * Game sessions, in memory, keyed by id.
@@ -35,6 +42,14 @@ export interface GameSession {
   /** §10.4 for the quarter on screen. */
   attributions: DeltaAttribution[];
   log: TurnLogEntry[];
+  /**
+   * The same record the CLI journals to disk, kept in memory: what the QA
+   * share sends if the player hands this run over. Market seed and per-quarter
+   * actions ride along, so a shared run is a deterministic replay.
+   */
+  events: JournalEvent[];
+  /** Set once the player has shared this run — the id they were shown. */
+  sharedAs?: string;
 }
 
 const globalStore = globalThis as unknown as { __bizsimSessions?: Map<string, GameSession> };
@@ -55,7 +70,9 @@ export function createSession(scenario: string): GameSession {
   // before the first decision.
   const first = tick(world, [], { throwOnAssertionFailure: false });
   const session: GameSession = {
-    id: randomUUID().slice(0, 8),
+    // A full UUID, because this doubles as the primary key a QA share uploads
+    // under — and the reference the player quotes to have it deleted.
+    id: randomUUID(),
     scenario,
     world: first.state,
     businessId,
@@ -63,6 +80,16 @@ export function createSession(scenario: string): GameSession {
     priorStatements: first.statements,
     attributions: [],
     log: [logEntry(first, [])],
+    events: [
+      {
+        kind: 'session',
+        build: 'web-dev',
+        startedAt: new Date().toISOString(),
+        startCapital: toDisplay(world.household.cash),
+      },
+      { kind: 'market_seed', seed: world.config.marketSeed },
+      quarterEvent(first, []),
+    ],
   };
   sessions.set(session.id, session);
   return session;
@@ -78,7 +105,8 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
   for (let i = 0; i < quarters; i++) {
     if (session.world.currentPeriod >= session.world.config.milestonePeriod + 40) break;
     const before = session.world;
-    const result = tick(before, i === 0 ? actions : [], { throwOnAssertionFailure: false });
+    const applied = i === 0 ? actions : [];
+    const result = tick(before, applied, { throwOnAssertionFailure: false });
     session.attributions = session.priorStatements
       ? attributeQuarter(
           { state: before, statements: session.priorStatements },
@@ -90,8 +118,15 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
     session.world = result.state;
     session.last = result;
     session.log.push(logEntry(result, session.attributions));
+    if (applied.length > 0) {
+      session.events.push(journalActions(result.statements.period, applied));
+    }
+    session.events.push(quarterEvent(result, session.attributions));
     const business = session.world.businesses.find((b) => b.id === session.businessId);
-    if (!business || business.status === 'CLOSED') break;
+    if (!business || business.status === 'CLOSED') {
+      session.events.push({ kind: 'end', reason: 'insolvent' });
+      break;
+    }
   }
   return session;
 }
@@ -101,3 +136,19 @@ const logEntry = (result: TickResult, attributions: DeltaAttribution[]): TurnLog
   events: result.events.filter((e) => e.severity !== 'INFO').map((e) => describeEvent(e)),
   attributions,
 });
+
+/** The same shape the CLI journals, so one redaction path serves both. */
+function quarterEvent(result: TickResult, attributions: DeltaAttribution[]): JournalEvent {
+  const consolidated = result.statements.consolidated.incomeStatement;
+  return {
+    kind: 'quarter',
+    period: result.statements.period,
+    revenue: toDisplay(consolidated.revenue),
+    ebitda: toDisplay(consolidated.ebitda),
+    cash: toDisplay(result.statements.consolidated.balanceSheet.cash),
+    events: result.events.filter((e) => e.severity !== 'INFO').map((e) => e.kind),
+    ...(attributions.length > 0
+      ? { attributions: attributions.map((a) => `${a.lineLabel} ${describeAttribution(a)}`) }
+      : {}),
+  };
+}

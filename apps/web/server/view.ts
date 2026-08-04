@@ -6,7 +6,7 @@ import {
   type DeltaAttribution,
   type Provenance,
 } from '@bizsim/schemas';
-import { priceUnits } from '@bizsim/sim-cli';
+import { priceUnits, shareNotice, uploadTarget } from '@bizsim/sim-cli';
 import type { GameSession, TurnLogEntry } from './store';
 
 /**
@@ -88,6 +88,12 @@ export interface GameView {
   register: { confidence: string; rows: RegisterRowView[] };
   household: { cash: string; netWorth: string };
   over: boolean;
+  /**
+   * The per-session QA share. Absent entirely when no endpoint is configured —
+   * a checkout with no SUPABASE_URL never shows the affordance, matching the
+   * CLI's silence. `sharedAs` is the reference the player quotes for deletion.
+   */
+  share?: { notice: string; sharedAs?: string };
 }
 
 const money = (m: Money): string => toDisplay(m);
@@ -289,6 +295,14 @@ export function toView(session: GameSession): GameView {
       netWorth: compact(last.statements.household.netWorth),
     },
     over: business.status === 'CLOSED' || period >= world.config.milestonePeriod,
+    ...(uploadTarget()
+      ? {
+          share: {
+            notice: shareNotice(),
+            ...(session.sharedAs ? { sharedAs: session.sharedAs } : {}),
+          },
+        }
+      : {}),
   };
 }
 
