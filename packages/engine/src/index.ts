@@ -73,4 +73,5 @@ export {
 // The advisor has to be able to say "marketing does nothing for this
 // archetype" without guessing, and to read the price off a stream without
 // re-implementing the six-way switch that would drift from this one.
-export { streamPrice, marketingMovesDemand } from './archetypes.js';
+export { streamPrice, marketingMovesDemand, demandFactors, type DemandFactors } from './archetypes.js';
+export { attributeQuarter, type QuarterSnapshot } from './attribution.js';

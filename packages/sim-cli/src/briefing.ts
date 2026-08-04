@@ -1,6 +1,6 @@
 import { ratio, toCompact, type Money } from '@bizsim/money';
 import { streamPrice, type TickResult } from '@bizsim/engine';
-import type { Business, WorldState } from '@bizsim/schemas';
+import type { Business, DeltaAttribution, WorldState } from '@bizsim/schemas';
 import type { Briefing } from '@bizsim/llm';
 import { priceUnits } from './pricing.js';
 
@@ -37,6 +37,12 @@ export interface BriefingContext {
   prior?: { revenue: Money; ebitda: Money; cash: Money };
   /** This quarter's engine events, already described in words. */
   events?: readonly string[];
+  /**
+   * §10.4's delta attribution, engine-computed. Rendered as "Why … moved"
+   * lines: the ONLY legal mechanisms for explaining a quarter-over-quarter
+   * move, each carrying the driving assumption's provenance tag.
+   */
+  attributions?: readonly DeltaAttribution[];
 }
 
 export function buildBriefing(
@@ -173,6 +179,12 @@ export function buildBriefing(
   for (const [i, event] of (context.events ?? []).entries()) {
     add(`Event ${i + 1} this quarter`, event, true);
   }
+  // §10.4's attribution: the move, decomposed by the engine into its drivers,
+  // each with the assumption's provenance tag. Money-flagged — a narration
+  // that quotes a driver's dollar contribution is quoting the engine.
+  for (const a of context.attributions ?? []) {
+    add(`Why ${a.lineLabel} moved`, describeAttribution(a), true);
+  }
 
   const text = [
     'BRIEFING — every number below was computed by the engine. You have no others.',
@@ -207,3 +219,19 @@ export function buildBriefing(
 }
 
 const pct = (v: number): string => `${(v * 100).toFixed(1)}%`;
+
+/**
+ * One attribution as one sentence: signed move, then drivers largest-first,
+ * each with its mechanism and — where a registered assumption drives it — the
+ * provenance tag §10.4 requires on the annotation.
+ */
+export function describeAttribution(a: DeltaAttribution): string {
+  const signed = (m: Money): string => `${m < 0n ? '-' : '+'}${toCompact(m < 0n ? -m : m)}`;
+  const drivers = a.drivers
+    .map((d) => {
+      const tag = d.provenance ? `, tagged ${d.provenance.toLowerCase().replace(/_/g, '-')}` : '';
+      return `${d.label} ${signed(d.amount)} (${d.explanation}${tag})`;
+    })
+    .join('; ');
+  return `${signed(a.delta)} vs last quarter — ${drivers}`;
+}

@@ -14,6 +14,12 @@ import ecommerceDtcBrand from '../data/ecommerce_dtc_brand.json' with { type: 'j
 import b2bSaas from '../data/b2b_saas.json' with { type: 'json' };
 import selfStorage from '../data/self_storage.json' with { type: 'json' };
 import generalContractor from '../data/general_contractor.json' with { type: 'json' };
+import quickServiceRestaurant from '../data/quick_service_restaurant.json' with { type: 'json' };
+import coffeeShop from '../data/coffee_shop.json' with { type: 'json' };
+import retailShop from '../data/retail_shop.json' with { type: 'json' };
+import marketingAgency from '../data/marketing_agency.json' with { type: 'json' };
+import tradesContractor from '../data/trades_contractor.json' with { type: 'json' };
+import gymFitness from '../data/gym_fitness.json' with { type: 'json' };
 
 /**
  * Seed templates — spec §4.7. Stored as data, not code, so they can be revised
@@ -24,10 +30,10 @@ import generalContractor from '../data/general_contractor.json' with { type: 'js
  * cost side, and an out-of-band value is what turns the register from a passive
  * log into an active reviewer.
  *
- * MVP target is 12+ templates (§4.7). Six are here — one per archetype, so
- * every archetype is exercised by the property and plausibility suites. The
- * remaining six are M2 content work, and calibration, not authoring, is the
- * schedule risk. See docs/plan/02-milestones.md.
+ * All twelve of §4.7's templates are here. The first six were built one per
+ * archetype, so every archetype is exercised by the property and plausibility
+ * suites; the second six reuse those archetypes for the trades §4.7 lists —
+ * which is why calibration, not authoring, was the schedule risk.
  */
 
 const RAW: unknown[] = [
@@ -37,6 +43,12 @@ const RAW: unknown[] = [
   b2bSaas,
   selfStorage,
   generalContractor,
+  quickServiceRestaurant,
+  coffeeShop,
+  retailShop,
+  marketingAgency,
+  tradesContractor,
+  gymFitness,
 ];
 
 const templates = new Map<string, SeedTemplate>();

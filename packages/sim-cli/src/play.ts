@@ -1,5 +1,6 @@
 import { fromDisplay, mulRate, ratio, toCompact, toDisplay, type Money } from '@bizsim/money';
 import {
+  attributeQuarter,
   marketingMovesDemand,
   marketingMultiplier,
   maturityRamp,
@@ -14,7 +15,9 @@ import {
   type Assumption,
   type Business,
   type CrisisRemedy,
+  type DeltaAttribution,
   type EngineEvent,
+  type StatementSet,
   type WorldState,
 } from '@bizsim/schemas';
 import { benchmarkSecurity, getSecurity, listSecurities } from '@bizsim/seeds';
@@ -29,12 +32,14 @@ import {
   type NarrationTransport,
 } from '@bizsim/llm';
 import { cloneOutlay, saleValue } from '@bizsim/engine';
-import { buildBriefing } from './briefing.js';
+import { buildBriefing, describeAttribution } from './briefing.js';
 import { SCENARIOS } from './scenarios.js';
 import { openInput, parseMoney, parseNumber, type LineSource } from './input.js';
 import { rule } from './ui.js';
-import type { Journal } from './journal.js';
+import { journalActions, type Journal } from './journal.js';
 import { describeEvent } from './events.js';
+import { readEvents, sessionIdForFile, shareNotice, shareRun, uploadTarget } from './upload.js';
+import { basename } from 'node:path';
 
 /**
  * The interactive turn loop — spec §9.1 Phase 5, without the LLM.
@@ -153,7 +158,12 @@ const severityColour = (s: EngineEvent['severity']): string =>
 // Rendering
 // ---------------------------------------------------------------------------
 
-function renderTurn(result: TickResult, business: Business, world?: WorldState): void {
+function renderTurn(
+  result: TickResult,
+  business: Business,
+  world?: WorldState,
+  attributions?: readonly DeltaAttribution[],
+): void {
   const period = result.statements.period;
   const entry = result.statements.byBusiness[business.id];
   const year = Math.floor(period / 4) + 1;
@@ -303,6 +313,30 @@ function renderTurn(result: TickResult, business: Business, world?: WorldState):
         `${others.map((b) => b.name).join(', ')}` +
         `  ${DIM}· group revenue ${toCompact(consolidated.revenue)}, EBITDA ${toCompact(consolidated.ebitda)}${RESET}`,
     );
+  }
+
+  /**
+   * §10.4 on screen, deterministically — the annotation must not depend on a
+   * model being configured. One dim line per significant move: the signed
+   * delta, then the drivers largest-first with their provenance tags. This is
+   * what stops a deterministic output reading as a fact about the world
+   * rather than an echo of an input the player chose.
+   */
+  if (attributions && attributions.length > 0) {
+    console.log('');
+    for (const a of attributions) {
+      const signed = (m: Money): string => `${m < 0n ? '−' : '+'}${toCompact(m < 0n ? -m : m)}`;
+      const drivers = a.drivers
+        .slice(0, 3)
+        .map((d) => {
+          const tag = d.provenance
+            ? ` ${DIM}[${d.provenance.toLowerCase().replace(/_/g, '-')}]${RESET}`
+            : '';
+          return `${d.label} ${signed(d.amount)}${tag}`;
+        })
+        .join(`${DIM} · ${RESET}`);
+      console.log(`  ${DIM}${pad(`${a.lineLabel} ${signed(a.delta)}`, 22)}${RESET}${drivers}`);
+    }
   }
 
   const notable = result.events.filter((e) => e.severity !== 'INFO');
@@ -1422,6 +1456,7 @@ async function narrateTurn(
   business: Business,
   result: TickResult,
   history: readonly RunPoint[],
+  attributions: readonly DeltaAttribution[],
   journal?: Journal,
 ): Promise<void> {
   if (!advisor?.narrate) return;
@@ -1438,11 +1473,13 @@ async function narrateTurn(
     const briefing = buildBriefing(world, business, result, [], COMMAND_GUIDE, {
       ...(prior ? { prior: { revenue: prior.revenue, ebitda: prior.ebitda, cash: prior.cash } } : {}),
       events,
+      attributions,
     });
     const outcome = await narrateQuarter(
       { narrate: (system, input) => advisor.narrate!(system, input) },
       briefing,
       () => Date.now(),
+      attributions,
     );
     if (!outcome) {
       // Twice it could not narrate without inventing a figure. Silence, and a
@@ -2372,9 +2409,27 @@ export async function play(
 
   const input = options.input ?? (await openInput());
 
+  /**
+   * §10.4, computed at the only moment it can be: the tick consumes the prior
+   * state, so the comparison endpoints exist together exactly here. `state`
+   * (not the prior result's state) is the "before", because commands like
+   * `assume` mutate between ticks and an adjusted assumption IS a driver.
+   */
+  let priorStatements: StatementSet | undefined;
+  let attributions: DeltaAttribution[] = [];
   const advance = (actions: Action[]): TickResult => {
+    const before = state;
     const result = tick(state, actions, { throwOnAssertionFailure: false });
+    attributions = priorStatements
+      ? attributeQuarter({ state: before, statements: priorStatements }, result, businessId)
+      : [];
+    priorStatements = result.statements;
     state = result.state;
+    // The quarter's decisions, replay-grade. With the market seed already in
+    // the journal, a shared run is a deterministic reproduction, not a story.
+    if (actions.length > 0) {
+      options.journal?.write(journalActions(result.statements.period, actions));
+    }
     return result;
   };
 
@@ -2426,6 +2481,9 @@ export async function play(
         ? { occupancy: entry.derivedMetrics.streamMetrics[0].occupancy }
         : {}),
       events: result.events.filter((e) => e.severity !== 'INFO').map((e) => e.kind),
+      ...(attributions.length > 0
+        ? { attributions: attributions.map((a) => `${a.lineLabel} ${describeAttribution(a)}`) }
+        : {}),
     });
   };
 
@@ -2447,13 +2505,14 @@ export async function play(
   // Run period 0 so there is something to look at before the first decision.
   let last = advance([]);
   record(last);
-  renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
+  renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state, attributions);
   await narrateTurn(
     options.advisor,
     state,
     state.businesses.find((b) => b.id === businessId)!,
     last,
     historyOf(businessId),
+    attributions,
     options.journal,
   );
 
@@ -2626,7 +2685,7 @@ export async function play(
         record(last);
       }
 
-      renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state);
+      renderTurn(last, state.businesses.find((b) => b.id === businessId)!, state, attributions);
       // One narration per pause, not per quarter: a `skip 8` narrates the
       // quarter that ended the skip, against the one before it. Narrating all
       // eight would be eight model calls nobody is reading.
@@ -2636,10 +2695,55 @@ export async function play(
         state.businesses.find((b) => b.id === businessId)!,
         last,
         historyOf(businessId),
+        attributions,
         options.journal,
       );
     }
+    // The run is over — quit, insolvency, milestone stop or end of input all
+    // land here, which is the one moment the share question makes sense.
+    await offerShare(input, options.journal);
   } finally {
     if (!options.input) input.close();
+  }
+}
+
+/**
+ * The per-session QA share, at the only moment it means anything.
+ *
+ * This is the third consent surface, independent of the ambient telemetry
+ * tiers on purpose: a player who declined standing collection is exactly the
+ * player whose bug reports we otherwise never see, and "share THIS run" at
+ * the end of it is consent they can fully evaluate — they just played
+ * everything it contains.
+ *
+ * Deliberately quiet: no endpoint configured, no journal, or a piped
+ * transcript that has run out of lines all mean the question is never asked.
+ * The exit path stays one keypress for everyone who does not want this.
+ */
+async function offerShare(input: LineSource, journal?: Journal): Promise<void> {
+  if (!journal?.path || !uploadTarget()) return;
+  console.log(`\n${DIM}${shareNotice()}${RESET}`);
+  const answer = await input.next('Share this run with the QA team? (y/N) > ');
+  if (answer === undefined || !['y', 'yes'].includes(answer.trim().toLowerCase())) return;
+  const note = (await input.next('Anything to add for QA? (enter to skip) > ')) ?? '';
+
+  try {
+    const result = await shareRun(
+      readEvents(journal.path),
+      sessionIdForFile(basename(journal.path)),
+      note,
+    );
+    if (result.shared) {
+      console.log(
+        `${GREEN}Shared as ${result.reference}.${RESET} ` +
+          `${DIM}Keep that reference — quote it to have the run deleted.${RESET}`,
+      );
+    } else {
+      console.log(`${DIM}Nothing was shared (${result.skipped ?? 'unknown reason'}).${RESET}`);
+    }
+  } catch {
+    // A QA endpoint being down is not the player's problem; say so plainly
+    // rather than printing a stack trace over their ledger.
+    console.log(`${DIM}Could not reach the QA endpoint — nothing was shared.${RESET}`);
   }
 }

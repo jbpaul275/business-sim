@@ -39,15 +39,15 @@ cloned to read the code uploads nothing, to no one.
 
 `supabase/migrations/0001_telemetry.sql`. Three tables.
 
-**`sessions`** — one row per run. Build, timestamps, outcome, archetype, starting capital, turn and quarter
+**`bizsim_sessions`** — one row per run. Build, timestamps, outcome, archetype, starting capital, turn and quarter
 counts, and the four quality signals (`repair_rounds`, `questions_asked`, `fabricated_figures`,
 `cancelled`). No free text: the *archetype* is here because it is one of six fixed strings and is the
 analytic dimension; the business *name* is something a person wrote and is not.
 
-**`calls`** — one row per model call, including the attempts that failed. Provider, model, effort tier,
+**`bizsim_calls`** — one row per model call, including the attempts that failed. Provider, model, effort tier,
 `ms`, four token counts, `cost_usd`, `rates_known`, `attempt`, `ok`, `failure`. Keyed `(session_id, seq)`.
 
-**`transcripts`** — `(session_id, seq, kind, payload jsonb)`. The content tier. `jsonb` rather than columns
+**`bizsim_transcripts`** — `(session_id, seq, kind, payload jsonb)`. The content tier. `jsonb` rather than columns
 because the journal's shape changes with the game, and a migration per event kind guarantees the schema lags
 what is being recorded.
 
@@ -99,12 +99,59 @@ question, and it is an order of magnitude smaller than the one that does not.
 
 ---
 
-## 5. Not done
+## 5. The third consent surface: the per-session QA share
 
-- **The migration has not been applied.** The SQL is written; pointing it at a live project is a decision
-  about a real database and is not one to take on someone's behalf.
-- **No in-game consent prompt.** Environment variables are the right shape for a CLI dev tool and the wrong
-  shape for a shipped game, where this has to be a screen someone reads and answers. `consentNotice()`
-  already returns the text that screen should say.
-- **No retention or deletion path.** A player who changes their mind has no way to ask for their rows back,
-  and there is no TTL on the transcript tier. Both need to exist before this is pointed at real users.
+The ambient tiers above are *standing* grants, and standing grants have a coverage problem: the player who
+declines them is exactly the player whose bug reports never arrive. So there is a third surface, narrower
+than both, built for the exit prompt and the end-of-game wrap:
+
+**"Share this run with QA?"** — asked once, at the end of a run, only when an endpoint is configured. On
+approval, `shareRun()` uploads that one session with the transcript tier **forced on**, plus the player's
+optional note to a `bizsim_feedback` table (`0002_feedback.sql`, same insert-only RLS). It deliberately ignores
+`BIZSIM_TELEMETRY*`: the explicit approval *is* the consent, and it is better consent than any standing
+flag — per-run, freshly given, and fully informed, because the player can see everything the run contains.
+Nothing about it widens any future session.
+
+Three properties worth naming:
+
+- **The exit path stays fast.** No endpoint, no journal, or a piped transcript means the question is never
+  asked. Decline is one keypress. In the web shell the affordance is a quiet link plus a spot on the wrap
+  banner, never a modal in the way of leaving.
+- **The reference id is the deletion handle.** After sharing, the player is shown the session id and told
+  to keep it. Because ids are content-derived (CLI) or per-session random (web) and there is no user
+  identifier, "delete run `dcda1d0a…`" is a request support can honour without ever being able to *find* a
+  player's other runs — deletion works precisely because lookup doesn't.
+- **A shared run is a reproduction, not a story.** Journals now carry the `actions` event — each quarter's
+  decisions with Money as exact cents strings — alongside the market seed. `actions` is classified as
+  content (players type names into actions), so it travels only under the transcript tier or a share.
+
+This reframes the signup question too: with a per-run share door, the account-creation prompt should ask
+for the **metrics tier only** — "numbers, never your words" — and standing transcript consent should not
+be offered at all. Transcripts flow through exactly one door, always deliberately.
+
+## 6. Applied, 2026-08-04
+
+Both migrations are live on the shared Supabase project (`iixciekdybisdslnnxyy`, "Mosaic"). Because the
+project is shared with a production application, every table, policy and index is **`bizsim_`-prefixed** —
+the co-tenant already has its own `feedback` and `sessions`-like tables, and an unprefixed
+`create table if not exists` plus a policy change would have silently attached an anonymous-insert policy
+to someone else's production table. The RLS contract was verified against the live database by exercising
+the `anon` role directly: insert succeeds, select returns nothing, delete touches nothing.
+
+To collect, the game needs:
+
+```sh
+export SUPABASE_URL=https://iixciekdybisdslnnxyy.supabase.co
+export SUPABASE_PUBLISHABLE_KEY=<the project's publishable key>
+```
+
+## 7. Not done
+
+- **No signup/account flow exists yet**, so the metrics-tier opt-in is still environment variables in the
+  CLI and absent in the web shell. The share prompt is the consent screen that *does* exist.
+- **Deletion is a handle, not yet a process.** The reference id makes the request expressible; someone
+  still has to run the `delete` on the service role, and there is no TTL on the transcript tier.
+- **No signup/account flow exists yet**, so the metrics-tier opt-in is still environment variables in the
+  CLI and absent in the web shell. The share prompt is the consent screen that *does* exist.
+- **Deletion is a handle, not yet a process.** The reference id makes the request expressible; someone
+  still has to run the `delete` on the service role, and there is no TTL on the transcript tier.

@@ -161,4 +161,22 @@ export const SCENARIOS: Record<string, () => WorldState> = {
   contractor: fromTemplate('general_contractor', 'Reference Contractor', 'PROJECT_BACKLOG', 900_000, 1_300_000, [
     { kind: 'REVOLVER', principal: 400_000, termQuarters: 40 },
   ]),
+  qsr: fromTemplate('quick_service_restaurant', 'Reference QSR', 'TRAFFIC', 700_000, 1_100_000, [
+    { kind: 'SBA_7A', principal: 300_000, termQuarters: 40 },
+  ]),
+  coffee: fromTemplate('coffee_shop', 'Reference Coffee Shop', 'TRAFFIC', 450_000, 800_000, [
+    { kind: 'SBA_7A', principal: 150_000, termQuarters: 40 },
+  ]),
+  retail: fromTemplate('retail_shop', 'Reference Retail Shop', 'TRAFFIC', 500_000, 900_000, [
+    { kind: 'REVOLVER', principal: 100_000, termQuarters: 40 },
+  ]),
+  agency: fromTemplate('marketing_agency', 'Reference Marketing Agency', 'UTILIZATION', 350_000, 750_000, [
+    { kind: 'REVOLVER', principal: 120_000, termQuarters: 40 },
+  ]),
+  trades: fromTemplate('trades_contractor', 'Reference Trades Contractor', 'PROJECT_BACKLOG', 700_000, 1_100_000, [
+    { kind: 'REVOLVER', principal: 250_000, termQuarters: 40 },
+  ]),
+  gym: fromTemplate('gym_fitness', 'Reference Gym', 'SUBSCRIPTION', 1_400_000, 1_800_000, [
+    { kind: 'SBA_7A', principal: 600_000, termQuarters: 40 },
+  ]),
 };

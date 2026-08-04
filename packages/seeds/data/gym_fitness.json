@@ -1,0 +1,162 @@
+{
+  "id": "gym_fitness",
+  "label": "Gym / fitness studio",
+  "naicsCode": "713940",
+  "defaultArchetypes": [
+    "SUBSCRIPTION"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "retail_and_supplies",
+      "label": "Retail, towels & member supplies",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.04,
+      "accruable": true,
+      "sourceNote": "Shaker bottles, drinks, towel service and cleaning consumables that scale with the member count rather than the building."
+    },
+    {
+      "lineId": "floor_staff",
+      "label": "Front desk & floor trainers",
+      "class": "STEP_FIXED",
+      "statementLine": "LABOR",
+      "value": 9000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "SUBSCRIBERS",
+      "capacityPerBlock": 400,
+      "minimumBlocks": 1,
+      "sourceNote": "One block ≈ 1.4 FTEs of desk and floor coverage at $15/hr per 400 members; coverage hours scale with the membership that shows up."
+    },
+    {
+      "lineId": "general_manager",
+      "label": "General manager",
+      "class": "FIXED_PERIOD",
+      "statementLine": "LABOR",
+      "value": 13000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Salaried GM at $52k/yr; sells memberships and runs the floor regardless of the count."
+    },
+    {
+      "lineId": "rent",
+      "label": "Rent",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 40000,
+      "isMoney": true,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 20000,
+        "high": 75000,
+        "source": "IHRSA industry data — quarterly rent for 6,000-12,000 sq ft of big-box or second-generation retail"
+      },
+      "sourceNote": "8,000 sq ft at $20/sq ft/yr NNN. A gym is a real-estate business with dumbbells: the square footage IS the product — and every extra foot is rent the members pay for through the ramp years.",
+      "annualEscalatorPct": 0.03
+    }
+  ],
+  "streamParamDefaults": {
+    "arpuPerQuarter": 165,
+    "baseCac": 90,
+    "cacInflationCoefficient": 0.3,
+    "quarterlyChurnRate": 0.13,
+    "setupFee": 49,
+    "netRevenueRetention": 1.0,
+    "prepayMonths": 0
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.5,
+    "rampConstant": 2.0,
+    "marketingMaxLift": 0.3,
+    "halfSaturationSpend": 18000,
+    "priceElasticity": 1.3,
+    "baseMarketingSpendPerQuarter": 18000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 2,
+    "dioDays": 10,
+    "dpoDays": 25,
+    "prepaidInsuranceMonths": 6,
+    "securityDepositMonths": 2,
+    "customerDepositPct": 0
+  },
+  "payrollLoadPct": 0.1315,
+  "workersCompPct": 0.02,
+  "offersBenefits": false,
+  "seasonality": [
+    1.12,
+    0.98,
+    0.92,
+    0.98
+  ],
+  "monthlySeasonalWeight": [
+    1.2,
+    1.1,
+    1.06,
+    1.0,
+    0.98,
+    0.96,
+    0.9,
+    0.9,
+    0.96,
+    0.96,
+    0.97,
+    1.01
+  ],
+  "typicalCapex": [
+    {
+      "label": "Cardio & strength equipment",
+      "category": "EQUIPMENT",
+      "cost": 300000,
+      "usefulLifeYears": 7
+    },
+    {
+      "label": "Buildout — flooring, HVAC, locker rooms",
+      "category": "LEASEHOLD_IMPROVEMENTS",
+      "cost": 250000,
+      "usefulLifeYears": 15
+    },
+    {
+      "label": "Front desk, AV & access control",
+      "category": "FF&E",
+      "cost": 40000,
+      "usefulLifeYears": 7
+    }
+  ],
+  "plausibility": {
+    "laborPctOfRevenue": {
+      "low": 0.2,
+      "high": 0.35,
+      "source": "IHRSA industry data — membership gyms without large PT books; studios with instructor-led classes run far higher"
+    },
+    "occupancyPctOfRevenue": {
+      "low": 0.16,
+      "high": 0.32,
+      "source": "IHRSA industry data — full OCCUPANCY line; gyms are the most occupancy-heavy business in this catalog by design"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.1,
+      "high": 0.25,
+      "source": "IHRSA industry data — independent mid-market clubs at stabilized membership; note EBITDA flatters a gym, whose equipment wears out fast"
+    }
+  },
+  "monthlyRent": 13333,
+  "preOpening": {
+    "payrollAndTraining": 30000,
+    "marketing": 40000,
+    "permitsAndLegal": 15000
+  },
+  "generalLiabilityInsurancePerYear": 12000,
+  "propertyInsurancePerYear": 6000,
+  "accountingAndLegalPerYear": 8000,
+  "softwareAndPosPerYear": 10000,
+  "permitsAndLicensesPerYear": 2000,
+  "utilitiesPerQuarter": 9000,
+  "ownerCompPerYear": 80000,
+  "badDebtPctOfRevenue": 0.02,
+  "repairsPctOfRevenue": 0.015,
+  "cardProcessingRate": 0.029,
+  "cardMixPct": 0.98,
+  "volumeNoun": "members"
+}

@@ -1,0 +1,152 @@
+{
+  "id": "trades_contractor",
+  "label": "Trades contractor",
+  "naicsCode": "238220",
+  "defaultArchetypes": [
+    "PROJECT_BACKLOG"
+  ],
+  "costDefaults": [
+    {
+      "lineId": "materials_and_equipment",
+      "label": "Materials & installed equipment",
+      "class": "VARIABLE_REVENUE",
+      "statementLine": "COGS",
+      "value": 0.35,
+      "accruable": true,
+      "benchmarkBand": {
+        "low": 0.55,
+        "high": 0.7,
+        "source": "PHCC / ACCA contractor benchmarking — band is TOTAL direct cost; own field labor is a separate COGS line and the two must land inside it together"
+      },
+      "sourceNote": "Condensers, water heaters, panels, pipe and wire — the equipment that gets installed. Materials-only; the crew that installs it is the next line."
+    },
+    {
+      "lineId": "field_techs",
+      "label": "Field technicians",
+      "class": "STEP_FIXED",
+      "statementLine": "COGS",
+      "value": 36000,
+      "isMoney": true,
+      "isLabor": true,
+      "driver": "REVENUE",
+      "capacityPerBlock": 220000,
+      "minimumBlocks": 1,
+      "sourceNote": "One block ≈ a two-tech crew with a truck, executing roughly $220k of installed work a quarter at $34/hr journeyman wages."
+    },
+    {
+      "lineId": "office_and_dispatch",
+      "label": "Office, estimating & dispatch",
+      "class": "FIXED_PERIOD",
+      "statementLine": "G&A",
+      "value": 30000,
+      "isMoney": true,
+      "isLabor": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Estimator-dispatcher and a bookkeeper; quotes go out and trucks get routed whether or not jobs close."
+    },
+    {
+      "lineId": "shop",
+      "label": "Shop & yard",
+      "class": "FIXED_PERIOD",
+      "statementLine": "OCCUPANCY",
+      "value": 7500,
+      "isMoney": true,
+      "accruable": true,
+      "annualEscalatorPct": 0.03,
+      "sourceNote": "Small shop bay with parts storage and a fenced yard for the fleet."
+    }
+  ],
+  "streamParamDefaults": {
+    "avgContractValue": 25000,
+    "bidsSubmittedPerQuarter": 40,
+    "winRate": 0.38,
+    "executionCapacityPerQuarter": 520000,
+    "retainagePct": 0.02,
+    "retainageReleaseLagQuarters": 1,
+    "progressBillingLagDays": 20,
+    "changeOrderPctOfContract": 0.05
+  },
+  "modifierDefaults": {
+    "rampFloor": 0.45,
+    "rampConstant": 2.5,
+    "marketingMaxLift": 0.3,
+    "halfSaturationSpend": 8000,
+    "priceElasticity": 1.5,
+    "baseMarketingSpendPerQuarter": 8000
+  },
+  "workingCapitalDefaults": {
+    "dsoDays": 25,
+    "dioDays": 12,
+    "dpoDays": 30,
+    "prepaidInsuranceMonths": 12,
+    "securityDepositMonths": 1,
+    "customerDepositPct": 0.15
+  },
+  "payrollLoadPct": 0.2065,
+  "workersCompPct": 0.07,
+  "offersBenefits": false,
+  "seasonality": [
+    0.86,
+    1.08,
+    1.12,
+    0.94
+  ],
+  "monthlySeasonalWeight": [
+    0.8,
+    0.86,
+    0.92,
+    1.02,
+    1.1,
+    1.12,
+    1.14,
+    1.12,
+    1.1,
+    1.0,
+    0.92,
+    0.9
+  ],
+  "typicalCapex": [
+    {
+      "label": "Service trucks & upfitting",
+      "category": "VEHICLES",
+      "cost": 180000,
+      "usefulLifeYears": 5
+    },
+    {
+      "label": "Tools, meters & pipe threaders",
+      "category": "EQUIPMENT",
+      "cost": 60000,
+      "usefulLifeYears": 7
+    }
+  ],
+  "plausibility": {
+    "cogsPctOfRevenue": {
+      "low": 0.55,
+      "high": 0.7,
+      "source": "PHCC / ACCA contractor benchmarking — total direct cost for install-led mechanical trades"
+    },
+    "ebitdaMarginPct": {
+      "low": 0.08,
+      "high": 0.18,
+      "source": "PHCC / ACCA contractor benchmarking — install-led shops; service-heavy books run higher, new-construction subs lower"
+    }
+  },
+  "monthlyRent": 2500,
+  "preOpening": {
+    "payrollAndTraining": 25000,
+    "marketing": 10000,
+    "permitsAndLegal": 15000
+  },
+  "generalLiabilityInsurancePerYear": 24000,
+  "propertyInsurancePerYear": 5000,
+  "accountingAndLegalPerYear": 10000,
+  "softwareAndPosPerYear": 9000,
+  "permitsAndLicensesPerYear": 6000,
+  "utilitiesPerQuarter": 2500,
+  "ownerCompPerYear": 110000,
+  "badDebtPctOfRevenue": 0.005,
+  "repairsPctOfRevenue": 0.012,
+  "cardProcessingRate": 0.028,
+  "cardMixPct": 0.35,
+  "volumeNoun": "jobs"
+}

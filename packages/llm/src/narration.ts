@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { DeltaAttribution } from '@bizsim/schemas';
 import { correction, unverifiedFigures, type Briefing } from './advice.js';
 
 /**
@@ -61,6 +62,7 @@ export const NARRATION_PROMPT = `You are narrating one quarter of a business sim
 
 - **Lead with what changed and why.** Compare this quarter to the last one where the briefing shows both. If nothing moved, say that in one sentence — a flat quarter is a finding, not a failure to find something.
 - **Every causal claim maps to an event or a figure you were given.** The briefing lists this quarter's events. "The revolver draw is why cash held" is legal if the draw is listed; "customers loved the new menu" is an invented mechanism and is not.
+- **The "Why … moved" lines are the engine's own attribution (§10.4)** — each significant move already decomposed into its drivers, with the assumption's provenance tag. When you explain a move, explain THOSE mechanisms. Naming a driver the attribution does not list is inventing one.
 - **Do not restate the numbers — explain them.** The statements are already on screen, and the deterministic findings are marked in the briefing as already shown. Repeating either wastes the only thing you add.
 - **Direct and unsentimental.** Not a cheerleader, not a doomsayer. No "great quarter!", no dread. The player is making decisions with real attention and deserves a straight read.
 
@@ -77,6 +79,16 @@ export interface NarrationOutcome {
   ms: number;
   /** Figures the first attempt invented — kept as data, same as the advisor. */
   retriedOn?: string[];
+  /**
+   * §11.5's `attributions`, attached verbatim from the engine rather than
+   * emitted by the model. The spec puts the field on the narration output;
+   * this build computes it in `attributeQuarter` (§10.4) and passes it
+   * through, because a model asked to produce assumption IDs and provenance
+   * tags would be invited to invent exactly the mechanisms §11.5 forbids.
+   * The model sees the same attributions as briefing lines and may explain
+   * them; it may not mint them.
+   */
+  attributions?: readonly DeltaAttribution[];
 }
 
 /**
@@ -91,13 +103,16 @@ export async function narrateQuarter(
   transport: NarrationTransport,
   briefing: Briefing,
   now: () => number = () => 0,
+  attributions?: readonly DeltaAttribution[],
 ): Promise<NarrationOutcome | undefined> {
   const started = now();
   const input = `${briefing.text}\n\nNarrate the quarter that just ended.`;
+  const attach: Pick<NarrationOutcome, 'attributions'> =
+    attributions && attributions.length > 0 ? { attributions } : {};
 
   const first = await transport.narrate(NARRATION_PROMPT, input);
   const bad = unverifiedFigures(spoken(first), briefing, '');
-  if (bad.length === 0) return { narration: first, ms: now() - started };
+  if (bad.length === 0) return { narration: first, ms: now() - started, ...attach };
 
   const second = await transport.narrate(
     NARRATION_PROMPT,
@@ -105,7 +120,7 @@ export async function narrateQuarter(
   );
   if (unverifiedFigures(spoken(second), briefing, '').length > 0) return undefined;
 
-  return { narration: second, ms: now() - started, retriedOn: bad };
+  return { narration: second, ms: now() - started, retriedOn: bad, ...attach };
 }
 
 /** Everything the player would see, as one string for the guard to sweep. */

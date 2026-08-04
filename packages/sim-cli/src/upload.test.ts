@@ -2,7 +2,16 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { consentNotice, consentTier, redact, uploadSession, uploadTarget } from './upload.js';
+import {
+  consentNotice,
+  consentTier,
+  redact,
+  sessionIdForFile,
+  shareNotice,
+  shareRun,
+  uploadSession,
+  uploadTarget,
+} from './upload.js';
 import type { JournalEvent } from './journal.js';
 
 /**
@@ -44,6 +53,9 @@ const events: JournalEvent[] = [
   { kind: 'narration_corrected', period: 0, figures: ['$9k'] },
   { kind: 'commit', committed: true, equity: '$1', termDebt: '$0', openingCash: '$1', monthZero: '$1' },
   { kind: 'quarter', period: 0, revenue: '$1', ebitda: '$0', cash: '$1', events: [] },
+  // Actions can carry player-typed names (a clone, a started concept), so they
+  // are classified as content and must never ride the metrics tier.
+  { kind: 'actions', period: 1, actions: [{ kind: 'START_BUSINESS', name: SECRET }] },
 ];
 
 describe('consent', () => {
@@ -123,7 +135,7 @@ describe('what the transcript tier sends', () => {
     expect(JSON.stringify(payload.transcripts)).toContain(SECRET);
     // Every content event, and no metric ones duplicated into it.
     expect(payload.transcripts.map((t) => t.kind).sort()).toEqual(
-      ['advice_corrected', 'asked', 'draft', 'narration', 'narration_corrected', 'turn'].sort(),
+      ['actions', 'advice_corrected', 'asked', 'draft', 'narration', 'narration_corrected', 'turn'].sort(),
     );
   });
 
@@ -196,9 +208,9 @@ describe('sending it', () => {
 
     // `calls` carries a foreign key to `sessions`, so the reverse order would
     // be rejected outright.
-    expect(seen.map((s) => s.table)).toEqual(['sessions', 'calls']);
+    expect(seen.map((s) => s.table)).toEqual(['bizsim_sessions', 'bizsim_calls']);
     // No transcripts request at all under the metrics tier — not an empty one.
-    expect(seen.some((s) => s.table === 'transcripts')).toBe(false);
+    expect(seen.some((s) => s.table === 'bizsim_transcripts')).toBe(false);
     // Retry-safe, and asking for nothing back: the policies grant insert and
     // nothing else, so requesting the row would 401.
     expect(seen[0]!.prefer).toContain('ignore-duplicates');
@@ -217,5 +229,90 @@ describe('sending it', () => {
           new Response('permission denied', { status: 401 })) as unknown as typeof fetch,
       }),
     ).rejects.toThrow(/401/);
+  });
+});
+
+describe('the per-session QA share', () => {
+  const target = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'k' };
+
+  const capture = () => {
+    const seen: { table: string; rows: unknown[] }[] = [];
+    const fetcher = (async (url: string, init: RequestInit) => {
+      seen.push({ table: url.split('/').pop()!, rows: JSON.parse(init.body as string) });
+      return new Response('', { status: 201 });
+    }) as unknown as typeof fetch;
+    return { seen, fetcher };
+  };
+
+  it('shares one run on explicit approval, with ambient consent fully off', async () => {
+    /**
+     * The design point. The player who declined standing collection is exactly
+     * the player whose bug reports we otherwise never see — their "share this
+     * run" at the exit prompt IS the consent, and it needs no env flag.
+     */
+    const { seen, fetcher } = capture();
+    const result = await shareRun(events, 'sess-1', 'the freezer price was insane', {
+      env: { ...target, BIZSIM_TELEMETRY: 'off' },
+      fetcher,
+    });
+    expect(result.shared).toBe(true);
+    expect(result.reference).toBe('sess-1');
+    // Transcript tier forced for this run: the words go, because that is what
+    // was approved.
+    expect(seen.map((s) => s.table)).toEqual(['bizsim_sessions', 'bizsim_calls', 'bizsim_transcripts', 'bizsim_feedback']);
+    expect(JSON.stringify(seen.find((s) => s.table === 'bizsim_transcripts')!.rows)).toContain(SECRET);
+  });
+
+  it('carries the note to the feedback table and nowhere else', async () => {
+    const { seen, fetcher } = capture();
+    await shareRun(events, 'sess-1', '  the challenge loop capitulated  ', {
+      env: target,
+      fetcher,
+    });
+    const feedback = seen.find((s) => s.table === 'bizsim_feedback')!.rows[0] as {
+      session_id: string;
+      note: string;
+      build: string;
+    };
+    expect(feedback).toEqual({
+      session_id: 'sess-1',
+      note: 'the challenge loop capitulated',
+      build: 'abc1234',
+    });
+    for (const { table, rows } of seen) {
+      if (table !== 'bizsim_feedback') {
+        expect(JSON.stringify(rows), table).not.toContain('capitulated');
+      }
+    }
+  });
+
+  it('still refuses to send anywhere without an endpoint', async () => {
+    // Explicit consent to share is not a place to send it. No default endpoint,
+    // same as the ambient path.
+    let called = false;
+    const result = await shareRun(events, 'sess-1', 'note', {
+      env: { BIZSIM_TELEMETRY: 'on', BIZSIM_TELEMETRY_TRANSCRIPTS: 'on' },
+      fetcher: (async () => {
+        called = true;
+        return new Response('', { status: 201 });
+      }) as unknown as typeof fetch,
+    });
+    expect(result.shared).toBe(false);
+    expect(called).toBe(false);
+    expect(result.skipped).toContain('SUPABASE_URL');
+  });
+
+  it('says what a share sends, per run, with the deletion handle named', () => {
+    const notice = shareNotice();
+    expect(notice).toContain('THIS run');
+    expect(notice).toContain('future sessions');
+    expect(notice).toContain('reference');
+  });
+
+  it('derives the same id the ambient upload uses, so both land on one key', () => {
+    const id = sessionIdForFile('2026-08-04-run.jsonl');
+    expect(id).toBe(sessionIdForFile('2026-08-04-run.jsonl'));
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(id).not.toBe(sessionIdForFile('2026-08-05-run.jsonl'));
   });
 });

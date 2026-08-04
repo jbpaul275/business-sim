@@ -12,7 +12,7 @@ import { openInput } from './input.js';
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { journalDir, listSessions, type Journal } from './journal.js';
-import { consentNotice, consentTier, uploadSession, uploadTarget } from './upload.js';
+import { consentNotice, consentTier, sessionIdForFile, uploadSession, uploadTarget } from './upload.js';
 import { summariseFaults } from './faults.js';
 
 /**
@@ -278,21 +278,7 @@ async function uploadRecorded(): Promise<void> {
  * need one.
  */
 function sessionId(file: string): string {
-  const name = basename(file);
-  let h = 0x811c9dc5;
-  const bytes: number[] = [];
-  for (let i = 0; i < 16; i++) {
-    for (let j = 0; j < name.length; j++) {
-      h ^= name.charCodeAt(j) + i;
-      h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    bytes.push(h & 0xff);
-  }
-  const hex = bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
-  return (
-    `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-` +
-    `8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
-  );
+  return sessionIdForFile(basename(file));
 }
 
 interface Args {
