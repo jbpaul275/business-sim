@@ -92,6 +92,12 @@ export interface SetupSession {
   deadReason?: string;
   /** Guards against concurrent model calls on one session. */
   busy: boolean;
+  /**
+   * Live stage label while the staged draft assembles ("building the model —
+   * the cost structure (2/4)"). A box rather than a string so the interview's
+   * onStage callback, wired before the session object exists, can write it.
+   */
+  progress: { text?: string | undefined };
 }
 
 const globalStore = globalThis as unknown as { __bizsimSetups?: Map<string, SetupSession> };
@@ -131,6 +137,7 @@ export function createSetup(
         events.push({ kind: 'call', ...record });
       },
     });
+  const progress: { text?: string | undefined } = {};
   const marketSeed = Date.now() % 1_000_000_007;
   events.push({ kind: 'market_seed', seed: marketSeed });
 
@@ -145,6 +152,10 @@ export function createSetup(
       // concept should be scaled to the person describing it, and the draft
       // call inherits the same system prompt.
       investable: toDisplay(capital, { showCents: false }),
+      // Staged synthesis progress, surfaced to the polling client.
+      onStage: ({ index, total, label }) => {
+        progress.text = `building the model — ${label} (${index + 1}/${total})`;
+      },
     }),
     calls,
     events,
@@ -170,6 +181,7 @@ export function createSetup(
     turns: 0,
     notes: [],
     busy: false,
+    progress,
   };
   setups.set(session.id, session);
   return session;
@@ -387,6 +399,7 @@ export async function say(
     }
   } finally {
     session.busy = false;
+    session.progress.text = undefined;
   }
 }
 

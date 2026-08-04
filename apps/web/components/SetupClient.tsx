@@ -42,6 +42,28 @@ export function SetupClient() {
     chatEnd.current?.scrollIntoView({ behavior: 'smooth' });
   }, [view?.chat.length, view?.phase]);
 
+  // While a model call runs, poll the session so staged-draft progress
+  // ("building the model — the cost structure (2/4)") reaches the screen.
+  // Only mid-call states are applied (data.busy), so a stale poll can never
+  // clobber the settled view the POST response delivers.
+  const sessionId = view?.id;
+  useEffect(() => {
+    if (!busy || !sessionId) return;
+    const poll = setInterval(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/setup/${sessionId}`);
+          if (!res.ok) return;
+          const data = (await res.json()) as SetupView;
+          if (data.busy) setView(data);
+        } catch {
+          // A missed poll costs a progress update, nothing else.
+        }
+      })();
+    }, 1200);
+    return () => clearInterval(poll);
+  }, [busy, sessionId]);
+
   const post = async (path: string, body: unknown): Promise<Response> =>
     fetch(path, {
       method: 'POST',
@@ -201,7 +223,11 @@ export function SetupClient() {
               {entry.effort && <div className="effort">{entry.effort}</div>}
             </div>
           ))}
-          {busy && <div className="bubble system"><div className="text">{busyLabel}…</div></div>}
+          {busy && (
+            <div className="bubble system">
+              <div className="text">{view.progress ?? busyLabel}…</div>
+            </div>
+          )}
           {error && <div className="share-error">{error}</div>}
           <div ref={chatEnd} />
 

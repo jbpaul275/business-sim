@@ -8,6 +8,8 @@ import {
   type ConceptTransport,
 } from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
+import { MalformedDraftError } from './draft.js';
+import type { InterviewMessage } from './client.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { zConceptDraft, zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
@@ -1283,5 +1285,97 @@ describe('cancelling a call', () => {
     aborted.name = 'APIUserAbortError';
     expect(isTransient(aborted)).toBe(false);
     expect(isCancellation(aborted)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Staged synthesis
+// ---------------------------------------------------------------------------
+
+/**
+ * A transport that speaks the staged protocol: one ready turn, then a slice
+ * of the fixture per stage. `breakCosts` returns nonsense from the costs
+ * stage that many times first, to exercise the scoped retry.
+ */
+function stagedTransport(d: ConceptDraft, opts: { breakCosts?: number } = {}) {
+  const slices: Record<string, unknown> = {
+    spine: {
+      businessName: d.businessName,
+      summary: d.summary,
+      legalForm: d.legalForm,
+      seedTemplateId: d.seedTemplateId,
+      stream: d.stream,
+    },
+    costs: { costLines: d.costLines },
+    capital: { capex: d.capex, workingCapital: d.workingCapital },
+    finish: { overheads: d.overheads, openNotes: d.openNotes },
+  };
+  let costsCalls = 0;
+  const calls: { stage: string; last: string }[] = [];
+  const transport = {
+    calls,
+    usage: EMPTY_USAGE,
+    turn: async () => ({
+      turn: { message: 'That is enough to build against.', cta: 'Drafting it now.', readyToDraft: true },
+    }),
+    adjudicate: () => Promise.reject(new Error('no adjudication in this double')),
+    advise: () => Promise.reject(new Error('no advice in this double')),
+    draft: () => Promise.reject(new Error('the one-shot path must not run when the transport is staged')),
+    async draftStage(_system: string, messages: readonly InterviewMessage[], stage: string) {
+      calls.push({ stage, last: messages[messages.length - 1]!.content });
+      if (stage === 'costs') {
+        costsCalls += 1;
+        if (costsCalls <= (opts.breakCosts ?? 0)) return { costLines: 'not an array at all' };
+      }
+      return slices[stage];
+    },
+  };
+  return transport as unknown as ConceptTransport & { calls: { stage: string; last: string }[] };
+}
+
+describe('staged synthesis', () => {
+  it('assembles the draft from four small constrained calls, in order', async () => {
+    const d = draft();
+    const transport = stagedTransport(d);
+    const seen: string[] = [];
+    const interview = new ConceptInterview({
+      transport,
+      onStage: ({ index, total, label }) => seen.push(`${index + 1}/${total} ${label}`),
+    });
+    const state = await interview.send('build the scoop shop');
+    expect(state.status).toBe('DRAFTED');
+    if (state.status !== 'DRAFTED') return;
+    // The assembled whole is exactly the fixture — stages are .pick()ed from
+    // the same schema, so nothing is lost or reshaped in assembly.
+    expect(state.draft).toEqual(d);
+    expect(transport.calls.map((c) => c.stage)).toEqual(['spine', 'costs', 'capital', 'finish']);
+    // Coherence: later stages receive the already-fixed sections verbatim.
+    expect(transport.calls[1]!.last).toContain(d.businessName);
+    expect(transport.calls[3]!.last).toContain('deferred question');
+    expect(seen).toEqual([
+      '1/4 the revenue engine',
+      '2/4 the cost structure',
+      '3/4 what it takes to open',
+      '4/4 overheads and open questions',
+    ]);
+  });
+
+  it('a misshapen section gets one scoped retry, not a full regeneration', async () => {
+    const d = draft();
+    const transport = stagedTransport(d, { breakCosts: 1 });
+    const interview = new ConceptInterview({ transport });
+    const state = await interview.send('build it');
+    expect(state.status).toBe('DRAFTED');
+    const costsCalls = transport.calls.filter((c) => c.stage === 'costs');
+    expect(costsCalls).toHaveLength(2);
+    expect(costsCalls[1]!.last).toContain('did not match its schema');
+    // The other stages ran exactly once — the repair stayed scoped.
+    expect(transport.calls.filter((c) => c.stage === 'spine')).toHaveLength(1);
+  });
+
+  it('a section wrong twice fails readably, feeding the existing repair loop', async () => {
+    const transport = stagedTransport(draft(), { breakCosts: 2 });
+    const interview = new ConceptInterview({ transport });
+    await expect(interview.send('build it')).rejects.toBeInstanceOf(MalformedDraftError);
   });
 });

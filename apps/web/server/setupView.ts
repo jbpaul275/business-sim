@@ -56,6 +56,8 @@ export interface SetupView {
   deadReason?: string;
   spend?: string;
   busy: boolean;
+  /** Stage label while the staged draft assembles, for the polling client. */
+  progress?: string;
   /**
    * Whether "no more questions — build it" would produce something. True once
    * the player has said anything at all (or arrived seeded, where the
@@ -78,6 +80,7 @@ export function toSetupView(session: SetupSession): SetupView {
       (session.turns > 0 || session.seed !== undefined || session.chat.some((c) => c.who === 'you')),
     ...(session.deadReason ? { deadReason: session.deadReason } : {}),
     ...(spendSummary(session) ? { spend: spendSummary(session)! } : {}),
+    ...(session.progress.text ? { progress: session.progress.text } : {}),
   };
 
   if (session.concept) {

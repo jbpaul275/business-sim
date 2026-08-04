@@ -1,4 +1,5 @@
-import { assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
+import { MalformedDraftError, assertDraftShape, type ConceptDraft, type DraftParam } from './draft.js';
+import { DRAFT_STAGES, assembleDraft } from './stages.js';
 import { statedFiguresAppendix } from './commitments.js';
 import { CONCEPT_INTERVIEW_SYSTEM, investableNote, templateCatalogue } from './prompt.js';
 import { ARCHETYPE_PARAMS, PRICE_KEY } from './toTemplate.js';
@@ -46,6 +47,12 @@ export interface InterviewOptions {
    * caller showing progress should be able to say which is happening.
    */
   onDrafting?: () => void;
+  /**
+   * Fired as each draft stage begins, when the transport supports staged
+   * synthesis — the hook progressive UIs hang "building the cost structure
+   * (2/4)" off. Never fires on the one-shot path.
+   */
+  onStage?: (stage: { index: number; total: number; label: string }) => void;
 }
 
 export type InterviewState =
@@ -161,10 +168,12 @@ export class ConceptInterview {
   }
 
   private readonly onDrafting: (() => void) | undefined;
+  private readonly onStage: InterviewOptions['onStage'];
 
   constructor(options: InterviewOptions) {
     this.transport = options.transport;
     this.onDrafting = options.onDrafting;
+    this.onStage = options.onStage;
     this.maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
     const templates = options.templates ?? [];
     this.system =
@@ -240,21 +249,19 @@ export class ConceptInterview {
 
   private async runDraft(): Promise<ConceptDraft> {
     this.onDrafting?.();
-    // A second call, with the draft schema this time. Splitting the two is what
-    // keeps each request's decoding grammar inside the API's size limit, and it
-    // also stops the model juggling seventeen overhead fields while asking
-    // where the shop is.
-    //
-    // `draft()` returns a draft, not a usage record, so the cost is read as a
-    // delta on the transport's running total. That also picks up the
-    // unconstrained retry when the draft grammar will not compile, which is a
-    // second full call at draft effort and the most expensive thing that
-    // happens in a session.
+    // The cost is read as a delta on the transport's running total either
+    // way, so retries and fallbacks inside the transport are still counted.
     const startedAt = Date.now();
     const before = this.transport.usage?.thinkingTokens ?? 0;
-    let draft;
+    let draft: ConceptDraft;
     try {
-      draft = assertDraftShape(await this.transport.draft(this.promptNow(), this.transcript));
+      draft = this.transport.draftStage
+        ? await this.runStagedDraft()
+        : // One-shot fallback for transports without staged synthesis. Its
+          // schema is the size that sometimes overflowed the decoding
+          // grammar — which is why the staged path is the default whenever
+          // the transport offers it.
+          assertDraftShape(await this.transport.draft(this.promptNow(), this.transcript));
     } catch (error) {
       throw isTransient(error) ? new TransientError(error, 'draft') : error;
     }
@@ -263,6 +270,53 @@ export class ConceptInterview {
       thinkingTokens: (this.transport.usage?.thinkingTokens ?? 0) - before,
     };
     return draft;
+  }
+
+  /**
+   * The draft as a pipeline of small constrained calls — spine, costs,
+   * capital, overheads — each validated as it lands, each seeing the
+   * sections already fixed. A stage that comes back misshapen gets exactly
+   * one correction retry scoped to that stage; the monolith's alternative
+   * was regenerating everything.
+   */
+  private async runStagedDraft(): Promise<ConceptDraft> {
+    const built: Record<string, unknown> = {};
+    for (const [index, stage] of DRAFT_STAGES.entries()) {
+      this.onStage?.({ index, total: DRAFT_STAGES.length, label: stage.label });
+      const asked: InterviewMessage[] = [
+        ...this.transcript,
+        { role: 'user', content: stage.instruction(built) },
+      ];
+      let value = await this.transport.draftStage!(this.promptNow(), asked, stage.name);
+      let parsed = stage.schema.safeParse(value);
+      if (!parsed.success) {
+        const where = parsed.error.issues
+          .slice(0, 3)
+          .map((i) => i.path.join('.'))
+          .filter(Boolean)
+          .join(', ');
+        value = await this.transport.draftStage!(
+          this.promptNow(),
+          [
+            ...asked,
+            { role: 'assistant', content: JSON.stringify(value) },
+            {
+              role: 'user',
+              content:
+                `That section did not match its schema${where ? ` (${where})` : ''}. ` +
+                `Emit the same section again, complete and exactly matching, and nothing else.`,
+            },
+          ],
+          stage.name,
+        );
+        parsed = stage.schema.safeParse(value);
+        if (!parsed.success) {
+          throw new MalformedDraftError(`the ${stage.label} section came back wrong twice`);
+        }
+      }
+      Object.assign(built, parsed.data as Record<string, unknown>);
+    }
+    return assembleDraft(built);
   }
 
   /**

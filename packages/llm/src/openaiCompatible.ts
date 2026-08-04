@@ -31,10 +31,12 @@ import {
   NARRATION_SCHEMA,
   DRAFT_AS_PROSE,
   DRAFT_SCHEMA,
+  STAGE_SCHEMAS,
   TURN_SCHEMA,
   isUnusable,
   parseModelJson,
 } from './wire.js';
+import type { DraftStageName } from './stages.js';
 
 /**
  * The same four calls, against anything that speaks the OpenAI wire format.
@@ -730,6 +732,38 @@ export class OpenAICompatibleTransport implements ConceptTransport {
       throw new MalformedDraftError('it was not valid JSON');
     }
     return assertDraftShape(json);
+  }
+
+  /**
+   * One section of the draft, constrained to that section's schema.
+   *
+   * The spine carries the draft's hard reasoning (parameters that must
+   * multiply out to the revenue claim), so it runs at draft effort; the
+   * later sections elaborate what the spine fixed and run at turn effort —
+   * small fast calls, which is the point of staging. Every stage grammar is
+   * a fraction of the monolith's, so constrained decoding always compiles.
+   */
+  async draftStage(
+    system: string,
+    messages: readonly InterviewMessage[],
+    stage: DraftStageName,
+  ): Promise<unknown> {
+    const effort = stage === 'spine' ? this.draftEffort : this.turnEffort;
+    const attempt = await this.complete(
+      'draft',
+      1,
+      system,
+      messages,
+      STAGE_SCHEMAS[stage],
+      effort,
+      this.draftModel,
+      this.draftMaxTokens,
+    );
+    try {
+      return parseModelJson(attempt.text);
+    } catch {
+      throw new MalformedDraftError(`the ${stage} section was not valid JSON`);
+    }
   }
 }
 

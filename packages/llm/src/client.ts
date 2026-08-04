@@ -3,6 +3,7 @@ import { type TurnAdvice, zTurnAdvice } from './advice.js';
 import { type TurnNarration, zTurnNarration } from './narration.js';
 import { type Adjudication, zAdjudication } from './challenge.js';
 import { ZERO_TOKENS, emitCall, type CallKind, type CallSink } from './telemetry.js';
+import type { DraftStageName } from './stages.js';
 import {
   ADJUDICATION_SCHEMA,
   ADVICE_SCHEMA,
@@ -135,6 +136,19 @@ export interface ConceptTransport {
   narrate?(system: string, input: string): Promise<TurnNarration>;
   /** Synthesise the full concept. Called once the interview says it is ready. */
   draft(system: string, messages: readonly InterviewMessage[]): Promise<ConceptDraft>;
+  /**
+   * One section of the draft, constrained to that section's schema — the
+   * staged pipeline's unit of work. Optional: transports that implement it
+   * get incremental synthesis (small grammars that always compile, repairs
+   * scoped to one section, progress the player can watch); transports that
+   * do not fall back to the one-shot `draft`. Returns the parsed JSON value;
+   * shape validation happens in the interview against the stage's Zod schema.
+   */
+  draftStage?(
+    system: string,
+    messages: readonly InterviewMessage[],
+    stage: DraftStageName,
+  ): Promise<unknown>;
   /**
    * Who is answering, for the player — "kimi · kimi-k3".
    *

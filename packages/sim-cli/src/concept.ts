@@ -232,6 +232,8 @@ export async function runConceptInterview(
   const interview = new ConceptInterview({
     transport: live,
     onDrafting: () => spinner.label('building the model'),
+    onStage: ({ index, total, label }) =>
+      spinner.label(`building the model — ${label} (${index + 1}/${total})`),
     // The templates are offered as a convenience, not a menu: the model uses
     // one only when its cost structure genuinely fits, and otherwise emits its
     // own cost lines (D-5).
