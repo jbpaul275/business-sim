@@ -354,7 +354,11 @@ export function investableNote(amount: string): string {
 
 export function templateCatalogue(templates: readonly { id: string; label: string }[]): string {
   const rows = templates.map((t) => `- \`${t.id}\` — ${t.label}`).join('\n');
-  return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.`;
+  return `\n\n## Available seed templates\n\n${rows}\n\nUse one of these ids only when its cost structure genuinely fits. Otherwise null.
+
+**Borrowing a template means pruning it.** A template is a starting cost structure, not a rider that must all come along. When the player's concept eliminates one of its lines, the line does not survive: a solo recruiter who says "the AI conducts the screening at ~$2/interview" has just deleted the services template's freelance-overflow COGS — a live draft kept it anyway and charged a one-person firm 35% of revenue for freelancers the player had explicitly replaced, on top of full staffed labor. Every borrowed line must survive the player's own description, or go.
+
+**Pay-per-outcome revenue is not billable hours.** Contingency fees, commissions, success fees and placements are won and delivered as discrete outcomes — a recruiting firm earns $30-37k per placement, and the player thinks in placements. Modeling it as UTILIZATION dressed the same business in $812.50 "blended hourly rate" and "utilisation 27.4%", vocabulary the player rightly rejected as someone else's business. Whatever archetype carries the constraint best, the params and volumeNoun must be in the trade's own unit of outcome, priced at what one outcome pays.`;
 }
 
 export const CONCEPT_INTERVIEW_SYSTEM = CONCEPT_INTERVIEW_TEMPLATE.replace(

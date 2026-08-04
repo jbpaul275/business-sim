@@ -160,6 +160,24 @@ describe('ConceptInterview', () => {
     expect(system).toContain('the business comes from what they tell you');
   });
 
+  it('borrowing a template means pruning it, and outcomes are not hours', async () => {
+    // Live: a solo contingency recruiter seeded from the services template got
+    // its freelance-overflow COGS (35% of revenue for freelancers the player
+    // had explicitly replaced with $2/interview AI) and its billable-hours
+    // vocabulary ($812.50/hr) — both survived a concept that deleted them.
+    const transport = new ScriptedTransport([asks('Where?')]);
+    const interview = new ConceptInterview({
+      transport,
+      templates: [{ id: 'professional_services_firm', label: 'Professional services firm' }],
+    });
+    await interview.send('a recruiting firm');
+    const system = transport.seen[0]!.system;
+    expect(system).toContain('Borrowing a template means pruning it');
+    expect(system).toContain("must survive the player's own description");
+    expect(system).toContain('Pay-per-outcome revenue is not billable hours');
+    expect(system).toContain('unit of outcome');
+  });
+
   it('offers templates only when there are templates to offer', async () => {
     const transport = new ScriptedTransport([asks('Where is it?')]);
     const interview = new ConceptInterview({
