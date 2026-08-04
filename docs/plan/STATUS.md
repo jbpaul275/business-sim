@@ -12,7 +12,7 @@ Against the milestones in [02-milestones.md](./02-milestones.md).
 | **M5 — Turn loop + actions** | 🟡 Mostly | §9.1 Phases 0-5 playable via `pnpm sim --new`. The §9.4 post-mortem is in, mandatory on insolvency and available any time. A model answers questions mid-game against a briefing it cannot see past, with every money figure in its reply checked back against the ledger (§11.4). `TurnNarration` (§11.5) narrates every pause — headline, narrative and suggested questions over the engine's screen, money-guarded like the advisor, silent when it cannot pass the guard — and now carries `attributions`, engine-computed (§10.4, below). `START_BUSINESS`/`SELL_BUSINESS` deferred to M7 |
 | **M6 — Export** | ⬜ Not started | |
 | **M7 — Multi-business** | ✅ Done | `START_BUSINESS` CLONE with §9.5's ramp bonus and two-quarter lead; `SELL_BUSINESS` at a trailing-EBITDA multiple; `DELEGATE`/`RECLAIM`; consolidation and household roll-up; ten-year wrap with the passive benchmark; continue-play past the milestone. `FULL_INTERVIEW` re-enters setup and is not a tick action |
-| **M8 — Hardening + UI** | ⬜ Not started | No UI exists yet |
+| **M8 — Hardening + UI** | 🟡 Started | `apps/web` — the three-pane shell from [01 §7](./01-architecture.md): turn log with §10.4 attributions and provenance badges · statements (IS/BS/CF to the cent) with a metric-tile strip · assumption register with provenance colour coding and deviation labels · structured action bar (price, marketing, hire/fire, run/skip). Sessions run server-side; the client renders strings and never recomputes a financial (§1.1, applied to the browser). Not yet: chat/advisor pane, challenge from the register, "show the math", free-text `ActionTranslation`, crisis policy editor, debt/capex controls |
 
 **Cross-cutting, added since the milestone plan was written:**
 
@@ -203,7 +203,9 @@ which the reference model omitted — the same reason its year three sat above b
 - **Any LLM contract.** M1 and M2 are specified to ship without one, and they have.
 - **The export.** See [D-4](./04-risks-and-decisions.md#d-4-the-export-is-a-second-engine-treat-it-as-one) — it
   is a second engine and needs the HyperFormula recalc harness from its first commit.
-- **The UI.** The three-pane shell in [01-architecture.md §7](./01-architecture.md) is unstarted.
+- **Most of the UI beyond the shell.** `apps/web` has the three-pane shell playable end to end; the
+  advisor chat pane, register-side challenge flow, "show the math", free-text actions and the crisis
+  policy editor are still CLI-or-nothing.
 - **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which
   cannot run inside a pure tick. CLONE covers the case §9.5 says should take two minutes; a genuinely
   different second business is a new run today.

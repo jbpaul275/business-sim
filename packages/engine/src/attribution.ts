@@ -257,7 +257,7 @@ function revenueDrivers(
     });
     add(Math.log(f1.marketing / f0.marketing), {
       label: 'Marketing response',
-      explanation: `spend moved $${toDisplay(prevStream.marketingSpendPerQuarter)}→$${toDisplay(stream.marketingSpendPerQuarter)} a quarter`,
+      explanation: `spend moved ${toDisplay(prevStream.marketingSpendPerQuarter)}→${toDisplay(stream.marketingSpendPerQuarter)} a quarter`,
       amount: 0n,
       ...lookup(`${path}.modifiers.halfSaturationSpend`),
     });
@@ -273,7 +273,7 @@ function revenueDrivers(
     const priceLog = levelLog + Math.log(f1.priceResponse / f0.priceResponse);
     add(priceLog, {
       label: 'Price',
-      explanation: `price $${toDisplay(streamPrice(prevStream))}→$${toDisplay(streamPrice(stream))}, elasticity ${stream.modifiers.priceElasticity.toFixed(1)}`,
+      explanation: `price ${toDisplay(streamPrice(prevStream))}→${toDisplay(streamPrice(stream))}, elasticity ${stream.modifiers.priceElasticity.toFixed(1)}`,
       amount: 0n,
       ...lookup(`${path}.modifiers.priceElasticity`),
     });
@@ -475,7 +475,7 @@ function describeCostDelta(
     return {
       label,
       explanation: baseChanged
-        ? `revised $${toDisplay(prevFixed.amountPerQuarter)}→$${toDisplay(currFixed.amountPerQuarter)} a quarter`
+        ? `revised ${toDisplay(prevFixed.amountPerQuarter)}→${toDisplay(currFixed.amountPerQuarter)} a quarter`
         : yearRolled
           ? `${(currFixed.annualEscalatorPct * 100).toFixed(0)}% annual escalator applied`
           : 'contract terms moved',
@@ -507,7 +507,7 @@ function describeCostDelta(
     return {
       label,
       explanation: rateChanged
-        ? `unit cost revised $${toDisplay(prevAct.costPerUnit)}→$${toDisplay(currAct.costPerUnit)}`
+        ? `unit cost revised ${toDisplay(prevAct.costPerUnit)}→${toDisplay(currAct.costPerUnit)}`
         : `follows volume, ${Math.round(prevVol).toLocaleString()}→${Math.round(currVol).toLocaleString()} served`,
       amount: delta,
       ...lookup(`costs.${costId}.costPerUnit`),
