@@ -8,7 +8,7 @@ import {
 } from '@bizsim/llm';
 import { buildBriefing } from '@bizsim/sim-cli';
 import type { Business } from '@bizsim/schemas';
-import type { AdvisorEntry, GameSession, StagedMove, SuggestedMove } from './store';
+import { persistGame, type AdvisorEntry, type GameSession, type StagedMove, type SuggestedMove } from './store';
 
 /**
  * The model's half of the turn loop — narration over the quarter, and the
@@ -99,6 +99,8 @@ export async function narrateAdvance(session: GameSession): Promise<void> {
   } catch {
     // A transport fault costs the player a paragraph, not a turn.
     session.events.push({ kind: 'narration_failed', period });
+  } finally {
+    persistGame(session);
   }
 }
 
@@ -171,6 +173,7 @@ export async function askGame(
     return { ok: true };
   } finally {
     session.advisorBusy = false;
+    persistGame(session);
   }
 }
 

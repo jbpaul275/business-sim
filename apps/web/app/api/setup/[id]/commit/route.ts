@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { toDisplay, type Money } from '@bizsim/money';
 import { computeMonthZeroOutlays } from '@bizsim/engine';
-import { commitBlocker, getSetup } from '../../../../../server/setup';
+import { commitBlocker, getSetup, persistSetup } from '../../../../../server/setup';
 import { createSessionFromWorld } from '../../../../../server/store';
 
 /**
@@ -39,5 +39,6 @@ export async function POST(
   const game = createSessionFromWorld(world, model.businessName, session.events);
   session.phase = 'DEAD';
   session.deadReason = 'committed';
+  persistSetup(session);
   return NextResponse.json({ playId: game.id });
 }

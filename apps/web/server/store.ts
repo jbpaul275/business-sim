@@ -3,6 +3,7 @@ import { toDisplay, type Money } from '@bizsim/money';
 import { attributeQuarter, tick, type TickResult } from '@bizsim/engine';
 import type { Action, DeltaAttribution, StatementSet, WorldState } from '@bizsim/schemas';
 import type { ConceptTransport } from '@bizsim/llm';
+import { loadState, saveState } from './persist';
 import {
   SCENARIOS,
   describeAttribution,
@@ -108,6 +109,20 @@ export interface GameSession {
 const globalStore = globalThis as unknown as { __bizsimSessions?: Map<string, GameSession> };
 const sessions: Map<string, GameSession> = (globalStore.__bizsimSessions ??= new Map());
 
+/** Everything worth writing down — the transport and its guard are runtime-only. */
+type PersistedGame = Omit<GameSession, 'transport' | 'advisorBusy'>;
+
+/** Write the session through to disk. Called after every mutation. */
+export function persistGame(session: GameSession): void {
+  const { transport: _transport, advisorBusy: _busy, ...state } = session;
+  saveState('game', session.id, state);
+}
+
+/** Drop the in-memory maps — the restart seam the persistence tests walk. */
+export function forgetSessions(): void {
+  sessions.clear();
+}
+
 export function listScenarios(): string[] {
   return Object.keys(SCENARIOS);
 }
@@ -151,11 +166,20 @@ export function createSession(scenario: string): GameSession {
   pushQuestion(session);
   pushPostmortemIfOver(session);
   sessions.set(session.id, session);
+  persistGame(session);
   return session;
 }
 
 export function getSession(id: string): GameSession | undefined {
-  return sessions.get(id);
+  const held = sessions.get(id);
+  if (held) return held;
+  // A restart emptied the map; the disk still has the session. The transport
+  // is runtime-only and recreates itself on the next advisor call.
+  const loaded = loadState<PersistedGame>('game', id);
+  if (!loaded) return undefined;
+  const session: GameSession = { ...loaded };
+  sessions.set(session.id, session);
+  return session;
 }
 
 /**
@@ -190,6 +214,7 @@ export function createSessionFromWorld(
   pushQuestion(session);
   pushPostmortemIfOver(session);
   sessions.set(session.id, session);
+  persistGame(session);
   return session;
 }
 
@@ -241,6 +266,7 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
   }
   pushQuestion(session);
   pushPostmortemIfOver(session);
+  persistGame(session);
   return session;
 }
 

@@ -347,6 +347,19 @@ export class ConceptInterview {
     return false;
   }
 
+  /**
+   * Rebuild a conversation from a persisted transcript — the restart seam.
+   *
+   * Web sessions used to die with the dev server; the transcript is the
+   * interview's whole state, so pushing it back restores the conversation
+   * exactly. `turnsTaken` is recovered from the player messages so the
+   * max-turns budget survives the restart instead of resetting.
+   */
+  resume(transcript: readonly InterviewMessage[]): void {
+    for (const message of transcript) this.transcript.push(message);
+    this.turnsTaken = transcript.filter((m) => m.role === 'user').length;
+  }
+
   /** Feed the player's latest message and get the model's next move. */
   async send(playerMessage: string): Promise<InterviewState> {
     // Same invariant on the way in. An empty player line would be rejected by
