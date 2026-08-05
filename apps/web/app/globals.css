@@ -1082,21 +1082,121 @@ select:focus {
 }
 
 /* The occasional moves: capital, growth, and owner cash, behind a toggle. */
-.morebar {
+/* The staged strip: the bet, stated before the run resolves it. */
+.staged-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  align-items: flex-end;
-  padding: 8px 16px 0;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
   border-top: 1px solid var(--border);
   background: var(--surface-1);
+  font-size: 12px;
 }
-.morebar .pair {
+.staged-cap {
+  color: var(--text-muted);
+}
+.staged-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 4px 2px 10px;
+}
+.staged-chip button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 5px;
+}
+.staged-chip button:hover {
+  color: var(--critical);
+}
+
+/* The command input: the game's grammar, one line at a time. */
+.control.cmd {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+.cmd-row {
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
-.morebar .pair input {
-  width: 90px;
+.cmd-row input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.cmd-help {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0 9px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cmd-error {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--warning);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.cmd-pop {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.cmd-pop-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.cmd-pop-row:hover {
+  background: var(--surface-2);
+}
+.cmd-template {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.cmd-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.staff-actions {
+  display: inline-flex;
+  gap: 8px;
 }
 
 /* The opening budget, itemized so it can be argued with. */

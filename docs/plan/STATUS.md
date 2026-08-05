@@ -233,7 +233,13 @@ which the reference model omitted — the same reason its year three sat above b
   deterministic gauge from `planDepth`/`depthGauge` (`sim-cli/depth.ts`): the candidate world ticked 12
   quarters silently, first crisis-ladder touch and cash trough reported at plan AND with demand 30%
   under it (one stress lever per archetype), debt service at its heaviest, and the downside stated
-  before the dive — the personally-guaranteed principal that follows you home. The register is tabbed by
+  before the dive — the personally-guaranteed principal that follows you home. The action bar is a
+  staged strip: price and marketing stay tactile, everything else stages as chips (typed into the
+  command input — the game's own grammar parsed deterministically by the suggestion validator, `?` for
+  the clickable template menu that keeps the strategy space visible — or clicked from advisor chips and
+  confirm cards, or from hire/cut links beside the staffing table), and the strip above Run states the
+  bet the next quarter's narration resolves. The morebar's eight form pairs and the hire steppers are
+  deleted. Watch across play-tests: action diversity, command-input usage, time-to-run. The register is tabbed by
   what each number bears on — investment (capex, working-capital terms, financing), P&L (prices, rates,
   recurring amounts), descriptive (square feet, seats, hours) — with the category clusters and the
   escalator column inside each tab, classified deterministically from `category`/`unit`/`isMoney`.
