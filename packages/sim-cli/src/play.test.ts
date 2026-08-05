@@ -743,7 +743,15 @@ describe('narrating the quarter', () => {
     let i = 0;
     return {
       calls,
-      advise: async () => ({ advice: { reply: 'x', suggestedCommands: [] } }),
+      advise: async () => ({
+        advice: {
+          reply: 'x',
+          suggestedCommands: [],
+          orderedCommands: [],
+          unresolvable: [],
+          confirmationSummary: '',
+        },
+      }),
       narrate: async (_system: string, input: string) => {
         calls.push(input);
         const next = replies[i] ?? replies[replies.length - 1]!;

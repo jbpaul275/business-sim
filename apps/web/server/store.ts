@@ -78,6 +78,17 @@ export interface AdvisorEntry {
   fact?: string;
   text: string;
   suggested?: SuggestedMove[];
+  /**
+   * §11.4: the player's own instruction, translated into stageable moves.
+   * Distinct from `suggested` — these were ordered, not offered — but they
+   * still stage rather than execute: the summary is what the player confirms,
+   * and the run button is what applies anything.
+   */
+  ordered?: SuggestedMove[];
+  /** What the ordered moves will do, restated for confirmation. */
+  orderedSummary?: string;
+  /** Instruction fragments that could not be translated — shown, not guessed. */
+  unresolvable?: string[];
 }
 
 export interface GameSession {

@@ -136,6 +136,9 @@ function scriptedInput(lines: readonly string[]): LineSource {
 const advice = (reply: string, suggestedCommands: string[] = []): TurnAdvice => ({
   reply,
   suggestedCommands,
+  orderedCommands: [],
+  unresolvable: [],
+  confirmationSummary: '',
 });
 
 async function transcript(

@@ -19,12 +19,12 @@ import { persistGame, type AdvisorEntry, type GameSession, type StagedMove, type
  */
 
 /**
- * The levers this build actually has. The web action bar carries price,
- * marketing, staffing and assumption revisions; `skip` is the run buttons.
- * Debt, expansion and the portfolio exist in the engine but have no web
- * controls yet, so they are deliberately absent — the briefing's closing
- * rule makes the advisor say "not in this build" instead of describing a
- * control that is not on the screen.
+ * The levers this build actually has, one line each, in the syntax
+ * `parseSuggestion` understands. This list is doing double duty: it is what
+ * the advisor may suggest, and what a player's own instruction may translate
+ * into (§11.4). The portfolio moves are still absent — the briefing's
+ * closing rule makes the advisor say "not in this build" instead of
+ * describing a control that is not on the screen.
  */
 export const WEB_COMMANDS: readonly string[] = [
   'price <amount> — set the price per unit; demand responds through the elasticity',
@@ -158,12 +158,36 @@ export async function askGame(
     const suggested = outcome.suggestedCommands
       .map((c) => parseSuggestion(c, business))
       .filter((s): s is SuggestedMove => s !== undefined);
+    // §11.4: the player's instructions, validated by the same parser as the
+    // suggestions. An ordered command that does not parse is not quietly
+    // dropped like a bad suggestion would be — the player said it, so it
+    // joins the unresolvable list where they can see it went untranslated.
+    const ordered: SuggestedMove[] = [];
+    const unresolvable = [...outcome.unresolvable];
+    for (const command of outcome.orderedCommands) {
+      const move = parseSuggestion(command, business);
+      if (move) ordered.push(move);
+      else unresolvable.push(`"${command}" is not a move this build can stage`);
+    }
     session.advisor.push({
       who: 'advisor',
       kind: 'chat',
       text: outcome.reply,
       ...(suggested.length > 0 ? { suggested } : {}),
+      ...(ordered.length > 0 ? { ordered } : {}),
+      ...(ordered.length > 0 && outcome.confirmationSummary
+        ? { orderedSummary: outcome.confirmationSummary }
+        : {}),
+      ...(unresolvable.length > 0 ? { unresolvable } : {}),
     });
+    if (ordered.length > 0) {
+      session.events.push({
+        kind: 'actions_translated',
+        question: text,
+        commands: ordered.map((o) => o.command),
+        ...(unresolvable.length > 0 ? { unresolvable } : {}),
+      });
+    }
     if (outcome.retriedOn && outcome.retriedOn.length > 0) {
       session.events.push({ kind: 'advice_corrected', question: text, figures: outcome.retriedOn });
     }

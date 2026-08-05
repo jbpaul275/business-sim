@@ -117,34 +117,38 @@ export function GameClient({ initial }: { initial: GameView }) {
 
   // A suggestion chip stages the move in the action bar — it never runs the
   // quarter. The decision stays with the player; the chip just saves typing.
+  // Functional updates throughout: "stage these" applies several moves in one
+  // click, and spreading a stale closure would keep only the last of them.
   const applyStage = (stage: StagedMove): void => {
     if (stage.type === 'price') setPrice(groupMoney(String(stage.value)));
     else if (stage.type === 'marketing') setMarketing(groupDigits(String(stage.value)));
-    else if (stage.type === 'staff') setHires({ ...hires, [stage.costId]: stage.delta });
+    else if (stage.type === 'staff') setHires((h) => ({ ...h, [stage.costId]: stage.delta }));
     else if (stage.type === 'assume') {
-      setAssumes({
-        ...assumes,
-        [stage.assumptionId]: { value: stage.value, evidence: assumes[stage.assumptionId]?.evidence ?? '' },
-      });
+      setAssumes((a) => ({
+        ...a,
+        [stage.assumptionId]: { value: stage.value, evidence: a[stage.assumptionId]?.evidence ?? '' },
+      }));
     } else {
       const g = (n: number): string => groupDigits(String(Math.round(n)));
-      const stagedMoves: Record<string, string> = { ...moves };
-      if (stage.type === 'expand') {
-        stagedMoves['expandUnits'] = g(stage.units);
-        stagedMoves['expandCost'] = g(stage.cost);
-      } else if (stage.type === 'upgrade') {
-        stagedMoves['upgradePct'] = g(stage.pct);
-        stagedMoves['upgradeCost'] = g(stage.cost);
-      } else if (stage.type === 'territory') {
-        stagedMoves['territoryPct'] = g(stage.pct);
-        stagedMoves['territoryCost'] = g(stage.cost);
-      } else if (stage.type === 'debt') {
-        stagedMoves['debt'] = g(stage.amount);
-        if (stage.quarters) stagedMoves['debtTerm'] = g(stage.quarters);
-      } else {
-        stagedMoves[stage.type] = g(stage.amount);
-      }
-      setMoves(stagedMoves);
+      setMoves((m) => {
+        const stagedMoves: Record<string, string> = { ...m };
+        if (stage.type === 'expand') {
+          stagedMoves['expandUnits'] = g(stage.units);
+          stagedMoves['expandCost'] = g(stage.cost);
+        } else if (stage.type === 'upgrade') {
+          stagedMoves['upgradePct'] = g(stage.pct);
+          stagedMoves['upgradeCost'] = g(stage.cost);
+        } else if (stage.type === 'territory') {
+          stagedMoves['territoryPct'] = g(stage.pct);
+          stagedMoves['territoryCost'] = g(stage.cost);
+        } else if (stage.type === 'debt') {
+          stagedMoves['debt'] = g(stage.amount);
+          if (stage.quarters) stagedMoves['debtTerm'] = g(stage.quarters);
+        } else {
+          stagedMoves[stage.type] = g(stage.amount);
+        }
+        return stagedMoves;
+      });
       setMore(true);
     }
   };
@@ -667,6 +671,37 @@ function AdvisorFeed({
           return (
             <div className={`a-chat ${e.who}`} key={i}>
               <div>{e.text}</div>
+              {e.ordered && e.ordered.length > 0 && (
+                <div className="a-confirm">
+                  {e.orderedSummary && <div className="a-confirm-summary">{e.orderedSummary}</div>}
+                  <div className="a-chips">
+                    {e.ordered.map((s) => (
+                      <button
+                        key={s.command}
+                        className="chip"
+                        title="Stage this in the action bar — nothing runs until you run the quarter"
+                        onClick={() => onStage(s.stage)}
+                      >
+                        {s.command}
+                      </button>
+                    ))}
+                    <button
+                      className="chip confirm"
+                      title="Stage everything above — nothing runs until you run the quarter"
+                      onClick={() => e.ordered!.forEach((s) => onStage(s.stage))}
+                    >
+                      {e.ordered.length > 1 ? 'stage all of it' : 'stage it'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {e.unresolvable && e.unresolvable.length > 0 && (
+                <div className="a-unresolved">
+                  {e.unresolvable.map((u, j) => (
+                    <div key={j}>· {u}</div>
+                  ))}
+                </div>
+              )}
               {e.suggested && e.suggested.length > 0 && (
                 <div className="a-chips">
                   {e.suggested.map((s) => (

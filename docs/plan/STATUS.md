@@ -220,13 +220,16 @@ which the reference model omitted — the same reason its year three sat above b
   fails soft to silence) and ONE deterministic eigen question — `selectAxis` in `sim-cli/eigen.ts`
   picks the axis by hierarchy (crisis → biggest §10.4 driver → looming constraint → idle slack) with
   a two-quarter repetition memory, and the chat answers through the same briefing/money-guard the
-  CLI uses, with suggested commands parsed into stageable action-bar moves. The register is tabbed by
+  CLI uses, with suggested commands parsed into stageable action-bar moves. §11.4 `ActionTranslation`
+  is folded into the same advise call: an instruction in chat ("raise the price to $6.50, hire another
+  crew") comes back as `orderedCommands` in the game's own syntax — validated by the same parser as
+  suggestions, staged only when the player confirms from the summary, with anything ambiguous or
+  inexpressible listed as unresolvable rather than guessed at. The register is tabbed by
   what each number bears on — investment (capex, working-capital terms, financing), P&L (prices, rates,
   recurring amounts), descriptive (square feet, seats, hours) — with the category clusters and the
   escalator column inside each tab, classified deterministically from `category`/`unit`/`isMoney`.
-  Still CLI-or-nothing:
-  "show the math", the crisis policy editor and debt/capex controls; web sessions are in-memory,
-  and the CLI's own turn loop does not yet use `selectAxis`.
+  Still CLI-or-nothing: "show the math" and the crisis policy editor; the CLI's own turn loop does not
+  yet use `selectAxis`, and its advisor does not yet surface `orderedCommands`.
 - **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which
   cannot run inside a pure tick. CLONE covers the case §9.5 says should take two minutes; a genuinely
   different second business is a new run today.

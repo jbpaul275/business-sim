@@ -917,6 +917,29 @@ select:focus {
   color: var(--accent);
 }
 
+/* §11.4: the player's own instruction, translated and awaiting their confirm. */
+.a-confirm {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface-0);
+}
+.a-confirm-summary {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.a-chips .chip.confirm {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.a-unresolved {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .advisor .say-row {
   margin-top: 8px;
 }
