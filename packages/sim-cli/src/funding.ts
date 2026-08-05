@@ -151,6 +151,73 @@ export function proposeFunding(ctx: FundingContext): FundingProposal {
   };
 }
 
+/**
+ * The three depths a player can open at, named. Choosing depth means
+ * comparing depths — one proposal plus a naked equity box is not a choice.
+ * Each is just an equity figure; the loan, revolver and pricing all derive
+ * from it through the same arithmetic `fund` applies, so a card can never
+ * promise a plan the lender then refuses on different numbers.
+ */
+export interface NamedPlan {
+  key: 'lean' | 'proposed' | 'cushioned';
+  label: string;
+  /** What this depth is FOR, in one clause. */
+  tagline: string;
+  equity: Money;
+  plan: CandidatePlan;
+}
+
+export function candidatePlans(p: FundingProposal): NamedPlan[] {
+  const planFor = (equity: Money): CandidatePlan => {
+    const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
+    const gap = max0(p.needed - equity);
+    const wanted = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
+    const ceiling = min(p.lendable, mulRate(equity, 1 / MIN_OWNER_INJECTION_PCT));
+    const loan = min(wanted, ceiling);
+    return { equity, outside: 0n, loan, revolver: revolverFor(p.lendable, equity, loan) };
+  };
+
+  // Cushioned adds one rounding unit of pure runway on top of the proposal —
+  // the cheapest air there is — capped at what the player actually has.
+  const unit = p.investable >= fromDisplay(1_000_000) ? fromDisplay(1_000_000) : fromDisplay(100_000);
+  const cushionedEquity = min(p.investable, p.proposedEquity + unit);
+
+  const named: NamedPlan[] = [
+    {
+      key: 'lean',
+      label: 'Lean',
+      tagline: 'least cash in, most leverage — keeps your powder dry and the service heavy',
+      equity: p.equityFloor,
+      plan: planFor(p.equityFloor),
+    },
+    {
+      key: 'proposed',
+      label: 'Proposed',
+      tagline: 'the worked plan: a round number with room in it',
+      equity: p.proposedEquity,
+      plan: { equity: p.proposedEquity, outside: 0n, loan: p.proposedLoan, revolver: p.proposedRevolver },
+    },
+    {
+      key: 'cushioned',
+      label: 'Cushioned',
+      tagline: 'more of your own cash as opening runway',
+      equity: cushionedEquity,
+      plan: planFor(cushionedEquity),
+    },
+  ];
+
+  // A depth that collapses into its neighbour is not a choice; a lean plan
+  // needing zero equity is an artifact of tiny builds. Distinct equity only.
+  const seen = new Set<string>();
+  return named.filter((n) => {
+    if (n.equity <= 0n && n.key === 'lean') return false;
+    const k = n.equity.toString();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 export interface LoanQuote {
   loan: Money;
   rate: number;

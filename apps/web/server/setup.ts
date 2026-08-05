@@ -27,8 +27,10 @@ import {
   arguableAssumptions,
   buildCandidate,
   buildabilityIssues,
+  candidatePlans,
   capacityCeilingIssues,
   capitalIntensityNote,
+  depthGauge,
   duplicateOverheadIssues,
   projectMatureRevenue,
   proposeFunding,
@@ -38,6 +40,7 @@ import {
   spendLine,
   staffingRealismIssues,
   type CandidateResult,
+  type DepthGauge,
   type FundingContext,
   type FundingProposal,
   type JournalEvent,
@@ -86,6 +89,8 @@ export interface SetupSession {
   config: WorldConfig;
   concept?: { mapped: MappedConcept; draft: ConceptDraft };
   proposal?: FundingProposal | undefined;
+  /** The three depths, priced and projected — computed once per proposal. */
+  plans?: StoredPlanCard[] | undefined;
   candidate?: CandidateResult | undefined;
   fundingAttempts: number;
   repairs: number;
@@ -460,6 +465,7 @@ export async function say(
 
       session.concept = { mapped: draftToTemplate(state.draft), draft: state.draft };
       session.proposal = proposeFunding(fundingContext(session));
+      session.plans = planCards(fundingContext(session), session.proposal);
       session.phase = 'FUNDING';
       return;
     }
@@ -516,6 +522,55 @@ export function undo(session: SetupSession): boolean {
     persistSetup(session);
   }
   return undone;
+}
+
+/**
+ * A named funding depth with its gauge readings, stored on the session so the
+ * projection (three plans × two demand scenarios × 12 ticks) runs once per
+ * proposal rather than once per render. Everything deterministic and
+ * engine-computed — the gauge is arithmetic, no model call anywhere near it.
+ */
+export interface StoredPlanCard {
+  key: 'lean' | 'proposed' | 'cushioned';
+  label: string;
+  tagline: string;
+  equity: Money;
+  loan: Money;
+  revolver: Money;
+  /** The loan's opening rate, when there is a loan. */
+  rate?: number | undefined;
+  openingCash: Money;
+  gauge: DepthGauge;
+  /** The lender's reason, when this depth cannot actually be written. */
+  declined?: string | undefined;
+}
+
+function planCards(ctx: FundingContext, p: FundingProposal): StoredPlanCard[] {
+  const cards: StoredPlanCard[] = [];
+  for (const named of candidatePlans(p)) {
+    const c = buildCandidate(ctx, named.plan);
+    // A plan that cannot build a valid register is not a depth, it is a bug;
+    // a plan the LENDER refuses is information and keeps its card.
+    if (c.errors.length > 0) continue;
+    const declined = c.declined[0]?.reason;
+    const rate =
+      named.plan.loan > 0n
+        ? quoteForEquity(p.needed, ctx.config.primeRate, named.equity).rate
+        : undefined;
+    cards.push({
+      key: named.key,
+      label: named.label,
+      tagline: named.tagline,
+      equity: named.equity,
+      loan: named.plan.loan,
+      revolver: named.plan.revolver,
+      ...(rate !== undefined ? { rate } : {}),
+      openingCash: c.openingCash,
+      gauge: depthGauge(c.world, c.world.businesses[0]!.id),
+      ...(declined ? { declined } : {}),
+    });
+  }
+  return cards;
 }
 
 function fundingContext(session: SetupSession): FundingContext {

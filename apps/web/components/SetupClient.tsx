@@ -475,15 +475,64 @@ function FundingPanel({
       </div>
       {!custom ? (
         <>
-          <div className="card-line plan">
-            {f.planLine}
-            {f.shortBy && <span className="share-error"> — still {f.shortBy} short</span>}
+          {f.shortBy && (
+            <div className="card-line">
+              <span className="share-error">Even the deepest plan is {f.shortBy} short of opening.</span>
+            </div>
+          )}
+          {f.plans.length > 0 && <div className="card-line quiet">{f.stressNote}</div>}
+          <div className="plan-cards">
+            {f.plans.map((p) => (
+              <div className={`plan-card${p.proposed ? ' proposed' : ''}`} key={p.key}>
+                <div className="plan-head">
+                  <span className="plan-label">{p.label}</span>
+                  <span className="plan-tag">{p.tagline}</span>
+                </div>
+                <div className="plan-line">{p.planLine}</div>
+                {p.declined ? (
+                  <div className="plan-declined">The lender won’t write this depth: {p.declined}</div>
+                ) : (
+                  <>
+                    <div className="gauge-row" title={p.airPlan}>
+                      <span className="gauge-cap">at plan</span>
+                      <span className="gauge-track">
+                        <span className="gauge-fill" style={{ width: `${p.gaugePlan * 100}%` }} />
+                      </span>
+                      <span className="gauge-word">{p.airPlan}</span>
+                    </div>
+                    <div className="gauge-row" title={p.airStressed}>
+                      <span className="gauge-cap">demand −30%</span>
+                      <span className="gauge-track">
+                        <span
+                          className="gauge-fill stressed"
+                          style={{ width: `${p.gaugeStressed * 100}%` }}
+                        />
+                      </span>
+                      <span className="gauge-word">{p.airStressed}</span>
+                    </div>
+                    <div className="plan-meta">
+                      {p.trough}
+                      {p.service ? ` · ${p.service}` : ''}
+                    </div>
+                  </>
+                )}
+                <div className="plan-downside">{p.downside}</div>
+                {!p.declined && (
+                  <button
+                    className={p.proposed ? 'primary' : ''}
+                    disabled={busy}
+                    onClick={() =>
+                      void fund(p.proposed ? { proposed: true } : { equity: p.equityDollars })
+                    }
+                  >
+                    {busy ? 'Asking the lender…' : 'Open at this depth'}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
           <div className="share-actions" style={{ marginTop: 10 }}>
             <button onClick={() => setCustom(true)}>Set the numbers myself</button>
-            <button className="primary" disabled={busy} onClick={() => void fund({ proposed: true })}>
-              {busy ? 'Asking the lender…' : 'Take this plan'}
-            </button>
           </div>
         </>
       ) : (

@@ -20,13 +20,22 @@ export {
   quoteForEquity,
   revolverFor,
   buildCandidate,
+  candidatePlans,
   equityForShare,
   type FundingContext,
   type FundingProposal,
   type LoanQuote,
   type CandidatePlan,
   type CandidateResult,
+  type NamedPlan,
 } from './funding.js';
+export {
+  depthGauge,
+  planDepth,
+  stressDemand,
+  type DepthGauge,
+  type PlanDepth,
+} from './depth.js';
 export {
   buildabilityIssues,
   capacityCeilingIssues,

@@ -154,6 +154,18 @@ describe('the web setup state machine', () => {
     expect(fundingView.budget.length).toBeGreaterThanOrEqual(4);
     expect(fundingView.budget.some((l) => l.label === 'Buildout & equipment')).toBe(true);
 
+    // Depth is chosen, visible, and priced: at least two distinct depths, each
+    // wearing a projected gauge and the downside stated before the dive.
+    expect(fundingView.plans.length).toBeGreaterThanOrEqual(2);
+    expect(fundingView.plans.some((pl) => pl.proposed)).toBe(true);
+    for (const pl of fundingView.plans.filter((x) => !x.declined)) {
+      expect(pl.airPlan.length).toBeGreaterThan(0);
+      expect(pl.airStressed.length).toBeGreaterThan(0);
+      expect(pl.gaugePlan).toBeGreaterThanOrEqual(0);
+      expect(pl.gaugePlan).toBeLessThanOrEqual(1);
+      expect(pl.downside).toMatch(/follows you home|you put in/);
+    }
+
     const outcome = fund(session, { proposed: true });
     expect(outcome.ok).toBe(true);
     expect(session.phase).toBe('REVIEW');

@@ -228,7 +228,12 @@ which the reference model omitted — the same reason its year three sat above b
   the moves that actually queued (described server-side from the accepted actions) and the eigen
   question they answered ride the §11.5 input, and the prompt opens the quarter on that bet's verdict —
   a read on the outcome, never a judgement of the decision, and never invented when no moves were
-  staged. The register is tabbed by
+  staged. The funding screen prices depth (Dave-the-Diver rule: chosen, visible, priced): three named
+  plans — Lean, Proposed, Cushioned — each just an equity preset over the same `fund` lever, wearing a
+  deterministic gauge from `planDepth`/`depthGauge` (`sim-cli/depth.ts`): the candidate world ticked 12
+  quarters silently, first crisis-ladder touch and cash trough reported at plan AND with demand 30%
+  under it (one stress lever per archetype), debt service at its heaviest, and the downside stated
+  before the dive — the personally-guaranteed principal that follows you home. The register is tabbed by
   what each number bears on — investment (capex, working-capital terms, financing), P&L (prices, rates,
   recurring amounts), descriptive (square feet, seats, hours) — with the category clusters and the
   escalator column inside each tab, classified deterministically from `category`/`unit`/`isMoney`.

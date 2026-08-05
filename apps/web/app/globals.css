@@ -940,6 +940,100 @@ select:focus {
   color: var(--text-muted);
 }
 
+/* The depth gauge: funding plans priced in air, stress, and downside. */
+.plan-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.plan-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--surface-0);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-card.proposed {
+  border-color: var(--accent);
+}
+.plan-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.plan-label {
+  font-weight: 600;
+}
+.plan-tag {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.plan-line {
+  font-size: 13px;
+}
+.gauge-row {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.gauge-cap {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.gauge-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.gauge-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.gauge-fill.stressed {
+  background: var(--warning);
+}
+.gauge-word {
+  grid-column: 2;
+  color: var(--text-secondary);
+}
+.plan-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.plan-downside {
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: auto;
+}
+.plan-declined {
+  font-size: 12px;
+  color: var(--warning);
+}
+.plan-card button {
+  align-self: flex-start;
+  border-radius: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.plan-card button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .advisor .say-row {
   margin-top: 8px;
 }
