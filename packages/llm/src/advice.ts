@@ -41,6 +41,25 @@ export const zTurnAdvice = z.object({
    * that just recommended it.
    */
   suggestedCommands: z.array(z.string()).default([]),
+  /**
+   * §11.4 `ActionTranslation`, folded into the same call: commands the player
+   * themselves ordered, in the game's own syntax. Distinct from suggestions —
+   * a suggestion is the advisor's idea offered for a click; an order is the
+   * player's own instruction, staged for them to confirm. Never carries
+   * anything the player did not express.
+   */
+  orderedCommands: z.array(z.string()).default([]),
+  /**
+   * Parts of an instruction too ambiguous to translate — "bump marketing a
+   * bit" has no amount. Asked about, never guessed at (§11.4).
+   */
+  unresolvable: z.array(z.string()).default([]),
+  /**
+   * One or two sentences restating what `orderedCommands` will do, for the
+   * player to approve before anything applies — including any cost/effect
+   * asymmetry ("cost lands now, capacity arrives next quarter").
+   */
+  confirmationSummary: z.string().default(''),
 });
 export type TurnAdvice = z.infer<typeof zTurnAdvice>;
 
@@ -72,7 +91,10 @@ export interface Briefing {
  * the class §1.1 is actually about — every value that lands on a statement is
  * denominated — and it is the class a fabrication shows up in.
  */
-const MONEY = /\$\s?-?[\d,]+(?:\.\d+)?\s*(?:[kmb]|bn|million|billion|thousand)?/gi;
+// The suffix must not run into a word: "$30,000 marketing" is thirty thousand
+// followed by a noun, not "$30,000 m[illion]" — the unguarded version read it
+// as thirty billion and flagged the reply for restating its own source.
+const MONEY = /\$\s?-?[\d,]+(?:\.\d+)?\s*(?:[kmb]|bn|million|billion|thousand)?(?![A-Za-z])/gi;
 
 const SCALE: Record<string, number> = {
   k: 1e3,
@@ -168,6 +190,14 @@ When the player tells you something about their business the model does not carr
 
 Suggest only what the briefing lists, and describe each command doing only what its description says. If the player's idea maps to no command, say plainly that it is not modelled in this build, in one sentence, and name the nearest thing that is. Never invent a screen, a quote list, a negotiation flow, or data the game does not have — a confident description of a mechanic that does not exist sends the player to a dead end wearing your authority.
 
+## When they give an order, translate it
+
+Some messages are not questions — they are instructions: "raise the price to $6.50", "hire another crew and take a $50k loan". Put the exact commands for what they ordered in \`orderedCommands\`, in the game's own syntax, and keep your own ideas in \`suggestedCommands\` — the two are different acts, and mixing them puts words in the player's mouth.
+
+Three rules, none negotiable. **Never put anything in \`orderedCommands\` the player did not express** — an order is theirs, not yours to round out. **An ambiguous amount goes in \`unresolvable\`, never guessed**: "bump marketing a bit" has no number, so name what is missing and ask in your reply. **Fill \`confirmationSummary\`** with one or two sentences saying what the orders will do, including any cost/effect asymmetry the briefing states — hiring costs money this quarter and adds capacity next quarter, a loan's fee lands before its proceeds. The player confirms before anything applies; write the summary so they can confirm from it alone.
+
+A message can be both: "hire a barista — or should I raise prices instead?" orders the hire and asks the question. Translate the order, answer the question.
+
 ## What you are for
 
 The arithmetic is already on screen, and a deterministic advisor has already printed its findings — you will see them in the briefing. Do not repeat them. You are here for the half that is not arithmetic:
@@ -193,6 +223,12 @@ Never flatter a plan. Never say "great idea". If a move looks poor, say why in t
 export interface AdviceOutcome {
   reply: string;
   suggestedCommands: string[];
+  /** §11.4: commands the player themselves ordered, for staging on confirm. */
+  orderedCommands: string[];
+  /** Instruction fragments too ambiguous to translate — asked, not guessed. */
+  unresolvable: string[];
+  /** What the ordered commands will do, restated for the player to approve. */
+  confirmationSummary: string;
   /** Milliseconds spent, for the same QA line the interview turns carry. */
   ms: number;
   /**
@@ -244,12 +280,20 @@ export async function askAdvisor(
    */
   const sources = [...history.map((m) => m.content), question].join('\n');
 
+  // The confirmation summary goes on screen exactly like the reply and quotes
+  // money the same way ("adds $16,800/quarter"), so it passes the same guard.
+  const spoken = (a: TurnAdvice): string =>
+    [a.reply, a.confirmationSummary].filter(Boolean).join('\n');
+
   const first = await transport.advise(TURN_ADVISOR_PROMPT, messages);
-  const bad = unverifiedFigures(first.advice.reply, briefing, sources);
+  const bad = unverifiedFigures(spoken(first.advice), briefing, sources);
   if (bad.length === 0) {
     return {
       reply: first.advice.reply,
       suggestedCommands: first.advice.suggestedCommands,
+      orderedCommands: first.advice.orderedCommands,
+      unresolvable: first.advice.unresolvable,
+      confirmationSummary: first.advice.confirmationSummary,
       ms: now() - started,
     };
   }
@@ -259,11 +303,14 @@ export async function askAdvisor(
     { role: 'assistant' as const, content: first.advice.reply },
     { role: 'user' as const, content: correction(bad) },
   ]);
-  if (unverifiedFigures(second.advice.reply, briefing, sources).length > 0) return undefined;
+  if (unverifiedFigures(spoken(second.advice), briefing, sources).length > 0) return undefined;
 
   return {
     reply: second.advice.reply,
     suggestedCommands: second.advice.suggestedCommands,
+    orderedCommands: second.advice.orderedCommands,
+    unresolvable: second.advice.unresolvable,
+    confirmationSummary: second.advice.confirmationSummary,
     ms: now() - started,
     retriedOn: bad,
   };

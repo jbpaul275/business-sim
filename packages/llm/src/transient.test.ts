@@ -191,4 +191,5 @@ const DRAFT: ConceptDraft = {
     preOpeningPermitsAndLegal: 4_000_000,
   },
   openNotes: ['The IFPE licence is the whole timeline.'],
+  founderProfile: { domainYears: 0, ownerHoursPerWeek: 40, basis: '' },
 };

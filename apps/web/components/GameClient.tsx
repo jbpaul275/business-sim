@@ -31,11 +31,19 @@ export function GameClient({ initial }: { initial: GameView }) {
   // Pending decisions. Empty string = leave unchanged this quarter.
   const [price, setPrice] = useState('');
   const [marketing, setMarketing] = useState('');
-  const [hires, setHires] = useState<Record<string, number>>({});
-  // The occasional moves, behind a toggle so the everyday bar stays calm.
-  const [more, setMore] = useState(false);
-  const [moves, setMoves] = useState<Record<string, string>>({});
-  const move = (key: string, value: string): void => setMoves({ ...moves, [key]: value });
+  /**
+   * Every other staged move, as one list — the strip above the run button IS
+   * this list, and this list becomes the TurnRequest. The old model kept the
+   * turn scattered across five parallel records (price, marketing, hires,
+   * eight form pairs, assumes), which meant the player could not see their
+   * turn anywhere and the code could lose part of it (the stale-closure bug).
+   */
+  const [staged, setStaged] = useState<StagedMove[]>([]);
+  // The command input: the game's own grammar, parsed server-side by the same
+  // parser that validates advisor chips. Deterministic — no model call.
+  const [cmd, setCmd] = useState('');
+  const [cmdError, setCmdError] = useState<string | undefined>();
+  const [cmdMenu, setCmdMenu] = useState(false);
   // Staged assumption revisions — the in-game `assume` lever, applied next tick.
   const [assumes, setAssumes] = useState<Record<string, { value: string; evidence: string }>>({});
   const [assumeOpen, setAssumeOpen] = useState<string | undefined>();
@@ -46,34 +54,28 @@ export function GameClient({ initial }: { initial: GameView }) {
   const runQuarter = async (skip: number): Promise<void> => {
     setBusy(true);
     try {
-      const hire = Object.entries(hires)
-        .filter(([, n]) => n > 0)
-        .map(([costId, blocks]) => ({ costId, blocks }));
-      const fire = Object.entries(hires)
-        .filter(([, n]) => n < 0)
-        .map(([costId, blocks]) => ({ costId, blocks: -blocks }));
+      const hire: { costId: string; blocks: number }[] = [];
+      const fire: { costId: string; blocks: number }[] = [];
       const assume = Object.entries(assumes)
         .filter(([, a]) => a.value.trim() !== '')
         .map(([assumptionId, a]) => ({ assumptionId, value: a.value, evidence: a.evidence }));
       const body: Record<string, unknown> = { skip, hire, fire, assume };
       if (price.trim() !== '') body['price'] = ungroup(price);
       if (marketing.trim() !== '') body['marketingPerQuarter'] = ungroup(marketing);
-      const staged = (key: string): number | undefined =>
-        (moves[key] ?? '').trim() !== '' ? ungroup(moves[key]!) : undefined;
-      if (staged('expandUnits') && staged('expandCost')) {
-        body['expand'] = { units: staged('expandUnits'), costDollars: staged('expandCost') };
-      }
-      if (staged('upgradePct') && staged('upgradeCost')) {
-        body['upgrade'] = { upliftPct: staged('upgradePct'), costDollars: staged('upgradeCost') };
-      }
-      if (staged('territoryPct') && staged('territoryCost')) {
-        body['territory'] = { pct: staged('territoryPct'), costDollars: staged('territoryCost') };
-      }
-      if (staged('debt')) {
-        body['debt'] = { amountDollars: staged('debt'), termQuarters: staged('debtTerm') ?? 40 };
-      }
-      for (const key of ['draw', 'repay', 'inject', 'distribute'] as const) {
-        if (staged(key)) body[key] = staged(key);
+      for (const s of staged) {
+        if (s.type === 'staff') {
+          (s.delta > 0 ? hire : fire).push({ costId: s.costId, blocks: Math.abs(s.delta) });
+        } else if (s.type === 'expand') {
+          body['expand'] = { units: s.units, costDollars: s.cost };
+        } else if (s.type === 'upgrade') {
+          body['upgrade'] = { upliftPct: s.pct, costDollars: s.cost };
+        } else if (s.type === 'territory') {
+          body['territory'] = { pct: s.pct, costDollars: s.cost };
+        } else if (s.type === 'debt') {
+          body['debt'] = { amountDollars: s.amount, termQuarters: s.quarters ?? 40 };
+        } else if (s.type === 'draw' || s.type === 'repay' || s.type === 'inject' || s.type === 'distribute') {
+          body[s.type] = s.amount;
+        }
       }
 
       const res = await fetch(`/api/sessions/${view.id}/turn`, {
@@ -85,26 +87,24 @@ export function GameClient({ initial }: { initial: GameView }) {
         setView((await res.json()) as GameView);
         setPrice('');
         setMarketing('');
-        setHires({});
         setAssumes({});
         setAssumeOpen(undefined);
-        setMoves({});
+        setStaged([]);
       }
     } finally {
       setBusy(false);
     }
   };
 
-  const ask = async (): Promise<void> => {
-    const text = msg.trim();
-    if (text === '' || asking) return;
+  const askText = async (text: string): Promise<void> => {
+    if (text.trim() === '' || asking) return;
     setAsking(true);
     setMsg('');
     try {
       const res = await fetch(`/api/sessions/${view.id}/ask`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: text.trim() }),
       });
       if (res.ok) setView((await res.json()) as GameView);
       else setMsg(text);
@@ -114,39 +114,90 @@ export function GameClient({ initial }: { initial: GameView }) {
       setAsking(false);
     }
   };
+  const ask = async (): Promise<void> => askText(msg);
+
+  // One line of the game's grammar → one staged chip, parsed server-side by
+  // the same validator that guards advisor chips. Deterministic and free; a
+  // non-parse is offered to the advisor as conversation instead.
+  const submitCommand = async (): Promise<void> => {
+    const command = cmd.trim();
+    if (command === '') return;
+    setCmdError(undefined);
+    const res = await fetch(`/api/sessions/${view.id}/parse`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ command }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      move?: { stage: StagedMove };
+      error?: string;
+    };
+    if (data.move) {
+      applyStage(data.move.stage);
+      setCmd('');
+    } else {
+      setCmdError(data.error ?? 'not a move this build can stage');
+    }
+  };
 
   // A suggestion chip stages the move in the action bar — it never runs the
   // quarter. The decision stays with the player; the chip just saves typing.
+  // Functional updates throughout: "stage these" applies several moves in one
+  // click, and spreading a stale closure would keep only the last of them.
   const applyStage = (stage: StagedMove): void => {
     if (stage.type === 'price') setPrice(groupMoney(String(stage.value)));
     else if (stage.type === 'marketing') setMarketing(groupDigits(String(stage.value)));
-    else if (stage.type === 'staff') setHires({ ...hires, [stage.costId]: stage.delta });
     else if (stage.type === 'assume') {
-      setAssumes({
-        ...assumes,
-        [stage.assumptionId]: { value: stage.value, evidence: assumes[stage.assumptionId]?.evidence ?? '' },
+      setAssumes((a) => ({
+        ...a,
+        [stage.assumptionId]: { value: stage.value, evidence: a[stage.assumptionId]?.evidence ?? '' },
+      }));
+    } else if (stage.type === 'staff') {
+      // Staff merges: two "hire" clicks on the same line stage two blocks.
+      // Everything else replaces — the TurnRequest has one slot per verb.
+      setStaged((list) => {
+        const existing = list.find((s) => s.type === 'staff' && s.costId === stage.costId);
+        const delta = Math.max(
+          -5,
+          Math.min(5, (existing?.type === 'staff' ? existing.delta : 0) + stage.delta),
+        );
+        const rest = list.filter((s) => !(s.type === 'staff' && s.costId === stage.costId));
+        return delta === 0 ? rest : [...rest, { ...stage, delta }];
       });
     } else {
-      const g = (n: number): string => groupDigits(String(Math.round(n)));
-      const stagedMoves: Record<string, string> = { ...moves };
-      if (stage.type === 'expand') {
-        stagedMoves['expandUnits'] = g(stage.units);
-        stagedMoves['expandCost'] = g(stage.cost);
-      } else if (stage.type === 'upgrade') {
-        stagedMoves['upgradePct'] = g(stage.pct);
-        stagedMoves['upgradeCost'] = g(stage.cost);
-      } else if (stage.type === 'territory') {
-        stagedMoves['territoryPct'] = g(stage.pct);
-        stagedMoves['territoryCost'] = g(stage.cost);
-      } else if (stage.type === 'debt') {
-        stagedMoves['debt'] = g(stage.amount);
-        if (stage.quarters) stagedMoves['debtTerm'] = g(stage.quarters);
-      } else {
-        stagedMoves[stage.type] = g(stage.amount);
-      }
-      setMoves(stagedMoves);
-      setMore(true);
+      setStaged((list) => [...list.filter((s) => s.type !== stage.type), stage]);
     }
+  };
+
+  const unstage = (index: number): void =>
+    setStaged((list) => list.filter((_, i) => i !== index));
+
+  /** A staged move, phrased for its chip. */
+  const chipLabel = (s: StagedMove): string => {
+    const n = (v: number): string => v.toLocaleString('en-US');
+    if (s.type === 'staff') {
+      const label = view.staffing.find((x) => x.costId === s.costId)?.label ?? s.costId;
+      return `${s.delta > 0 ? 'hire' : 'cut'} ${label} ×${Math.abs(s.delta)}`;
+    }
+    if (s.type === 'expand') return `expand +${n(s.units)} ${view.moves.expandNoun} · $${n(s.cost)}`;
+    if (s.type === 'upgrade') return `upgrade +${s.pct}% · $${n(s.cost)}`;
+    if (s.type === 'territory') return `territory +${s.pct}% · $${n(s.cost)}`;
+    if (s.type === 'debt') return `loan $${n(s.amount)}${s.quarters ? ` · ${s.quarters}q` : ''}`;
+    if (s.type === 'draw' || s.type === 'repay' || s.type === 'inject' || s.type === 'distribute') {
+      return `${s.type} $${n(s.amount)}`;
+    }
+    return s.type;
+  };
+
+  // Assumption labels for the strip, from the register the view already carries.
+  const assumptionLabel = (id: string): string => {
+    for (const t of view.register.tabs) {
+      for (const g of t.groups) {
+        const row = g.rows.find((r) => r.id === id || r.escalatorId === id);
+        if (row) return row.id === id ? row.label : `${row.label} escalator`;
+      }
+    }
+    return id;
   };
 
   return (
@@ -268,6 +319,25 @@ export function GameClient({ initial }: { initial: GameView }) {
                   <span className="needs">needs {s.needed}</span>
                 )}
                 <span>{s.blockCost}/block</span>
+                {/* Control beside evidence: the row already shows blocks,
+                    pending and the capacity warning — the decision is made
+                    here, so the lever lives here. Clicks accumulate. */}
+                {!view.over && (
+                  <span className="staff-actions">
+                    <button
+                      className="share-link"
+                      onClick={() => applyStage({ type: 'staff', costId: s.costId, delta: 1 })}
+                    >
+                      hire
+                    </button>
+                    <button
+                      className="share-link"
+                      onClick={() => applyStage({ type: 'staff', costId: s.costId, delta: -1 })}
+                    >
+                      cut
+                    </button>
+                  </span>
+                )}
               </div>
             ))}
             {view.debts.map((d) => (
@@ -454,28 +524,45 @@ export function GameClient({ initial }: { initial: GameView }) {
         />
       )}
 
-      {more && !view.over && (
-        <div className="morebar">
-          <MoveInput label={`Expand (+${view.moves.expandNoun}, cost $)`} pair
-            a={moves['expandUnits'] ?? ''} onA={(v) => move('expandUnits', v)}
-            b={moves['expandCost'] ?? ''} onB={(v) => move('expandCost', v)} />
-          <MoveInput label="Upgrade (% better, cost $)" pair
-            a={moves['upgradePct'] ?? ''} onA={(v) => move('upgradePct', v)}
-            b={moves['upgradeCost'] ?? ''} onB={(v) => move('upgradeCost', v)} />
-          {view.moves.territory && (
-            <MoveInput label="New territory (% more market, cost $)" pair
-              a={moves['territoryPct'] ?? ''} onA={(v) => move('territoryPct', v)}
-              b={moves['territoryCost'] ?? ''} onB={(v) => move('territoryCost', v)} />
+      {(staged.length > 0 ||
+        price.trim() !== '' ||
+        marketing.trim() !== '' ||
+        Object.values(assumes).some((a) => a.value.trim() !== '')) && (
+        <div className="staged-strip">
+          <span className="staged-cap">This quarter:</span>
+          {price.trim() !== '' && (
+            <span className="staged-chip">
+              price ${price}
+              <button onClick={() => setPrice('')} aria-label="unstage price">×</button>
+            </span>
           )}
-          <MoveInput label="Term loan ($, quarters)" pair
-            a={moves['debt'] ?? ''} onA={(v) => move('debt', v)}
-            b={moves['debtTerm'] ?? ''} onB={(v) => move('debtTerm', v)} />
-          {view.moves.revolver && (
-            <MoveInput label="Draw revolver ($)" a={moves['draw'] ?? ''} onA={(v) => move('draw', v)} />
+          {marketing.trim() !== '' && (
+            <span className="staged-chip">
+              marketing ${marketing}/qtr
+              <button onClick={() => setMarketing('')} aria-label="unstage marketing">×</button>
+            </span>
           )}
-          <MoveInput label="Repay debt ($)" a={moves['repay'] ?? ''} onA={(v) => move('repay', v)} />
-          <MoveInput label="Inject ($)" a={moves['inject'] ?? ''} onA={(v) => move('inject', v)} />
-          <MoveInput label="Distribute ($)" a={moves['distribute'] ?? ''} onA={(v) => move('distribute', v)} />
+          {staged.map((s, i) => (
+            <span className="staged-chip" key={`${s.type}-${i}`}>
+              {chipLabel(s)}
+              <button onClick={() => unstage(i)} aria-label={`unstage ${s.type}`}>×</button>
+            </span>
+          ))}
+          {Object.entries(assumes)
+            .filter(([, a]) => a.value.trim() !== '')
+            .map(([id, a]) => (
+              <span className="staged-chip" key={id}>
+                assume {assumptionLabel(id)} → {a.value}
+                <button
+                  onClick={() =>
+                    setAssumes((all) => Object.fromEntries(Object.entries(all).filter(([k]) => k !== id)))
+                  }
+                  aria-label="unstage assumption"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
         </div>
       )}
       <footer className="actionbar">
@@ -499,30 +586,74 @@ export function GameClient({ initial }: { initial: GameView }) {
             onChange={(e) => setMarketing(groupDigits(e.target.value))}
           />
         </div>
-        {view.staffing.map((s) => (
-          <div className="control" key={s.costId}>
-            <label htmlFor={`staff-${s.costId}`}>{s.label}</label>
-            <select
-              id={`staff-${s.costId}`}
-              value={hires[s.costId] ?? 0}
-              onChange={(e) => setHires({ ...hires, [s.costId]: Number(e.target.value) })}
-            >
-              {[-2, -1, 0, 1, 2, 3].map((n) => (
-                <option key={n} value={n}>
-                  {n === 0 ? 'hold' : n > 0 ? `hire +${n}` : `cut ${n}`}
-                </option>
-              ))}
-            </select>
+        {!view.over && (
+          <div className="control cmd">
+            <label htmlFor="cmd">Move</label>
+            <div className="cmd-row">
+              <input
+                id="cmd"
+                value={cmd}
+                placeholder="type a move — hire crew 1, debt 50000…"
+                onChange={(e) => {
+                  setCmd(e.target.value);
+                  setCmdError(undefined);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submitCommand();
+                }}
+              />
+              <button
+                className="cmd-help"
+                aria-label="all moves"
+                onClick={() => setCmdMenu(!cmdMenu)}
+              >
+                ?
+              </button>
+            </div>
+            {cmdError && (
+              <div className="cmd-error">
+                {cmdError} —{' '}
+                <button
+                  className="share-link"
+                  onClick={() => {
+                    void askText(cmd);
+                    setCmd('');
+                    setCmdError(undefined);
+                    setLeftTab('advisor');
+                  }}
+                >
+                  ask the advisor
+                </button>
+              </div>
+            )}
+            {cmdMenu && (
+              <div className="cmd-pop">
+                {view.commands.map((line) => {
+                  const [template, ...rest] = line.split(' — ');
+                  return (
+                    <button
+                      key={line}
+                      className="cmd-pop-row"
+                      onClick={() => {
+                        setCmd(`${template!.trim()} `);
+                        setCmdMenu(false);
+                        document.getElementById('cmd')?.focus();
+                      }}
+                    >
+                      <span className="cmd-template">{template}</span>
+                      <span className="cmd-desc">{rest.join(' — ')}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        ))}
+        )}
         <div className="run">
           {view.share && !view.share.sharedAs && !view.over && (
             <button className="share-link" onClick={() => setSharing(true)}>
               Share with QA
             </button>
-          )}
-          {!view.over && (
-            <button onClick={() => setMore(!more)}>{more ? 'Fewer moves' : 'More moves'}</button>
           )}
           <button onClick={() => runQuarter(3)} disabled={busy || view.status === 'CLOSED'}>
             Skip year
@@ -667,6 +798,37 @@ function AdvisorFeed({
           return (
             <div className={`a-chat ${e.who}`} key={i}>
               <div>{e.text}</div>
+              {e.ordered && e.ordered.length > 0 && (
+                <div className="a-confirm">
+                  {e.orderedSummary && <div className="a-confirm-summary">{e.orderedSummary}</div>}
+                  <div className="a-chips">
+                    {e.ordered.map((s) => (
+                      <button
+                        key={s.command}
+                        className="chip"
+                        title="Stage this in the action bar — nothing runs until you run the quarter"
+                        onClick={() => onStage(s.stage)}
+                      >
+                        {s.command}
+                      </button>
+                    ))}
+                    <button
+                      className="chip confirm"
+                      title="Stage everything above — nothing runs until you run the quarter"
+                      onClick={() => e.ordered!.forEach((s) => onStage(s.stage))}
+                    >
+                      {e.ordered.length > 1 ? 'stage all of it' : 'stage it'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {e.unresolvable && e.unresolvable.length > 0 && (
+                <div className="a-unresolved">
+                  {e.unresolvable.map((u, j) => (
+                    <div key={j}>· {u}</div>
+                  ))}
+                </div>
+              )}
               {e.suggested && e.suggested.length > 0 && (
                 <div className="a-chips">
                   {e.suggested.map((s) => (
@@ -707,35 +869,6 @@ function AdvisorFeed({
         <button className="primary" onClick={onAsk} disabled={!available || asking || msg.trim() === ''}>
           {asking ? '…' : 'Send'}
         </button>
-      </div>
-    </div>
-  );
-}
-
-/** One occasional-move control: a labelled input, or a pair for (size, cost). */
-function MoveInput({
-  label,
-  a,
-  onA,
-  b,
-  onB,
-  pair,
-}: {
-  label: string;
-  a: string;
-  onA: (v: string) => void;
-  b?: string;
-  onB?: (v: string) => void;
-  pair?: boolean;
-}) {
-  return (
-    <div className="control">
-      <label>{label}</label>
-      <div className="pair">
-        <input inputMode="numeric" value={a} onChange={(e) => onA(groupDigits(e.target.value))} />
-        {pair && onB && (
-          <input inputMode="numeric" value={b ?? ''} onChange={(e) => onB(groupDigits(e.target.value))} />
-        )}
       </div>
     </div>
   );

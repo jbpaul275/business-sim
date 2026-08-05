@@ -84,6 +84,15 @@ describe('what the briefing can account for', () => {
   it('says nothing about zero', () => {
     expect(unverifiedFigures('that costs you $0 to try', briefing, '')).toEqual([]);
   });
+
+  it('does not read "$30,000 marketing" as thirty billion', () => {
+    // The suffix must stop at word boundaries: the "m" of "marketing" is not
+    // "million". The unguarded regex flagged a reply for restating its own
+    // source, which is a retry burned on a parsing artifact.
+    expect(unverifiedFigures('a $30,000 marketing push', briefing, 'marketing to $30,000')).toEqual(
+      [],
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -103,9 +112,17 @@ function transportOf(...replies: TurnAdvice[]): AdviceTransport & { calls: numbe
   };
 }
 
-const advice = (reply: string, suggestedCommands: string[] = []): TurnAdvice => ({
+const advice = (
+  reply: string,
+  suggestedCommands: string[] = [],
+  extra: Partial<TurnAdvice> = {},
+): TurnAdvice => ({
   reply,
   suggestedCommands,
+  orderedCommands: [],
+  unresolvable: [],
+  confirmationSummary: '',
+  ...extra,
 });
 
 describe('asking, checking, and giving up', () => {
@@ -195,6 +212,41 @@ describe('asking, checking, and giving up', () => {
   });
 });
 
+describe('translating orders (§11.4)', () => {
+  it('passes the translation through beside the reply', async () => {
+    const transport = transportOf(
+      advice('Staged for you to confirm.', [], {
+        orderedCommands: ['price 6.50', 'hire barista 1'],
+        unresolvable: ['how much is "a bit" more marketing?'],
+        confirmationSummary: 'Price to $6.50 now; the hire costs money this quarter and adds capacity next.',
+      }),
+    );
+    const outcome = await askAdvisor(transport, briefing, 'price to $6.50, hire a barista, and bump marketing a bit');
+    expect(outcome?.orderedCommands).toEqual(['price 6.50', 'hire barista 1']);
+    expect(outcome?.unresolvable).toEqual(['how much is "a bit" more marketing?']);
+    expect(outcome?.confirmationSummary).toContain('capacity next');
+  });
+
+  it('holds the confirmation summary to the same money guard as the reply', async () => {
+    // The summary goes on screen exactly like the reply. A summary quoting a
+    // cost the briefing never produced is the same fabrication in a nicer box.
+    const transport = transportOf(
+      advice('Staged.', [], {
+        orderedCommands: ['hire barista 1'],
+        confirmationSummary: 'The hire adds about $850k a quarter.',
+      }),
+      advice('Staged.', [], {
+        orderedCommands: ['hire barista 1'],
+        confirmationSummary: 'The hire adds cost this quarter and capacity next.',
+      }),
+    );
+    const outcome = await askAdvisor(transport, briefing, 'hire a barista');
+    expect(transport.calls).toBe(2);
+    expect(outcome?.retriedOn).toEqual(['$850k']);
+    expect(outcome?.confirmationSummary).toContain('capacity next');
+  });
+});
+
 describe('the advisor prompt frames a business, not a pricing exercise', () => {
   /**
    * The Genki session, condensed: "we're not making any money" was met with
@@ -222,5 +274,14 @@ describe('the advisor prompt frames a business, not a pricing exercise', () => {
 
   it('forbids claiming a player’s different number is already reflected', () => {
     expect(TURN_ADVISOR_PROMPT).toContain('already baked in');
+  });
+
+  it('separates orders from suggestions and forbids guessing amounts (§11.4)', () => {
+    expect(TURN_ADVISOR_PROMPT).toContain('When they give an order, translate it');
+    expect(TURN_ADVISOR_PROMPT).toContain(
+      'Never put anything in `orderedCommands` the player did not express',
+    );
+    expect(TURN_ADVISOR_PROMPT).toContain('An ambiguous amount goes in `unresolvable`, never guessed');
+    expect(TURN_ADVISOR_PROMPT).toContain('The player confirms before anything applies');
   });
 });

@@ -7,7 +7,7 @@ import {
   type Provenance,
 } from '@bizsim/schemas';
 import { priceUnits, shareNotice, uploadTarget } from '@bizsim/sim-cli';
-import { advisorAvailable } from './advisor';
+import { advisorAvailable, WEB_COMMANDS } from './advisor';
 import type { AdvisorEntry, GameSession, TurnLogEntry } from './store';
 
 /**
@@ -275,6 +275,13 @@ export interface GameView {
   advisor: AdvisorEntry[];
   /** Whether the chat input works — false when no provider key is set. */
   advisorAvailable: boolean;
+  /**
+   * The command vocabulary, one human-written line per verb — the `?` menu
+   * behind the command input. This is also the strategy space kept visible:
+   * the old wall of forms taught what moves exist, and the menu inherits that
+   * job without the resident clutter. Filtered to this business's levers.
+   */
+  commands: string[];
   register: { confidence: string; count: number; tabs: RegisterTabView[] };
   household: { cash: string; netWorth: string };
   over: boolean;
@@ -490,6 +497,13 @@ export function toView(session: GameSession): GameView {
     log: [...session.log].reverse().slice(0, 24).map(toLogView),
     advisor: session.advisor,
     advisorAvailable: advisorAvailable(),
+    commands: WEB_COMMANDS.filter((line) => {
+      // The menu only lists levers this business has, and `skip` is the run
+      // buttons — a menu row for it would stage nothing.
+      if (line.startsWith('market ') && !(stream?.params.kind === 'UTILIZATION' || stream?.params.kind === 'TRAFFIC')) return false;
+      if (line.startsWith('skip ')) return false;
+      return true;
+    }),
     register: {
       confidence: pct(business.assumptions.confidenceScore),
       count: assumptions.length,

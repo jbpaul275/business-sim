@@ -217,6 +217,9 @@ You will always be able to think of one more useful question. Resist it — hard
 - **What makes customers choose them** over the shop down the street — that is the capture rate, the marketing posture and the price position wearing plain words, and it is also what makes the draft THEIR business instead of a generic one.
 - **Stay small, or build toward something** — one crew forever and the first location of a bigger ambition are different drafts.
 - **Pocket the earnings, or reinvest them** — that is \`ownerCompPerYear\` and the distribution posture, and in a service business it decides how fast anything compounds.
+- **Have they done this before** — run one, worked in one, or new ground — and how much of themselves they plan to put in. "I ran the books for my dad's HVAC company" carries years, role, and adjacency in one sentence, and no checkbox could. This is what \`founderProfile\` carries.
+
+**Biography is never invented.** \`founderProfile\` may carry ONLY what the player actually said: their years in the domain, the hours they said they will work, and their own words as the basis. A model that infers "probably experienced" from tone has fabricated a credential, which is worse than fabricating a number — the game would flatter the player with their own invented résumé. If they said nothing about experience or hours, leave the defaults exactly as they are; a neutral profile changes nothing downstream, and nothing is the correct effect of nothing said.
 
 A live interview drafted a Toledo plumbing shop after four questions of pure mechanics — work mix, crew, ticket price — and never asked one of these. The mechanics were estimable; the ambition was not. These still obey the question policy (ask the ones whose answers you cannot predict, skip any the conversation already answered), but a draft built without a single one of them is usually a draft built on the most predictable player imaginable.
 

@@ -206,6 +206,13 @@ which the reference model omitted — the same reason its year three sat above b
   cumulative volume. Half-deliberate (nothing may move without a visible assumption), and today the player
   enacts the curve through `assume` revisions the eigen questions prompt. If it lands, it lands as
   scheduled, register-visible revisions — never a hidden curve.
+- **The founder profile.** Specced, not built — [07](./07-founder-profile.md). The load-bearing-inputs
+  law ("never collect what the model won't carry"), one new must-ask person-question (domain
+  experience), and four effect mappings, every one a visible register line: ramp floor from years in
+  the trade, the owner-supplied labor block (the deferred owner-2-blocks item, declared in the
+  player's own words rather than picked from a persona menu), the lender's file pricing experience,
+  and expertise-as-evidence in the challenge loop (one tier, in domain only, never past D-5). Four
+  shippable stages; persona pickers and the industry multi-select deliberately deferred.
 - **A duplicate-overheads guard beyond known families.** A live draft carried "Accounting & legal" AND
   "Accounting, legal, and compliance" at $2,500 each — omission-guard defaults beside custom lines saying
   the same thing, paying twice. `duplicateOverheadIssues` now catches the known families (accounting,
@@ -220,13 +227,31 @@ which the reference model omitted — the same reason its year three sat above b
   fails soft to silence) and ONE deterministic eigen question — `selectAxis` in `sim-cli/eigen.ts`
   picks the axis by hierarchy (crisis → biggest §10.4 driver → looming constraint → idle slack) with
   a two-quarter repetition memory, and the chat answers through the same briefing/money-guard the
-  CLI uses, with suggested commands parsed into stageable action-bar moves. The register is tabbed by
+  CLI uses, with suggested commands parsed into stageable action-bar moves. §11.4 `ActionTranslation`
+  is folded into the same advise call: an instruction in chat ("raise the price to $6.50, hire another
+  crew") comes back as `orderedCommands` in the game's own syntax — validated by the same parser as
+  suggestions, staged only when the player confirms from the summary, with anything ambiguous or
+  inexpressible listed as unresolvable rather than guessed at. Narration resolves the player's bet:
+  the moves that actually queued (described server-side from the accepted actions) and the eigen
+  question they answered ride the §11.5 input, and the prompt opens the quarter on that bet's verdict —
+  a read on the outcome, never a judgement of the decision, and never invented when no moves were
+  staged. The funding screen prices depth (Dave-the-Diver rule: chosen, visible, priced): three named
+  plans — Lean, Proposed, Cushioned — each just an equity preset over the same `fund` lever, wearing a
+  deterministic gauge from `planDepth`/`depthGauge` (`sim-cli/depth.ts`): the candidate world ticked 12
+  quarters silently, first crisis-ladder touch and cash trough reported at plan AND with demand 30%
+  under it (one stress lever per archetype), debt service at its heaviest, and the downside stated
+  before the dive — the personally-guaranteed principal that follows you home. The action bar is a
+  staged strip: price and marketing stay tactile, everything else stages as chips (typed into the
+  command input — the game's own grammar parsed deterministically by the suggestion validator, `?` for
+  the clickable template menu that keeps the strategy space visible — or clicked from advisor chips and
+  confirm cards, or from hire/cut links beside the staffing table), and the strip above Run states the
+  bet the next quarter's narration resolves. The morebar's eight form pairs and the hire steppers are
+  deleted. Watch across play-tests: action diversity, command-input usage, time-to-run. The register is tabbed by
   what each number bears on — investment (capex, working-capital terms, financing), P&L (prices, rates,
   recurring amounts), descriptive (square feet, seats, hours) — with the category clusters and the
   escalator column inside each tab, classified deterministically from `category`/`unit`/`isMoney`.
-  Still CLI-or-nothing:
-  "show the math", the crisis policy editor and debt/capex controls; web sessions are in-memory,
-  and the CLI's own turn loop does not yet use `selectAxis`.
+  Still CLI-or-nothing: "show the math" and the crisis policy editor; the CLI's own turn loop does not
+  yet use `selectAxis`, and its advisor does not yet surface `orderedCommands`.
 - **`START_BUSINESS` in `FULL_INTERVIEW` mode.** A brand-new concept needs the Phase 1-4 conversation, which
   cannot run inside a pure tick. CLONE covers the case §9.5 says should take two minutes; a genuinely
   different second business is a new run today.
@@ -237,12 +262,16 @@ which the reference model omitted — the same reason its year three sat above b
   forced draft (the staged per-stage grammars where the transport supports them, one-shot otherwise), one
   production-style repair round, then the deterministic tail to `buildCandidate` and zero validation
   errors. Run on demand with a key exported; it fails fast naming the missing key var otherwise. This is
-  the check that would have caught the two live failures to date before a player did (the oversized draft
-  grammar, the 0.975 seasonality). It needs running whenever the provider, a prompt, or a wire schema
+  the check that would have caught the live failures to date before a player did (the oversized draft
+  grammar, the 0.975 seasonality, the monthly cadence). First live pass 2026-08-05 on kimi-k3: turn plus
+  all four staged grammars accepted on the wire, zero repair rounds, zero validation errors — 5 calls,
+  52.9k in / 2.6k out, $0.07, 76s. It needs re-running whenever the provider, a prompt, or a wire schema
   changes — nothing runs it automatically, and the Anthropic transport still falls back to the one-shot
   draft (`draftStage` unimplemented).
-- **One real session on the meter.** Every `spend` record in `.bizsim/` is a test fixture with zero tokens.
-  The cost case for the provider switch is entirely arithmetic on published rates.
+- **One real session on the meter.** Partially answered by the smoke's first pass: a real session-shaped
+  run on kimi-k3 cost $0.07 (52.9k in / 2.6k out), consistent with the published-rate arithmetic the
+  provider switch was decided on. A full played run — turns, advisor chat, adjudications over forty
+  quarters — is still unmeasured; play-test sessions with journals are where that number will come from.
 
 ## Simplifications taken, and where they are recorded
 

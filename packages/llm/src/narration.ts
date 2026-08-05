@@ -66,6 +66,10 @@ export const NARRATION_PROMPT = `You are narrating one quarter of a business sim
 - **Do not restate the numbers — explain them.** The statements are already on screen, and the deterministic findings are marked in the briefing as already shown. Repeating either wastes the only thing you add.
 - **Direct and unsentimental.** Not a cheerleader, not a doomsayer. No "great quarter!", no dread. The player is making decisions with real attention and deserves a straight read.
 
+## Open on the player's bet
+
+When the input lists what the player did this quarter, the first thing you resolve is that bet: what they changed, and what happened to the thing they changed it about. "You bet a second crew would clear the turned-away demand; it did, and the extra volume covered the payroll" is the shape — the decision, then the verdict, in the same breath. The verdict comes from the events and attribution lines like every other claim, and it is a read on the outcome, not a judgement of the decision. When the input lists no moves, there is no bet — narrate the quarter as it is and do not invent one.
+
 ## Shape
 
 A one-sentence headline: the thing that changed, plainly. Two to four sentences of narrative. Up to two suggested questions the player might ask next — questions about judgement, not arithmetic the engine already printed.`;
@@ -99,26 +103,53 @@ export interface NarrationOutcome {
  * nothing to add to it. Same contract as `askAdvisor`, for the same reason —
  * nobody can tell a fabricated figure from a real one by reading it.
  */
+/**
+ * What the player staged for the quarter being narrated, plus the question
+ * they were answering when they staged it. This is what turns the narration
+ * from a weather report into a verdict: each quarter is a bet the player
+ * placed on purpose, and the paragraph over the results should open by
+ * resolving it. Dave the Diver's loop, in financial form — each half of the
+ * game is bait for the other.
+ */
+export interface NarrationBet {
+  /** The eigen question that was on the table, verbatim. */
+  question?: string | undefined;
+  /** The moves they staged, player-readable ("price to $6.50"). */
+  moves: readonly string[];
+}
+
 export async function narrateQuarter(
   transport: NarrationTransport,
   briefing: Briefing,
   now: () => number = () => 0,
   attributions?: readonly DeltaAttribution[],
+  bet?: NarrationBet,
 ): Promise<NarrationOutcome | undefined> {
   const started = now();
-  const input = `${briefing.text}\n\nNarrate the quarter that just ended.`;
+  const betText =
+    bet && bet.moves.length > 0
+      ? `\n\nThe player's bet this quarter${
+          bet.question ? ` — the question on the table was: "${bet.question}"` : ''
+        }. What they did:\n${bet.moves.map((m) => `- ${m}`).join('\n')}`
+      : '';
+  const input = `${briefing.text}${betText}\n\nNarrate the quarter that just ended.`;
+  // The bet is a legal source for the guard, same as a player's question in
+  // chat: "your move to $6.50" restates the player's own number, and flagging
+  // the narration for quoting the bet it was asked to resolve would train
+  // everyone to ignore the guard.
+  const sources = bet ? [bet.question ?? '', ...bet.moves].join('\n') : '';
   const attach: Pick<NarrationOutcome, 'attributions'> =
     attributions && attributions.length > 0 ? { attributions } : {};
 
   const first = await transport.narrate(NARRATION_PROMPT, input);
-  const bad = unverifiedFigures(spoken(first), briefing, '');
+  const bad = unverifiedFigures(spoken(first), briefing, sources);
   if (bad.length === 0) return { narration: first, ms: now() - started, ...attach };
 
   const second = await transport.narrate(
     NARRATION_PROMPT,
     `${input}\n\nYour previous attempt said:\n${spoken(first)}\n\n${correction(bad)}`,
   );
-  if (unverifiedFigures(spoken(second), briefing, '').length > 0) return undefined;
+  if (unverifiedFigures(spoken(second), briefing, sources).length > 0) return undefined;
 
   return { narration: second, ms: now() - started, retriedOn: bad, ...attach };
 }

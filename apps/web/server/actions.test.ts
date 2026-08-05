@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromDisplay } from '@bizsim/money';
 import { createSession } from './store';
-import { translateTurn } from './actions';
+import { describeActions, translateTurn } from './actions';
 
 /**
  * The action bar's server-side translation, against a real business. The
@@ -88,5 +88,37 @@ describe('translateTurn', () => {
       business(),
     );
     expect(actions.map((a) => a.kind)).toEqual(['SET_PRICE']);
+  });
+});
+
+describe('describeActions', () => {
+  it('restates the accepted moves as the bet, in the player\'s vocabulary', () => {
+    const b = business();
+    const staffed = b.costs.stepFixed[0]!;
+    const actions = translateTurn(
+      {
+        price: 52,
+        marketingPerQuarter: 30_000,
+        hire: [{ costId: staffed.id, blocks: 2 }],
+        upgrade: { upliftPct: 15, costDollars: 250_000 },
+        debt: { amountDollars: 300_000, termQuarters: 20 },
+      },
+      b,
+    );
+    const lines = describeActions(actions, b);
+    expect(lines).toContain('price to $52.00');
+    expect(lines).toContain('marketing to $30,000 per quarter');
+    expect(lines).toContain(`hired 2 blocks of ${staffed.label}`);
+    expect(lines.some((l) => l.includes('15% more willingness to pay'))).toBe(true);
+    expect(lines.some((l) => l.includes('$300,000 term loan'))).toBe(true);
+  });
+
+  it('describes only what queued — a skipped move states no bet', () => {
+    const b = business();
+    const actions = translateTurn(
+      { price: 52, expand: { units: -3, costDollars: 100_000 } },
+      b,
+    );
+    expect(describeActions(actions, b)).toEqual(['price to $52.00']);
   });
 });

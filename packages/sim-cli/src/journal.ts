@@ -129,6 +129,13 @@ export type JournalEvent =
   | { kind: 'advice_refused'; question: string }
   | { kind: 'advice_failed'; question: string }
   /**
+   * §11.4 — a chat instruction translated into staged commands. `unresolvable`
+   * carries what could not be translated (ambiguous amounts, moves the build
+   * cannot express); its rate is the signal for where the vocabulary or the
+   * prompt needs work.
+   */
+  | { kind: 'actions_translated'; question: string; commands: string[]; unresolvable?: string[] }
+  /**
    * §11.5 — the sentence over each quarter. The highest-volume model output in
    * the game, so its correction rate is the fabrication signal with the most
    * statistical power: an advisor answers when asked, a narrator speaks every

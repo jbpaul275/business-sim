@@ -1,8 +1,14 @@
-import { toDisplay, type Money } from '@bizsim/money';
+import { toCompact, toDisplay, type Money } from '@bizsim/money';
 import { computeMonthZeroOutlays } from '@bizsim/engine';
 import { computeConfidenceScore } from '@bizsim/schemas';
-import { arguableAssumptions, type CandidateResult } from '@bizsim/sim-cli';
-import { spendSummary, type ChatEntry, type SetupPhase, type SetupSession } from './setup';
+import { arguableAssumptions, type CandidateResult, type PlanDepth } from '@bizsim/sim-cli';
+import {
+  spendSummary,
+  type ChatEntry,
+  type SetupPhase,
+  type SetupSession,
+  type StoredPlanCard,
+} from './setup';
 import { tabRegister, type RegisterTabView } from './view';
 
 /**
@@ -21,6 +27,30 @@ export interface DraftView {
   synthetic: boolean;
 }
 
+/**
+ * One funding depth, display-ready: the plan in a sentence, the air it buys
+ * at plan and under the standard demand stress, and what drowning costs.
+ * Depth is chosen, visible, and priced — the bargain stated before the dive.
+ */
+export interface FundingPlanView {
+  key: string;
+  label: string;
+  tagline: string;
+  planLine: string;
+  /** Dollars for the fund call — the card is a preset over the equity lever. */
+  equityDollars: number;
+  proposed: boolean;
+  airPlan: string;
+  airStressed: string;
+  /** 0..1 — how much of the projection window stays clear of the ladder. */
+  gaugePlan: number;
+  gaugeStressed: number;
+  trough: string;
+  service?: string;
+  downside: string;
+  declined?: string;
+}
+
 export interface FundingView {
   needed: string;
   investable: string;
@@ -32,6 +62,10 @@ export interface FundingView {
   budget: { label: string; amount: string }[];
   /** The worked plan, as one sentence. */
   planLine: string;
+  /** The depths on offer, gauge attached. */
+  plans: FundingPlanView[];
+  /** How the stress reading was taken, said once above the cards. */
+  stressNote: string;
   /** Nonempty when even the capped plan cannot cover opening. */
   shortBy?: string;
   equityFloor: string;
@@ -176,6 +210,9 @@ export function toSetupView(session: SetupSession): SetupView {
         .sort(([, a], [, b]) => (b > a ? 1 : b < a ? -1 : 0))
         .map(([label, amount]) => ({ label, amount: money(amount) })),
       planLine: plan,
+      plans: (session.plans ?? []).map((card) => toPlanView(card)),
+      stressNote:
+        'Air is read twice: with demand as drafted, and with it 30% under — the standard lender stress, and how thin plans actually die.',
       ...(p.shortBy > 0n ? { shortBy: money(p.shortBy) } : {}),
       equityFloor: money(p.equityFloor),
       proposedEquityDollars: Number(p.proposedEquity) / 100,
@@ -220,3 +257,57 @@ export function toSetupView(session: SetupSession): SetupView {
 }
 
 const cMonthZero = (c: CandidateResult): Money => computeMonthZeroOutlays(c.model).total;
+
+// ---------------------------------------------------------------------------
+// The depth gauge, phrased
+// ---------------------------------------------------------------------------
+
+const airPhrase = (d: PlanDepth): string =>
+  d.insolvencyQuarter !== undefined
+    ? `runs out of cash inside Q${d.insolvencyQuarter}`
+    : d.firstCrisisQuarter !== undefined
+      ? `touches the crisis ladder in Q${d.firstCrisisQuarter}`
+      : `clear through all ${d.quarters} quarters`;
+
+/** How much of the projection window stays above the ladder, for the bar. */
+const airFraction = (d: PlanDepth): number => {
+  const mark = d.insolvencyQuarter ?? d.firstCrisisQuarter ?? d.quarters + 1;
+  return Math.max(0, Math.min(1, (mark - 1) / d.quarters));
+};
+
+function toPlanView(card: StoredPlanCard): FundingPlanView {
+  const money = (m: Money): string => toDisplay(m, { showCents: false });
+  const planLine =
+    card.loan > 0n
+      ? `${money(card.equity)} of your own + a ${money(card.loan)} SBA 7(a)` +
+        `${card.rate !== undefined ? ` @ ${(card.rate * 100).toFixed(1)}%` : ''}` +
+        `${card.revolver > 0n ? `, ${money(card.revolver)} revolver` : ''}`
+      : `${money(card.equity)} of your own, no debt`;
+  const g = card.gauge;
+  const service =
+    g.atPlan.debtServicePerQuarter > 0n
+      ? `${money(g.atPlan.debtServicePerQuarter)}/quarter of debt service at its heaviest`
+      : undefined;
+  // The drowning, priced before the dive: the guarantee brings the loan home.
+  const downside =
+    card.loan > 0n
+      ? `Personally guaranteed — if the business fails owing it, up to ${money(card.loan)} follows ` +
+        `you home on top of the ${money(card.equity)} you put in.`
+      : `No debt: the downside is the ${money(card.equity)} you put in.`;
+  return {
+    key: card.key,
+    label: card.label,
+    tagline: card.tagline,
+    planLine,
+    equityDollars: Number(card.equity) / 100,
+    proposed: card.key === 'proposed',
+    airPlan: airPhrase(g.atPlan),
+    airStressed: airPhrase(g.stressed),
+    gaugePlan: airFraction(g.atPlan),
+    gaugeStressed: airFraction(g.stressed),
+    trough: `cash trough ${toCompact(g.atPlan.troughCash)} in Q${g.atPlan.troughQuarter}`,
+    ...(service ? { service } : {}),
+    downside,
+    ...(card.declined ? { declined: card.declined } : {}),
+  };
+}

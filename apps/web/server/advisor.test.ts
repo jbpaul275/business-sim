@@ -9,6 +9,14 @@ import { askGame, narrateAdvance, parseSuggestion } from './advisor';
  * through the same briefing/guard machinery as the CLI advisor.
  */
 
+const adviceOf = (partial: Partial<TurnAdvice> & { reply: string }): TurnAdvice => ({
+  suggestedCommands: [],
+  orderedCommands: [],
+  unresolvable: [],
+  confirmationSummary: '',
+  ...partial,
+});
+
 function scripted(
   advice: TurnAdvice[],
   narration?: TurnNarration,
@@ -110,16 +118,43 @@ describe('narration over the quarter', () => {
       expect(session.advisor.filter((e) => e.kind === 'question').length).toBeGreaterThan(1);
     });
   });
+
+  it('threads the bet into the narration: staged moves plus the prior question', async () => {
+    // The loop's bait: the narration opens on the bet the player placed, so
+    // its input carries what they staged and the eigen question that was on
+    // the table when they staged it — the question from BEFORE this quarter,
+    // not the fresh one already in the feed.
+    const session = createSession('storage');
+    const seen: string[] = [];
+    session.transport = {
+      narrate: async (_system: string, input: string) => {
+        seen.push(input);
+        return { headline: 'The hire cleared the queue.', narrative: 'Capacity caught demand.', suggestedQuestions: [] };
+      },
+    } as unknown as NonNullable<GameSession['transport']>;
+
+    const openingQuestion = session.advisor.find((e) => e.kind === 'question')!.text;
+    advanceSession(session, [], 0);
+    await narrateAdvance(session, ['hired 1 block of Site staff']);
+    expect(seen[0]).toContain("The player's bet this quarter");
+    expect(seen[0]).toContain('- hired 1 block of Site staff');
+    expect(seen[0]).toContain(openingQuestion);
+
+    // No moves staged → no bet in the input, nothing to resolve.
+    advanceSession(session, [], 0);
+    await narrateAdvance(session);
+    expect(seen[1]).not.toContain("The player's bet");
+  });
 });
 
 describe('the conversation', () => {
   it('answers through the money guard and turns suggestions into staged moves', async () => {
     const session = createSession('storage');
     session.transport = scripted([
-      {
+      adviceOf({
         reply: 'Occupancy is the lever here; marketing is how you buy it faster.',
         suggestedCommands: ['marketing 25000', 'expand 100 500000'],
-      },
+      }),
     ]);
     const outcome = await askGame(session, 'What should I focus on first?');
     expect(outcome.ok).toBe(true);
@@ -135,11 +170,35 @@ describe('the conversation', () => {
     ]);
   });
 
+  it("translates the player's own orders into confirmable staged moves", async () => {
+    // §11.4 in the feed: what the player instructed stages on their confirm,
+    // what could not be translated is shown rather than guessed at — including
+    // an ordered command this build cannot express.
+    const session = createSession('storage');
+    session.transport = scripted([
+      adviceOf({
+        reply: 'Staged for you to confirm; price needs a number.',
+        orderedCommands: ['marketing 25000', 'buy the moon 5'],
+        unresolvable: ['how much is "a bit" more on price?'],
+        confirmationSummary: 'Marketing to $25,000 a quarter from the next run.',
+      }),
+    ]);
+    const outcome = await askGame(session, 'set marketing to $25k, buy the moon, raise price a bit');
+    expect(outcome.ok).toBe(true);
+    const last = session.advisor.at(-1)!;
+    expect(last.ordered).toEqual([
+      { command: 'marketing 25000', stage: { type: 'marketing', value: 25_000 } },
+    ]);
+    expect(last.orderedSummary).toContain('$25,000');
+    expect(last.unresolvable?.some((u) => u.includes('buy the moon'))).toBe(true);
+    expect(last.unresolvable?.some((u) => u.includes('a bit'))).toBe(true);
+    expect(session.events.some((e) => e.kind === 'actions_translated')).toBe(true);
+  });
+
   it('replaces an answer that invents money with the honest refusal', async () => {
-    const invented: TurnAdvice = {
+    const invented: TurnAdvice = adviceOf({
       reply: 'A renovation would cost about $87,654,321 and pay back fast.',
-      suggestedCommands: [],
-    };
+    });
     const session = createSession('storage');
     session.transport = scripted([invented, invented]);
     const outcome = await askGame(session, 'Should I renovate?');
