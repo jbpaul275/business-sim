@@ -232,14 +232,15 @@ which the reference model omitted — the same reason its year three sat above b
   different second business is a new run today.
 - **A clone re-prompting for each parameter that differs.** §9.5 lists location, rent, traffic, wage rate,
   buildout and unit count; this build takes one size multiplier covering all of them.
-- **Any live-call test, anywhere.** Every LLM path in this repo is verified against scripted or stubbed
-  transports. Nothing has ever asserted that a real provider accepts the request a transport builds. That
-  was a tolerable gap while there was one provider that had visibly worked; it is the largest unverified
-  surface in the build now that the default provider changed on the strength of stubs alone. The staged
-  draft pipeline (spine → costs → capital → finish; `llm/stages.ts`) raises the stakes here: it exists to
-  fix a live failure (draft grammar exceeding the API's size limit and degrading to unconstrained
-  generation), and only a live session proves the per-stage grammars behave. The Anthropic transport does
-  not implement `draftStage` and falls back to the one-shot draft.
+- **Live calls in `pnpm check`.** Deliberately never. What exists instead: `pnpm smoke`
+  (`sim-cli/smoke.ts`) drives one real session against the configured provider — an interview turn, the
+  forced draft (the staged per-stage grammars where the transport supports them, one-shot otherwise), one
+  production-style repair round, then the deterministic tail to `buildCandidate` and zero validation
+  errors. Run on demand with a key exported; it fails fast naming the missing key var otherwise. This is
+  the check that would have caught the two live failures to date before a player did (the oversized draft
+  grammar, the 0.975 seasonality). It needs running whenever the provider, a prompt, or a wire schema
+  changes — nothing runs it automatically, and the Anthropic transport still falls back to the one-shot
+  draft (`draftStage` unimplemented).
 - **One real session on the meter.** Every `spend` record in `.bizsim/` is a test fixture with zero tokens.
   The cost case for the provider switch is entirely arithmetic on published rates.
 

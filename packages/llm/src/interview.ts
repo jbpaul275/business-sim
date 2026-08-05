@@ -511,13 +511,15 @@ export function draftIssues(draft: ConceptDraft): string[] {
   if (stream.seasonality.length !== 4) {
     issues.push(`${where}: seasonality needs exactly 4 quarterly weights.`);
   } else {
-    // The engine reads these as multipliers around 1.0; weights that average
-    // to something else silently rescale the whole year's revenue.
+    // Weights are shape, not scale — the mapper renormalises any positive
+    // mean to average exactly 1.0 (`normaliseSeasonality` in toTemplate).
+    // A live build burned its repair rounds asking the model to fix a 0.975
+    // average; only weights no rescale can make coherent go back to it.
     const mean = stream.seasonality.reduce((a, b) => a + b, 0) / 4;
-    if (Math.abs(mean - 1) > 0.02) {
+    if (stream.seasonality.some((q) => q < 0) || !(mean > 0)) {
       issues.push(
-        `${where}: seasonality averages ${mean.toFixed(2)}, not 1.0 — that rescales annual ` +
-          `revenue rather than redistributing it across quarters.`,
+        `${where}: seasonality weights must be non-negative with at least one above zero — ` +
+          `they redistribute the year across quarters.`,
       );
     }
   }

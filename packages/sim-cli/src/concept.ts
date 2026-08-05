@@ -596,7 +596,6 @@ export async function runConceptInterview(
           ? structural
           : [
               ...revenueRealityIssues(state.draft),
-        ...duplicateOverheadIssues(state.draft),
               ...staffingRealismIssues(state.draft),
               ...duplicateOverheadIssues(state.draft),
             ];
