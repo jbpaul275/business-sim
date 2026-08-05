@@ -237,12 +237,16 @@ which the reference model omitted — the same reason its year three sat above b
   forced draft (the staged per-stage grammars where the transport supports them, one-shot otherwise), one
   production-style repair round, then the deterministic tail to `buildCandidate` and zero validation
   errors. Run on demand with a key exported; it fails fast naming the missing key var otherwise. This is
-  the check that would have caught the two live failures to date before a player did (the oversized draft
-  grammar, the 0.975 seasonality). It needs running whenever the provider, a prompt, or a wire schema
+  the check that would have caught the live failures to date before a player did (the oversized draft
+  grammar, the 0.975 seasonality, the monthly cadence). First live pass 2026-08-05 on kimi-k3: turn plus
+  all four staged grammars accepted on the wire, zero repair rounds, zero validation errors — 5 calls,
+  52.9k in / 2.6k out, $0.07, 76s. It needs re-running whenever the provider, a prompt, or a wire schema
   changes — nothing runs it automatically, and the Anthropic transport still falls back to the one-shot
   draft (`draftStage` unimplemented).
-- **One real session on the meter.** Every `spend` record in `.bizsim/` is a test fixture with zero tokens.
-  The cost case for the provider switch is entirely arithmetic on published rates.
+- **One real session on the meter.** Partially answered by the smoke's first pass: a real session-shaped
+  run on kimi-k3 cost $0.07 (52.9k in / 2.6k out), consistent with the published-rate arithmetic the
+  provider switch was decided on. A full played run — turns, advisor chat, adjudications over forty
+  quarters — is still unmeasured; play-test sessions with journals are where that number will come from.
 
 ## Simplifications taken, and where they are recorded
 
