@@ -583,6 +583,7 @@ function fundingContext(session: SetupSession): FundingContext {
     marketing: mapped.template.modifierDefaults.baseMarketingSpendPerQuarter,
     config: session.config,
     provenanceFor: mapped.provenanceFor,
+    sourceNoteFor: mapped.sourceNoteFor,
   };
 }
 

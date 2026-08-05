@@ -318,6 +318,16 @@ export const zStepFixedCost = z.object({
    * has to reproduce that.
    */
   pendingBlocks: z.number().int().nonnegative().default(0),
+  /**
+   * A block the owner works themselves — docs/plan/07-founder-profile.md.
+   * Counts toward capacity, adds NO block cost: the owner's labor is already
+   * paid through the owner-comp fixed line, and paying it twice would be the
+   * duplicate-overheads bug in reverse. At most one, set only from what the
+   * player said in setup ("I'll run it myself, 80 hours a week"), removable
+   * in play — 80-hour weeks are not forever, and revising this to 0 is how
+   * the game prices stepping back without moralising about it.
+   */
+  ownerBlocks: z.number().int().min(0).max(1).default(0),
   addLeadTimeQuarters: z.number().int().nonnegative(),
   removeSeverancePerBlock: zMoney,
   isLabor: z.boolean(),

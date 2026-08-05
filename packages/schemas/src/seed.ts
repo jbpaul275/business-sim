@@ -45,6 +45,8 @@ export const zCostDefault = z.object({
   isPrepaidExpense: z.boolean().default(false),
   benchmarkBand: zBenchmarkBand.optional(),
   sourceNote: z.string().min(1),
+  /** STEP_FIXED only: one block of this line is the owner working it (07). */
+  ownerBlocks: z.number().int().min(0).max(1).default(0),
 });
 export type CostDefault = z.infer<typeof zCostDefault>;
 

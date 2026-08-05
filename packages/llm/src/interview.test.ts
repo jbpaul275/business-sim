@@ -646,6 +646,61 @@ describe('draftIssues', () => {
     expect(finish.properties['founderProfile']).toBeDefined();
   });
 
+  it('the founder profile maps to the model: ramp floor and the owner block (stage 2)', () => {
+    const laborLine = {
+      label: 'Scoop crew',
+      class: 'STEP_FIXED' as const,
+      statementLine: 'LABOR' as const,
+      value: 13_000,
+      isLabor: true,
+      accruable: false,
+      capacityPerBlock: 11_000,
+      minimumBlocks: 1,
+      sourceNote: 'One crew per shift.',
+      provenance: 'LLM_ESTIMATE' as const,
+    };
+    const experienced = draft({
+      costLines: [...draft().costLines, laborLine],
+      founderProfile: { domainYears: 4, ownerHoursPerWeek: 80, basis: 'ran my own shop for four years' },
+    });
+    const mapped = draftToTemplate(experienced);
+    // 0.40 + 0.025 × 4 — and the register will say whose figure it is, quoting them.
+    expect(mapped.template.modifierDefaults.rampFloor).toBeCloseTo(0.5, 10);
+    expect(mapped.provenanceFor('streams.s1.modifiers.rampFloor')).toBe('PLAYER_SOURCED');
+    expect(mapped.sourceNoteFor('streams.s1.modifiers.rampFloor')).toContain(
+      'ran my own shop for four years',
+    );
+    // 80 hours a week fills one slot on the labor line — the industrious
+    // persona declared in their own words, never picked from a menu.
+    const labor = mapped.template.costDefaults.find((c) => c.class === 'STEP_FIXED' && c.isLabor);
+    expect(labor?.ownerBlocks).toBe(1);
+
+    // The cap: no résumé buys a ramp floor above 0.6.
+    const veteran = draft({
+      founderProfile: { domainYears: 30, ownerHoursPerWeek: 40, basis: 'thirty years' },
+    });
+    expect(draftToTemplate(veteran).template.modifierDefaults.rampFloor).toBeCloseTo(0.6, 10);
+
+    // Nothing said, nothing moved: the neutral profile is inert everywhere.
+    const neutral = draftToTemplate(draft({ costLines: [...draft().costLines, laborLine] }));
+    expect(neutral.template.modifierDefaults.rampFloor).toBeCloseTo(0.4, 10);
+    expect(neutral.provenanceFor('streams.s1.modifiers.rampFloor')).toBe('CATALOG');
+    expect(neutral.sourceNoteFor('streams.s1.modifiers.rampFloor')).toBeUndefined();
+    const neutralLabor = neutral.template.costDefaults.find((c) => c.isLabor && c.class === 'STEP_FIXED');
+    expect(neutralLabor?.ownerBlocks ?? 0).toBe(0);
+
+    // Forty hours with experience: faster ramp, but nobody works a line they
+    // did not say they would work.
+    const hands0ff = draftToTemplate(
+      draft({
+        costLines: [...draft().costLines, laborLine],
+        founderProfile: { domainYears: 6, ownerHoursPerWeek: 40, basis: 'six years, hiring a manager' },
+      }),
+    );
+    const handsOffLabor = hands0ff.template.costDefaults.find((c) => c.isLabor && c.class === 'STEP_FIXED');
+    expect(handsOffLabor?.ownerBlocks ?? 0).toBe(0);
+  });
+
   it('the wire schema itself demands exactly four weights', () => {
     // Belt to the coercion's braces: a provider that enforces grammars never
     // lets a monthly curve exist at all.
