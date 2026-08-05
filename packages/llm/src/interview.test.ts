@@ -20,6 +20,7 @@ import {
   type ConceptDraft,
   type InterviewTurn,
 } from './draft.js';
+import { zDraftFinish } from './stages.js';
 
 /**
  * The interview is the input method for §9.1 Phases 1-2 — the thing that
@@ -107,6 +108,7 @@ const draft = (over: Partial<ConceptDraft> = {}): ConceptDraft => ({
     preOpeningPermitsAndLegal: 9_000,
   },
   openNotes: ['Capture rate is an estimate; nobody has run a 256-flavour shop here.'],
+  founderProfile: { domainYears: 0, ownerHoursPerWeek: 40, basis: '' },
   ...over,
 });
 
@@ -184,6 +186,11 @@ describe('ConceptInterview', () => {
     // Live: a food truck kept a 2,000 sq ft floor-area assumption — a
     // storefront's number on a vehicle with ~200 usable square feet.
     expect(system).toContain('Scale parameters are lines too');
+    // 07-founder-profile.md stage 1: experience is a must-ask person-question,
+    // and the profile may carry only what the player actually said.
+    expect(system).toContain('Have they done this before');
+    expect(system).toContain('Biography is never invented');
+    expect(system).toContain('nothing is the correct effect of nothing said');
     expect(system).toContain('Pay-per-outcome revenue is not billable hours');
     expect(system).toContain('unit of outcome');
   });
@@ -614,6 +621,29 @@ describe('draftIssues', () => {
     expect(coerceSeasonality([1.5, 0.5, 1])).toEqual([1.5, 0.5, 1, 1]);
     // Garbage stays garbage for the schema to reject honestly.
     expect(coerceSeasonality(['high', 'low'])).toEqual(['high', 'low']);
+  });
+
+  it('a draft that never mentions the founder parses to the neutral profile', () => {
+    // The biography law's deterministic half (07-founder-profile.md): every
+    // pre-profile draft — persisted sessions, fixtures, one-shot transports —
+    // parses to defaults, and the defaults produce zero effects.
+    const { founderProfile: _absent, ...preProfile } = draft();
+    const parsed = zConceptDraft.parse(preProfile);
+    expect(parsed.founderProfile).toEqual({ domainYears: 0, ownerHoursPerWeek: 40, basis: '' });
+
+    const stated = zConceptDraft.parse({
+      ...draft(),
+      founderProfile: { domainYears: 9, ownerHoursPerWeek: 80, basis: 'nine years running kitchens' },
+    });
+    expect(stated.founderProfile.domainYears).toBe(9);
+    expect(stated.founderProfile.basis).toContain('kitchens');
+  });
+
+  it('the founder profile rides the finish stage, so staged drafts can carry it', () => {
+    const finish = zodToJsonSchema(zDraftFinish, { $refStrategy: 'none' }) as {
+      properties: Record<string, unknown>;
+    };
+    expect(finish.properties['founderProfile']).toBeDefined();
   });
 
   it('the wire schema itself demands exactly four weights', () => {

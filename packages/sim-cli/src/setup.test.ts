@@ -134,6 +134,7 @@ const draft: ConceptDraft = {
   openNotes: [
     'Capture rate is a guess — nobody has run an hourly telescope rental here, so there is no rate to borrow.',
   ],
+  founderProfile: { domainYears: 0, ownerHoursPerWeek: 40, basis: '' },
 };
 
 describe('the concept path reaches the same gate as the picker', () => {

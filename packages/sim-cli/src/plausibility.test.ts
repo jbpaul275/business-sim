@@ -108,6 +108,7 @@ const mcdonalds = (expectedAnnualRevenue: number): ConceptDraft => ({
     preOpeningPermitsAndLegal: 60_000,
   },
   openNotes: ['Percentage rent is the largest unknown.'],
+  founderProfile: { domainYears: 0, ownerHoursPerWeek: 40, basis: '' },
 });
 
 describe('does the draft build the business the draft says it is building', () => {

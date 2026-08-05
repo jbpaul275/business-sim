@@ -33,7 +33,11 @@ export const zDraftSpine = zConceptDraft.pick({
 });
 export const zDraftCosts = zConceptDraft.pick({ costLines: true });
 export const zDraftCapital = zConceptDraft.pick({ capex: true, workingCapital: true });
-export const zDraftFinish = zConceptDraft.pick({ overheads: true, openNotes: true });
+export const zDraftFinish = zConceptDraft.pick({
+  overheads: true,
+  openNotes: true,
+  founderProfile: true,
+});
 
 export type DraftStageName = 'spine' | 'costs' | 'capital' | 'finish';
 
@@ -88,7 +92,7 @@ export const DRAFT_STAGES: readonly DraftStage[] = [
     label: 'overheads and open questions',
     schema: zDraftFinish,
     instruction: (built) =>
-      `${emitOnly('the closing section: overheads and openNotes')} openNotes are ordered by what would change their decision, and a note recording a fork you guessed is written as a deferred question — branch taken, live alternative, what changes if they meant the other.${consistent(built)}`,
+      `${emitOnly('the closing section: overheads, openNotes, and founderProfile')} openNotes are ordered by what would change their decision, and a note recording a fork you guessed is written as a deferred question — branch taken, live alternative, what changes if they meant the other. founderProfile carries ONLY what the player actually said about their experience and hours — never an inference; leave the defaults when they said nothing.${consistent(built)}`,
   },
 ];
 

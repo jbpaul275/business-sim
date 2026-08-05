@@ -98,6 +98,38 @@ export function coerceSeasonality(value: unknown): unknown {
   return [q[0] ?? 1, q[1] ?? 1, q[2] ?? 1, q[3] ?? 1];
 }
 
+/**
+ * Who is building this — docs/plan/07-founder-profile.md, stage 1.
+ *
+ * Every field obeys the biography law: it may carry ONLY what the player
+ * actually said. A model that infers "probably experienced" from tone has
+ * fabricated a credential, which is worse than fabricating a number — the
+ * downstream effects (ramp, lender file, adjudication range) would flatter
+ * the player with their own invented résumé. Unasked or unanswered means the
+ * neutral defaults, and the neutral defaults produce zero effects.
+ *
+ * No effects are wired yet: this stage only carries the profile through the
+ * draft, the journal, and the drafting context, so later stages can map it.
+ */
+export const zFounderProfile = z.object({
+  /** Years of hands-on experience in this concept's domain. 0 = new ground. */
+  domainYears: z
+    .number()
+    .default(0)
+    .describe('Years the player SAID they have in this domain. 0 unless they stated it.'),
+  /** What the player says they will personally work. */
+  ownerHoursPerWeek: z
+    .number()
+    .default(40)
+    .describe('Hours per week the player SAID they will work in the business. 40 unless stated.'),
+  /** The player's words the numbers came from — quoted, not paraphrased. */
+  basis: z
+    .string()
+    .default('')
+    .describe("The player's own words these figures came from. Empty when they said nothing."),
+});
+export type FounderProfile = z.infer<typeof zFounderProfile>;
+
 export const zDraftStream = z.object({
   label: z.string(),
   archetype: z.enum([
@@ -303,6 +335,12 @@ export const zConceptDraft = z.object({
    * should be argued with first.
    */
   openNotes: z.array(z.string()),
+  /**
+   * Defaulted so every draft that predates the field — persisted sessions,
+   * fixtures, one-shot transports that never learned it — parses to the
+   * neutral profile, which produces zero effects.
+   */
+  founderProfile: zFounderProfile.default({}),
 });
 export type ConceptDraft = z.infer<typeof zConceptDraft>;
 
