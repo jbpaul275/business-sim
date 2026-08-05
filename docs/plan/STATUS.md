@@ -206,6 +206,13 @@ which the reference model omitted — the same reason its year three sat above b
   cumulative volume. Half-deliberate (nothing may move without a visible assumption), and today the player
   enacts the curve through `assume` revisions the eigen questions prompt. If it lands, it lands as
   scheduled, register-visible revisions — never a hidden curve.
+- **The founder profile.** Specced, not built — [07](./07-founder-profile.md). The load-bearing-inputs
+  law ("never collect what the model won't carry"), one new must-ask person-question (domain
+  experience), and four effect mappings, every one a visible register line: ramp floor from years in
+  the trade, the owner-supplied labor block (the deferred owner-2-blocks item, declared in the
+  player's own words rather than picked from a persona menu), the lender's file pricing experience,
+  and expertise-as-evidence in the challenge loop (one tier, in domain only, never past D-5). Four
+  shippable stages; persona pickers and the industry multi-select deliberately deferred.
 - **A duplicate-overheads guard beyond known families.** A live draft carried "Accounting & legal" AND
   "Accounting, legal, and compliance" at $2,500 each — omission-guard defaults beside custom lines saying
   the same thing, paying twice. `duplicateOverheadIssues` now catches the known families (accounting,
