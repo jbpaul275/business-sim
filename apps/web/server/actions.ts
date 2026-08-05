@@ -171,7 +171,7 @@ export function translateTurn(body: TurnRequest, business: Business | undefined)
     actions.push({
       kind: 'RAISE_DEBT',
       businessId: business.id,
-      spec: { kind: 'SBA_7A', requestedPrincipal: principal, termQuarters, personalGuarantee: true },
+      spec: { kind: 'SBA_7A', requestedPrincipal: principal, termQuarters, personalGuarantee: true, operatorYears: 0 },
     });
   }
 

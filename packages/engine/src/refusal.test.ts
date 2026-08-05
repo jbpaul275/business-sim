@@ -59,6 +59,7 @@ describe('money that runs backwards', () => {
         requestedPrincipal: fromDisplay(-400_000),
         termQuarters: 40,
         personalGuarantee: true,
+        operatorYears: 0,
       },
     };
 
@@ -125,6 +126,7 @@ describe('a refusal at submission is a refusal', () => {
         requestedPrincipal: fromDisplay(40_000_000),
         termQuarters: 40,
         personalGuarantee: true,
+        operatorYears: 0,
       },
     };
 

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fromDisplay } from '@bizsim/money';
+import { fromDisplay, mulRate } from '@bizsim/money';
 import { getSeedTemplate } from '@bizsim/seeds';
 import {
   DEBT_PRODUCTS,
   LEVERAGE_PRICING,
+  collateralValue,
   leverageSpread,
   openingLoanRate,
   underwrite,
@@ -26,6 +27,7 @@ const spec = (principal: bigint) => ({
   requestedPrincipal: principal,
   termQuarters: 40,
   personalGuarantee: true,
+  operatorYears: 0,
 });
 
 function openedWorld(equity: bigint, loan: bigint) {
@@ -113,6 +115,40 @@ describe('pre-revenue underwriting prices leverage', () => {
     const decision = underwrite(business, spec(fromDisplay(100_000)), config, world.household, 0);
     expect(decision.approved).toBe(false);
     expect(decision.reason).toContain('10% minimum');
+  });
+});
+
+describe("the lender's file prices experience (07, stage 3)", () => {
+  it('five years earns a spread credit, never below the tier-0 price', () => {
+    const thin = openingLoanRate(0.075, fromDisplay(850_000), fromDisplay(150_000));
+    const thinVeteran = openingLoanRate(0.075, fromDisplay(850_000), fromDisplay(150_000), 9);
+    expect(thinVeteran).toBeCloseTo(thin - 0.0075, 10);
+    // A half-equity deal already prices at tier 0 — a resume buys nothing more.
+    const half = openingLoanRate(0.075, fromDisplay(500_000), fromDisplay(500_000));
+    expect(openingLoanRate(0.075, fromDisplay(500_000), fromDisplay(500_000), 30)).toBeCloseTo(
+      half,
+      10,
+    );
+    // Four years is not five.
+    expect(openingLoanRate(0.075, fromDisplay(850_000), fromDisplay(150_000), 4)).toBeCloseTo(
+      thin,
+      10,
+    );
+  });
+
+  it('the advance-rate credit widens what the same collateral supports', () => {
+    const { config, world } = openedWorld(fromDisplay(2_000_000), 0n);
+    const business = world.businesses[0]!;
+    const collateral = collateralValue(business);
+    // A request between raw collateral and 1.15x of it: declined for the
+    // newcomer, written for the operator the lender believes can run it.
+    const between = mulRate(collateral, 1.08);
+    expect(underwrite(business, spec(between), config, world.household, 0).approved).toBe(false);
+    const veteran = { ...spec(between), operatorYears: 9 };
+    expect(underwrite(business, veteran, config, world.household, 0).approved).toBe(true);
+    // The credit is a factor, not a blank cheque.
+    const past = { ...spec(mulRate(collateral, 1.3)), operatorYears: 9 };
+    expect(underwrite(business, past, config, world.household, 0).approved).toBe(false);
   });
 });
 

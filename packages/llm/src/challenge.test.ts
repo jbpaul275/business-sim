@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CHALLENGE_PROMPT,
   adjudicate,
   clampToRange,
   impossibility,
@@ -26,7 +27,11 @@ import {
  * vote on. That is what makes the last case a property rather than a hope.
  */
 
-const freezer = (assertedValue: number, statedBasis: string | null): AdjudicationInput => ({
+const freezer = (
+  assertedValue: number,
+  statedBasis: string | null,
+  operatorYears = 0,
+): AdjudicationInput => ({
   assumption: {
     label: 'Batch freezer',
     value: 60_000,
@@ -36,7 +41,7 @@ const freezer = (assertedValue: number, statedBasis: string | null): Adjudicatio
     provenance: 'LLM_ESTIMATE',
     benchmarkBand: null,
   },
-  playerClaim: { assertedValue, statedBasis, evidenceUrl: null },
+  playerClaim: { assertedValue, statedBasis, evidenceUrl: null, operatorYears },
   businessContext: { archetype: 'TRAFFIC', summary: '400 covers a day' },
   catalogEntry: {
     label: 'Batch freezer (ice cream)',
@@ -205,6 +210,53 @@ describe('repeated pressure does not drift', () => {
     }
     // Five capitulations later, the number is still at its floor and not below.
     expect(value).toBe(42_000);
+  });
+});
+
+describe('expertise is evidence, one tier (07, stage 4)', () => {
+  it("an experienced operator's bare word reaches the widest known range, not their own", () => {
+    // The freezer's own range floors at $42k, but the catalog knows used
+    // 20-quart floor models from $8k. A chef with nine years saying "$22k"
+    // lands at $22k; a layman saying the same lands at the range floor.
+    const layman = settle(freezer(22_000, null), ruling({ newValue: 22_000 }));
+    expect(layman.value).toBe(42_000);
+    const chef = settle(freezer(22_000, null, 9), ruling({ newValue: 22_000 }));
+    expect(chef.value).toBe(22_000);
+    // Their word moved it further, but an undocumented number is still an
+    // assumption — the register's promise does not bend for a resume.
+    expect(chef.provenance).toBe('PLAYER_ASSUMED');
+  });
+
+  it('the sycophancy property holds for experts: repetition buys nothing', () => {
+    // The widest known floor is the catalog's $8k. Five expert assertions of
+    // $1,000 land at $8,000 every time — a hard cap, exactly like the layman's.
+    let input = freezer(1_000, null, 9);
+    let value = input.assumption.value;
+    for (let i = 0; i < 5; i++) {
+      const settled = settle(input, ruling({ ruling: 'CONCEDE', newValue: 1_000 }));
+      value = settled.value;
+      input = { ...input, assumption: { ...input.assumption, value } };
+    }
+    expect(value).toBe(8_000);
+  });
+
+  it('expertise is not evidence for the impossible', () => {
+    const settled = settle(freezer(-5_000, null, 30), ruling({ newValue: -5_000 }));
+    expect(settled.ruling).toBe('DEFEND');
+    expect(settled.value).toBe(60_000);
+    expect(settled.provenance).toBe('UNCHANGED');
+  });
+
+  it('below the threshold, nothing changes', () => {
+    const fourYears = settle(freezer(22_000, null, 4), ruling({ newValue: 22_000 }));
+    expect(fourYears.value).toBe(42_000);
+  });
+});
+
+describe('the adjudicator is told about expertise', () => {
+  it('the prompt carries the expert paragraph and its limits', () => {
+    expect(CHALLENGE_PROMPT).toContain('When the player is the expert');
+    expect(CHALLENGE_PROMPT).toContain('Rule 6 outranks a resume');
   });
 });
 

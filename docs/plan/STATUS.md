@@ -206,7 +206,7 @@ which the reference model omitted — the same reason its year three sat above b
   cumulative volume. Half-deliberate (nothing may move without a visible assumption), and today the player
   enacts the curve through `assume` revisions the eigen questions prompt. If it lands, it lands as
   scheduled, register-visible revisions — never a hidden curve.
-- **The founder profile.** Stages 1-2 built, 3-4 remain — [07](./07-founder-profile.md). The load-bearing-inputs
+- **The founder profile.** All four stages built — [07](./07-founder-profile.md). The load-bearing-inputs
   law ("never collect what the model won't carry"), one new must-ask person-question (domain
   experience), and four effect mappings, every one a visible register line: ramp floor from years in
   the trade, the owner-supplied labor block (the deferred owner-2-blocks item, declared in the
@@ -215,8 +215,15 @@ which the reference model omitted — the same reason its year three sat above b
   the wire and both laws (stage 1), and the ramp floor + owner-supplied block (stage 2) — `ownerBlocks`
   on step-fixed lines carries capacity without payroll, satisfies the operating floor (a solo operator
   validates), is dropped by clones (one person, one site), and registers PLAYER_SOURCED with the
-  player quoted via the new `sourceNoteFor` hook. Remaining: the lender's file (3) and
-  expertise-as-evidence (4); persona pickers and the industry multi-select deliberately deferred.
+  player quoted via the new `sourceNoteFor` hook. The lender's file (3): `DebtSpec.operatorYears`
+  carries the application's management-experience section; five-plus years earns 75bp off the leverage
+  spread (never below tier 0) and a 1.15x advance against the same collateral — one arithmetic, so the
+  screen cannot propose what the underwriter refuses, and the funding screen says what the years bought.
+  Expertise-as-evidence (4): an experienced operator's bare assertion clamps to the widest range the
+  world knows for the item (own range ∪ benchmark band ∪ catalog) instead of the assumption's own —
+  still a hard cap, so the sycophancy property holds for experts exactly as for laymen, still
+  PLAYER_ASSUMED, and rule 6 still outranks a resume. Persona pickers and the industry multi-select
+  remain deliberately deferred.
 - **A duplicate-overheads guard beyond known families.** A live draft carried "Accounting & legal" AND
   "Accounting, legal, and compliance" at $2,500 each — omission-guard defaults beside custom lines saying
   the same thing, paying twice. `duplicateOverheadIssues` now catches the known families (accounting,

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EXPERIENCED_OPERATOR_YEARS } from '@bizsim/schemas';
 
 /**
  * The anti-sycophancy contract — spec §11.3.
@@ -45,6 +46,13 @@ export const zAdjudicationInput = z.object({
     assertedValue: z.number(),
     statedBasis: z.string().nullable(),
     evidenceUrl: z.string().nullable(),
+    /**
+     * The operator's stated years in this concept's domain (07, stage 4).
+     * The business under discussion IS their declared domain by construction
+     * — the interview asked about THIS concept — so no fuzzy industry
+     * matching is needed. Defaults to 0, which changes nothing.
+     */
+    operatorYears: z.number().nonnegative().default(0),
   }),
   businessContext: z.object({
     archetype: z.string(),
@@ -109,6 +117,24 @@ export function clampToRange(
   if (asserted < range.low) return range.low;
   if (asserted > range.high) return range.high;
   return asserted;
+}
+
+/**
+ * The widest range the world knows for an item: the assumption's own range,
+ * the benchmark band, and the catalog's outer edges, combined. This is the
+ * expert-tier cap — an experienced operator's bare word reaches the edge of
+ * what is KNOWN for the class, never past it (D-5's weak constraints).
+ */
+export function widestKnownRange(input: AdjudicationInput): { low: number; high: number } {
+  const ranges = [
+    input.assumption.range,
+    ...(input.assumption.benchmarkBand ? [input.assumption.benchmarkBand] : []),
+    ...(input.catalogEntry ? [{ low: input.catalogEntry.low, high: input.catalogEntry.high }] : []),
+  ];
+  return {
+    low: Math.min(...ranges.map((r) => r.low)),
+    high: Math.max(...ranges.map((r) => r.high)),
+  };
 }
 
 /**
@@ -188,8 +214,19 @@ export function settle(input: AdjudicationInput, ruling: Adjudication): Settleme
 
   // Rule 1. A bare assertion reaches the nearer edge of the range and stops
   // there — so the second and third assertions have nowhere left to go.
+  //
+  // Expertise is evidence, one tier of it (07, stage 4): an experienced
+  // operator's unadorned word in their own trade reaches the edge of the
+  // widest range the WORLD knows for the item — benchmark band, catalog —
+  // rather than the assumption's own. Still a hard cap, so the sycophancy
+  // property holds for experts exactly as for everyone: asserting three
+  // times cannot move a value further than asserting once. And still
+  // PLAYER_ASSUMED — their word moved it further, but an undocumented number
+  // is ranked as what it is, which is the register's whole promise.
   if (!hasStatedBasis(playerClaim.statedBasis)) {
-    const landed = clampToRange(playerClaim.assertedValue, assumption.range);
+    const expert = playerClaim.operatorYears >= EXPERIENCED_OPERATOR_YEARS;
+    const bound = expert ? widestKnownRange(input) : assumption.range;
+    const landed = clampToRange(playerClaim.assertedValue, bound);
     return {
       ...base,
       value: landed,
@@ -232,6 +269,10 @@ The failure you exist to prevent: someone says "I think that machine costs $10k,
 6. **Refuse the impossible regardless of evidence.** Zero rent on a leased space, 100% occupancy forever, wages below the legal minimum, negative churn with no expansion mechanism. A quote does not make these possible. This is also enforced outside your answer.
 
 7. **Say what else moves.** A cheaper machine is usually a *different* machine: less capacity, shorter life, more maintenance, no warranty. If they halve a capex line, the model that comes back should not be the same model with a smaller number in it. Put that in secondOrderEffect.
+
+## When the player is the expert
+
+The claim arrives with the operator's stated years in this exact trade (operatorYears). At five or more, the enforced cap on their unadorned word widens: from the assumption's own range to the widest range the world knows for the item — benchmark band, catalog. That is done outside your answer. Your part: weigh their judgement the way rule 5 already tells you to — someone with years in a trade routinely knows more than you do about it — while remembering that expertise is not evidence for the impossible. Rule 6 outranks a resume.
 
 ## How to write it
 

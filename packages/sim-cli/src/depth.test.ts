@@ -99,6 +99,18 @@ describe('planDepth', () => {
   });
 });
 
+describe("the lender's file in the proposal (07, stage 3)", () => {
+  it('experience widens lendable at the same factor the underwriter applies', () => {
+    const plain = proposeFunding(contextFor(500_000));
+    const veteran = proposeFunding({ ...contextFor(500_000), domainYears: 9 });
+    // 1.15x, exactly — the screen must never promise what the lender refuses,
+    // so both sides read the same named factor.
+    expect(veteran.lendable).toBe((plain.lendable * 115n) / 100n);
+    const fourYears = proposeFunding({ ...contextFor(500_000), domainYears: 4 });
+    expect(fourYears.lendable).toBe(plain.lendable);
+  });
+});
+
 describe('candidatePlans', () => {
   it('offers distinct depths: lean carries more debt, cushioned more cash', () => {
     const ctx = contextFor(500_000);

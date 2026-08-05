@@ -1,6 +1,6 @@
 import { toCompact, toDisplay, type Money } from '@bizsim/money';
 import { computeMonthZeroOutlays } from '@bizsim/engine';
-import { computeConfidenceScore } from '@bizsim/schemas';
+import { EXPERIENCED_OPERATOR_YEARS, computeConfidenceScore } from '@bizsim/schemas';
 import { arguableAssumptions, type CandidateResult, type PlanDepth } from '@bizsim/sim-cli';
 import {
   spendSummary,
@@ -66,6 +66,8 @@ export interface FundingView {
   plans: FundingPlanView[];
   /** How the stress reading was taken, said once above the cards. */
   stressNote: string;
+  /** What the lender makes of the operator's years, when they earn anything. */
+  experienceLine?: string;
   /** Nonempty when even the capped plan cannot cover opening. */
   shortBy?: string;
   equityFloor: string;
@@ -213,6 +215,7 @@ export function toSetupView(session: SetupSession): SetupView {
       plans: (session.plans ?? []).map((card) => toPlanView(card)),
       stressNote:
         'Air is read twice: with demand as drafted, and with it 30% under — the standard lender stress, and how thin plans actually die.',
+      ...(experienceLine(session) ? { experienceLine: experienceLine(session)! } : {}),
       ...(p.shortBy > 0n ? { shortBy: money(p.shortBy) } : {}),
       equityFloor: money(p.equityFloor),
       proposedEquityDollars: Number(p.proposedEquity) / 100,
@@ -261,6 +264,19 @@ const cMonthZero = (c: CandidateResult): Money => computeMonthZeroOutlays(c.mode
 // ---------------------------------------------------------------------------
 // The depth gauge, phrased
 // ---------------------------------------------------------------------------
+
+/**
+ * The lender's read of the operator, said once above the cards (07, stage 3).
+ * Only when the years earn something — a line about nothing is noise.
+ */
+function experienceLine(session: SetupSession): string | undefined {
+  const years = session.concept?.mapped.founderProfile.domainYears ?? 0;
+  if (years < EXPERIENCED_OPERATOR_YEARS) return undefined;
+  return (
+    `The lender prices your ${years} years in this trade: 0.75% off the leverage spread, ` +
+    `and the same collateral supports a wider advance.`
+  );
+}
 
 const airPhrase = (d: PlanDepth): string =>
   d.insolvencyQuarter !== undefined

@@ -1,6 +1,8 @@
 import { fromDisplay, mulRate, type Money } from '@bizsim/money';
 import {
   DEBT_PRODUCTS,
+  EXPERIENCE_ADVANCE_FACTOR,
+  isExperiencedOperator,
   LEVERAGE_PRICING,
   MIN_OWNER_INJECTION_PCT,
   buildModelFromTemplate,
@@ -42,6 +44,8 @@ export interface FundingContext {
   config: WorldConfig;
   provenanceFor?: ((path: string) => Provenance | undefined) | undefined;
   sourceNoteFor?: ((path: string) => string | undefined) | undefined;
+  /** The operator's stated years in this trade — the lender's file (07). */
+  domainYears?: number | undefined;
 }
 
 export interface FundingProposal {
@@ -122,7 +126,12 @@ export function proposeFunding(ctx: FundingContext): FundingProposal {
   const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
   const wanted = gap > 0n ? mulRate(gap, 1 / (1 - originationPct)) : 0n;
 
-  const lendable = collateralValue(world.businesses[0]!);
+  // The advance-rate credit, applied at the SAME factor the underwriter
+  // applies — the screen must never propose what the lender then refuses.
+  const rawCollateral = collateralValue(world.businesses[0]!);
+  const lendable = isExperiencedOperator(ctx.domainYears ?? 0)
+    ? mulRate(rawCollateral, EXPERIENCE_ADVANCE_FACTOR)
+    : rawCollateral;
   const onEquity = mulRate(proposedEquity, 1 / MIN_OWNER_INJECTION_PCT);
   const ceiling = min(lendable, onEquity);
   const proposedLoan = min(wanted, ceiling);
@@ -242,13 +251,18 @@ export const equityForShare = (needed: Money, share: number, feePct: number): Mo
  * What a given equity figure buys: the gap loan, priced by leverage. `loan` is
  * zero when the figure fully funds opening.
  */
-export function quoteForEquity(needed: Money, primeRate: number, equity: Money): LoanQuote {
+export function quoteForEquity(
+  needed: Money,
+  primeRate: number,
+  equity: Money,
+  operatorYears = 0,
+): LoanQuote {
   const originationPct = DEBT_PRODUCTS.SBA_7A.originationFeePct;
   const shortOfNeed = max0(needed - equity);
   const loan = shortOfNeed > 0n ? mulRate(shortOfNeed, 1 / (1 - originationPct)) : 0n;
   if (loan === 0n) return { loan, rate: 0, share: 0 };
 
-  const rate = openingLoanRate(primeRate, loan, equity);
+  const rate = openingLoanRate(primeRate, loan, equity, operatorYears);
   const share = Number(loan) / Number(loan + equity);
   const tierIndex = LEVERAGE_PRICING.findIndex((t) => share <= t.maxDebtShare);
   const cheaperTier = tierIndex > 0 ? LEVERAGE_PRICING[tierIndex - 1] : undefined;
@@ -298,12 +312,13 @@ export interface CandidateResult {
 
 /** Build the candidate world for a plan and put it through lender and gate. */
 export function buildCandidate(ctx: FundingContext, plan: CandidatePlan): CandidateResult {
+  const operatorYears = ctx.domainYears ?? 0;
   const debt = [
     ...(plan.loan > 0n
-      ? [{ kind: 'SBA_7A' as const, principal: plan.loan, termQuarters: 40 }]
+      ? [{ kind: 'SBA_7A' as const, principal: plan.loan, termQuarters: 40, operatorYears }]
       : []),
     ...(plan.revolver > 0n
-      ? [{ kind: 'REVOLVER' as const, principal: plan.revolver, termQuarters: 40 }]
+      ? [{ kind: 'REVOLVER' as const, principal: plan.revolver, termQuarters: 40, operatorYears }]
       : []),
   ];
 
