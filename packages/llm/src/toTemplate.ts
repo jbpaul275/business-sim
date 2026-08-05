@@ -198,6 +198,29 @@ function costDefaultFrom(
 const monthlyFromQuarterly = (seasonality: readonly number[]): number[] =>
   seasonality.flatMap((q) => [q, q, q]);
 
+/**
+ * Seasonality is shape, not scale: the engine reads multipliers averaging
+ * 1.00 ± 0.01, and a draft averaging 0.975 is the right shape wearing the
+ * wrong scale. A live build died over that 2.5% — repair rounds spent asking
+ * the model for arithmetic this one line does deterministically. Divide by
+ * the mean; the model's quarters keep their ratios exactly. Weights no
+ * rescale can make coherent (negative, or a non-positive mean) are still the
+ * model's to fix — `draftIssues` rejects those before the draft gets here.
+ */
+const normaliseSeasonality = (
+  seasonality: readonly number[],
+): [number, number, number, number] => {
+  const q = [
+    seasonality[0] ?? 1,
+    seasonality[1] ?? 1,
+    seasonality[2] ?? 1,
+    seasonality[3] ?? 1,
+  ];
+  const mean = q.reduce((a, b) => a + b, 0) / 4;
+  if (!(mean > 0)) return [1, 1, 1, 1];
+  return [q[0]! / mean, q[1]! / mean, q[2]! / mean, q[3]! / mean];
+};
+
 export function draftToTemplate(draft: ConceptDraft): MappedConcept {
   const stream = draft.stream;
 
@@ -246,13 +269,8 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     payrollLoadPct: payrollLoadPct(o.workersCompPct, o.offersBenefits),
     workersCompPct: o.workersCompPct,
     offersBenefits: o.offersBenefits,
-    seasonality: [
-      stream.seasonality[0] ?? 1,
-      stream.seasonality[1] ?? 1,
-      stream.seasonality[2] ?? 1,
-      stream.seasonality[3] ?? 1,
-    ],
-    monthlySeasonalWeight: monthlyFromQuarterly(stream.seasonality),
+    seasonality: normaliseSeasonality(stream.seasonality),
+    monthlySeasonalWeight: monthlyFromQuarterly(normaliseSeasonality(stream.seasonality)),
     typicalCapex: draft.capex.map((c) => ({
       label: c.label,
       category: c.category,

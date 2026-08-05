@@ -8,6 +8,7 @@ import {
   type ConceptTransport,
 } from './client.js';
 import { ConceptInterview, draftIssues, paramsToRecord } from './interview.js';
+import { draftToTemplate } from './toTemplate.js';
 import { MalformedDraftError } from './draft.js';
 import type { InterviewMessage } from './client.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
@@ -558,11 +559,31 @@ describe('draftIssues', () => {
     expect(issues[0]).toContain('fraction of revenue');
   });
 
-  it('catches seasonality that rescales the year instead of redistributing it', () => {
-    const broken = draft({
+  it('renormalises off-scale seasonality instead of arguing about it', () => {
+    // Live: a B2B SaaS build died on SEASONALITY_NOT_NORMALISED at a 0.975
+    // average — repair rounds spent asking the model for arithmetic the
+    // mapper does in one line. Shape survives; scale is corrected.
+    const offScale = draft({
       stream: { ...draft().stream, seasonality: [1.5, 1.5, 1.5, 1.5] },
     });
-    expect(draftIssues(broken)[0]).toContain('rescales annual');
+    expect(draftIssues(offScale).filter((i) => i.includes('seasonality'))).toHaveLength(0);
+    const mapped = draftToTemplate(offScale);
+    expect(mapped.template.seasonality).toEqual([1, 1, 1, 1]);
+
+    const shaped = draft({
+      stream: { ...draft().stream, seasonality: [0.9, 1.1, 1.2, 0.7] },
+    });
+    const q = draftToTemplate(shaped).template.seasonality;
+    const mean = q.reduce((a, b) => a + b, 0) / 4;
+    expect(mean).toBeCloseTo(1, 10);
+    // The model's quarters keep their ratios exactly.
+    expect(q[1]! / q[0]!).toBeCloseTo(1.1 / 0.9, 10);
+
+    // What no rescale can save still goes back to the model.
+    const incoherent = draft({
+      stream: { ...draft().stream, seasonality: [1, -0.5, 1, 1] },
+    });
+    expect(draftIssues(incoherent)[0]).toContain('non-negative');
   });
 
   it('catches a step-fixed line with no block capacity', () => {
