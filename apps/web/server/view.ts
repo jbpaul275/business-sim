@@ -259,7 +259,16 @@ export interface GameView {
   tiles: Tile[];
   statements: { is: Row[]; bs: Row[]; cf: Row[] };
   streams: { label: string; volume: string; detail: string; warning: boolean }[];
-  staffing: { costId: string; label: string; blocks: number; pending: number; needed?: number; blockCost: string }[];
+  staffing: {
+    costId: string;
+    label: string;
+    blocks: number;
+    /** One of the staffed blocks is the owner working the line (07). */
+    ownerBlocks: number;
+    pending: number;
+    needed?: number;
+    blockCost: string;
+  }[];
   debts: { label: string; detail: string }[];
   price: { value: number; per: string };
   marketingPerQuarter: number;
@@ -445,6 +454,7 @@ export function toView(session: GameSession): GameView {
     costId: c.id,
     label: c.label,
     blocks: c.currentBlocks,
+    ownerBlocks: c.ownerBlocks ?? 0,
     pending: c.pendingBlocks,
     ...(needed.get(c.label) !== undefined ? { needed: needed.get(c.label)! } : {}),
     blockCost: compact(c.blockCostPerQuarter),

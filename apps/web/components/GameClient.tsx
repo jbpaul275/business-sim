@@ -313,6 +313,7 @@ export function GameClient({ initial }: { initial: GameView }) {
                 <span>{s.label}</span>
                 <span className="blocks">
                   {s.blocks} blocks
+                  {s.ownerBlocks > 0 ? ' + you' : ''}
                   {s.pending > 0 ? ` (+${s.pending} arriving)` : ''}
                 </span>
                 {s.needed !== undefined && s.needed > s.blocks && (

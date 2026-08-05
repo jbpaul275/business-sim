@@ -132,18 +132,23 @@ export function resolveCapacity(
     );
     blocksNeeded.set(cost.id, needed);
 
-    if (cost.currentBlocks < needed) {
+    // The owner-worked block (07-founder-profile.md) carries capacity like any
+    // other, and costs nothing here — the owner is paid through owner comp.
+    // `?? 0` because worlds persisted before the field existed rehydrate
+    // without it, and undefined would poison the arithmetic silently.
+    const staffed = cost.currentBlocks + (cost.ownerBlocks ?? 0);
+    if (staffed < needed) {
       shortfalls.push({
         costId: cost.id,
         label: cost.label,
-        active: cost.currentBlocks,
+        active: staffed,
         needed,
       });
     }
 
     if (relevant.length === 0) continue;
 
-    const pool = cost.currentBlocks * perBlock;
+    const pool = staffed * perBlock;
     for (const d of relevant) {
       const share =
         totalDemand > 0 ? (d.demandVolume / totalDemand) * pool : pool / relevant.length;

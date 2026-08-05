@@ -41,6 +41,7 @@ export interface FundingContext {
   marketing: Money;
   config: WorldConfig;
   provenanceFor?: ((path: string) => Provenance | undefined) | undefined;
+  sourceNoteFor?: ((path: string) => string | undefined) | undefined;
 }
 
 export interface FundingProposal {
@@ -85,6 +86,7 @@ function probe(ctx: FundingContext): { model: BusinessModel; world: WorldState }
     marketingSpendPerQuarter: ctx.marketing,
     equityInjection: 0n,
     ...(ctx.provenanceFor ? { provenanceFor: ctx.provenanceFor } : {}),
+    ...(ctx.sourceNoteFor ? { sourceNoteFor: ctx.sourceNoteFor } : {}),
   });
   const world = createWorld({
     id: 'probe',
@@ -315,6 +317,7 @@ export function buildCandidate(ctx: FundingContext, plan: CandidatePlan): Candid
     outsideCapital: plan.outside,
     debt,
     ...(ctx.provenanceFor ? { provenanceFor: ctx.provenanceFor } : {}),
+    ...(ctx.sourceNoteFor ? { sourceNoteFor: ctx.sourceNoteFor } : {}),
   });
 
   const validation = validateBusinessModel(model);

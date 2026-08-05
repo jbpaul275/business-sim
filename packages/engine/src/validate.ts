@@ -185,7 +185,9 @@ export function validateBusinessModel(model: BusinessModel): ValidationResult {
     const driver = ARCHETYPE_DRIVER[stream.params.kind];
     const lines = model.costs.stepFixed.filter((c) => c.capacity.driver === driver);
     for (const line of lines) {
-      if (line.minimumBlocks > line.currentBlocks) {
+      // The owner-worked block satisfies the operating floor: a solo operator
+      // with zero paid staff is a legitimate business, not a validation error.
+      if (line.minimumBlocks > line.currentBlocks + (line.ownerBlocks ?? 0)) {
         issues.push({
           severity: 'ERROR',
           code: 'BLOCKS_BELOW_MINIMUM',

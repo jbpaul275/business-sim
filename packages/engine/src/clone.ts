@@ -115,7 +115,15 @@ export function cloneBusiness(
     cost.amountPerQuarter = mulRate(cost.amountPerQuarter, scale);
   }
   for (const cost of business.costs.stepFixed) {
-    cost.currentBlocks = Math.max(cost.minimumBlocks, Math.round(cost.currentBlocks * scale));
+    // The owner cannot work the line at two sites: a clone hires a real block
+    // where the parent had the owner's, or the copy would be quietly staffed
+    // by a person who is somewhere else.
+    const ownerBlocks = cost.ownerBlocks ?? 0;
+    cost.currentBlocks = Math.max(
+      cost.minimumBlocks,
+      Math.round((cost.currentBlocks + ownerBlocks) * scale),
+    );
+    cost.ownerBlocks = 0;
     cost.pendingBlocks = 0;
   }
   // A new building, bought new. Depreciation starts now.

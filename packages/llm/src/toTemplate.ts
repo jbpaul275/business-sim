@@ -53,6 +53,11 @@ export interface MappedConcept {
    * what stops the mapper discarding it.
    */
   provenanceFor: (path: string) => Provenance | undefined;
+  /**
+   * The note beside a value the founder profile moved — the register quotes
+   * the player's own words instead of claiming a seed default (07).
+   */
+  sourceNoteFor: (path: string) => string | undefined;
 }
 
 /** Scale knobs the archetypes read, keyed as `ScaleInput` spells them. */
@@ -175,6 +180,8 @@ function costDefaultFrom(
     annualEscalatorPct: 0.02,
     isPrepaidExpense: false,
     sourceNote: line.sourceNote,
+    // Set by `withOwnerBlock` on the primary labor line, never by the draft.
+    ownerBlocks: 0,
     // Deliberately no `benchmarkBand`: an absent band is honest, and a
     // borrowed one is a fabrication wearing a citation (D-5).
     ...(line.capacityPerBlock !== null ? { capacityPerBlock: line.capacityPerBlock } : {}),
@@ -221,6 +228,19 @@ const normaliseSeasonality = (
   return [q[0]! / mean, q[1]! / mean, q[2]! / mean, q[3]! / mean];
 };
 
+/**
+ * The owner-worked block (07): "I'll run it myself, 80 hours a week" fills
+ * one slot on the primary labor line — the first step-fixed labor line the
+ * draft carries. Declared in the player's own words, never a persona picker;
+ * a profile that said nothing (the 40-hour default) changes nothing.
+ */
+function withOwnerBlock(defaults: CostDefault[], draft: ConceptDraft): CostDefault[] {
+  if (draft.founderProfile.ownerHoursPerWeek < 60) return defaults;
+  const primary = draft.costLines.findIndex((l) => l.class === 'STEP_FIXED' && l.isLabor);
+  if (primary < 0) return defaults;
+  return defaults.map((d, i) => (i === primary ? { ...d, ownerBlocks: 1 } : d));
+}
+
 export function draftToTemplate(draft: ConceptDraft): MappedConcept {
   const stream = draft.stream;
 
@@ -250,12 +270,18 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     id: `llm_${slug(draft.businessName)}`,
     label: draft.businessName,
     defaultArchetypes: [stream.archetype],
-    costDefaults: draft.costLines.map((line, i) => costDefaultFrom(line, i, stream.archetype)),
+    costDefaults: withOwnerBlock(
+      draft.costLines.map((line, i) => costDefaultFrom(line, i, stream.archetype)),
+      draft,
+    ),
     streamParamDefaults,
     modifierDefaults: {
       // Not concept-specific and not worth a model's guess: these are the
-      // §3.7 response curves, identical across every seeded template.
-      rampFloor: 0.4,
+      // §3.7 response curves, identical across every seeded template — except
+      // the ramp floor, which the founder profile earns (07): an operator who
+      // has run one before opens faster. They know suppliers, hiring, permits.
+      // Neutral profile (0 years) leaves the spec constant untouched.
+      rampFloor: Math.min(0.6, 0.4 + 0.025 * draft.founderProfile.domainYears),
       rampConstant: 3.0,
       marketingMaxLift: 0.35,
       halfSaturationSpend: 8_000,
@@ -324,7 +350,12 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     if (costLine) return byName.get(costLine) ?? 'LLM_ESTIMATE';
 
     // §3.7 response curves: spec constants this file writes on every template
-    // alike. The model never sees them and never guessed them.
+    // alike. The model never sees them and never guessed them — except the
+    // ramp floor when the founder profile moved it (07): that figure exists
+    // because the player stated their years, so it is theirs.
+    if (path.endsWith('.modifiers.rampFloor') && draft.founderProfile.domainYears > 0) {
+      return 'PLAYER_SOURCED';
+    }
     if (path.startsWith('streams.') && path.includes('.modifiers.')) return 'CATALOG';
 
     const named = byName.get(path.split('.').pop() ?? '');
@@ -348,10 +379,22 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     return undefined;
   };
 
+  const profile = draft.founderProfile;
+  const sourceNoteFor = (path: string): string | undefined => {
+    if (path.endsWith('.modifiers.rampFloor') && profile.domainYears > 0) {
+      return (
+        `Raised from the 0.40 default by your ${profile.domainYears} years in this trade` +
+        `${profile.basis ? ` — "${profile.basis}"` : ''}.`
+      );
+    }
+    return undefined;
+  };
+
   return {
     template: zSeedTemplate.parse(input),
     scale: scale as ScaleInput,
     provenanceFor,
+    sourceNoteFor,
     marketingSpendPerQuarter: stream.marketingSpendPerQuarter,
     archetype: stream.archetype,
     legalForm: draft.legalForm,

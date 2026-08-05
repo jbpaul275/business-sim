@@ -898,6 +898,7 @@ export async function runSetup(
         marketingSpendPerQuarter: marketing,
         equityInjection: 0n,
         ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+        ...(concept ? { sourceNoteFor: concept.mapped.sourceNoteFor } : {}),
       });
       // Opened, so the assets exist to lend against. Nothing is committed by
       // this: it is the same throwaway probe the outlay figure comes from.
@@ -1162,6 +1163,7 @@ export async function runSetup(
         outsideCapital: outside,
         debt,
         ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
+        ...(concept ? { sourceNoteFor: concept.mapped.sourceNoteFor } : {}),
       });
 
       // The completeness invariant is a hard gate: a model with a hole in its

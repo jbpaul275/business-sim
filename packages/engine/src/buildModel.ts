@@ -74,6 +74,14 @@ export interface BuildModelOptions {
    * assembled the template around it.
    */
   provenanceFor?: (path: string) => Assumption['provenance'] | undefined;
+  /**
+   * Same shape, for the note beside the value. A caller that moved a figure
+   * for a stated reason — the founder profile's ramp floor exists because of
+   * the player's years in the trade — supplies the sentence that says so;
+   * everywhere else the call site's generic note stands. The hook wins where
+   * it answers, because a targeted note beats a generic one.
+   */
+  sourceNoteFor?: (path: string) => string | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +92,7 @@ interface AssumptionSink {
   next: number;
   out: Assumption[];
   provenanceFor?: ((path: string) => Assumption['provenance'] | undefined) | undefined;
+  sourceNoteFor?: ((path: string) => string | undefined) | undefined;
 }
 
 function assume(
@@ -116,7 +125,7 @@ function assume(
     isMoney: typeof value === 'bigint',
     range,
     provenance: opts.provenance ?? sink.provenanceFor?.(path) ?? 'BENCHMARK',
-    sourceNote: opts.sourceNote,
+    sourceNote: sink.sourceNoteFor?.(path) ?? opts.sourceNote,
     outsideBenchmark: opts.benchmarkBand
       ? numeric < opts.benchmarkBand.low || numeric > opts.benchmarkBand.high
       : false,
@@ -370,6 +379,19 @@ function costsFromTemplate(
             ? Number(fromDisplay(c.capacityPerBlock ?? 1))
             : (c.capacityPerBlock ?? 1);
         const blockCost = asMoney(c);
+        const ownerBlocks = c.ownerBlocks ?? 0;
+        // Open staffed to planned mature demand. Blocks never auto-scale
+        // during play (§4.3) — growing is a player decision with a lead time
+        // — but nobody opens a 64-seat dining room with one cook, and
+        // starting short would bake the under-staffing trap into every
+        // scenario rather than testing for it. An owner-worked block (07)
+        // fills one of those slots, so one fewer is hired — that is the
+        // "staffing need reduced" the profile promises, and it may go all
+        // the way to zero paid staff: a solo operator is a business.
+        const staffedToDemand = Math.max(
+          c.minimumBlocks,
+          capacityPerBlock > 0 ? Math.ceil(demand / capacityPerBlock) : c.minimumBlocks,
+        );
         stepFixed.push({
           id: c.lineId,
           label: c.label,
@@ -378,15 +400,8 @@ function costsFromTemplate(
           capacity: { driver: driver as 'TRANSACTIONS', capacityPerBlock },
           appliesToStreamIds: 'ALL',
           minimumBlocks: c.minimumBlocks,
-          // Open staffed to planned mature demand. Blocks never auto-scale
-          // during play (§4.3) — growing is a player decision with a lead time
-          // — but nobody opens a 64-seat dining room with one cook, and
-          // starting short would bake the under-staffing trap into every
-          // scenario rather than testing for it.
-          currentBlocks: Math.max(
-            c.minimumBlocks,
-            capacityPerBlock > 0 ? Math.ceil(demand / capacityPerBlock) : c.minimumBlocks,
-          ),
+          currentBlocks: Math.max(0, staffedToDemand - ownerBlocks),
+          ownerBlocks,
           pendingBlocks: 0,
           addLeadTimeQuarters: 1,
           // Default severance is four weeks of the block cost (§4.3).
@@ -425,7 +440,12 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
   const t = options.template;
   const archetype = options.archetype ?? t.defaultArchetypes[0] ?? 'TRAFFIC';
   const scale = options.scale ?? {};
-  const sink: AssumptionSink = { next: 0, out: [], provenanceFor: options.provenanceFor };
+  const sink: AssumptionSink = {
+    next: 0,
+    out: [],
+    provenanceFor: options.provenanceFor,
+    sourceNoteFor: options.sourceNoteFor,
+  };
 
   const streamId = 's1';
   const params = streamParams(archetype, t, scale);
@@ -598,6 +618,20 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
         sourceNote: 'Volume one block supports before the next step is required.',
       },
     );
+    // The owner-worked block registers like everything else — no hidden
+    // multipliers (07). PLAYER_SOURCED because it exists only when the player
+    // declared it; revising it to 0 in play is how they step back.
+    if ((cost.ownerBlocks ?? 0) > 0) {
+      assume(sink, `costs.${cost.id}.ownerBlocks`, `${cost.label} — worked by you`, cost.ownerBlocks, {
+        category: 'COST',
+        unit: 'count',
+        range: { low: 0, high: 1 },
+        provenance: 'PLAYER_SOURCED',
+        sourceNote:
+          'One block of this line is the owner working it, as declared in setup. ' +
+          'It carries capacity and costs nothing beyond owner comp. Revise to 0 to step back.',
+      });
+    }
   }
   for (const cost of withGuard.fixedPeriod) {
     assume(sink, `costs.${cost.id}.amountPerQuarter`, cost.label, cost.amountPerQuarter, {
