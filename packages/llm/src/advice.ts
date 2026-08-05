@@ -91,7 +91,10 @@ export interface Briefing {
  * the class §1.1 is actually about — every value that lands on a statement is
  * denominated — and it is the class a fabrication shows up in.
  */
-const MONEY = /\$\s?-?[\d,]+(?:\.\d+)?\s*(?:[kmb]|bn|million|billion|thousand)?/gi;
+// The suffix must not run into a word: "$30,000 marketing" is thirty thousand
+// followed by a noun, not "$30,000 m[illion]" — the unguarded version read it
+// as thirty billion and flagged the reply for restating its own source.
+const MONEY = /\$\s?-?[\d,]+(?:\.\d+)?\s*(?:[kmb]|bn|million|billion|thousand)?(?![A-Za-z])/gi;
 
 const SCALE: Record<string, number> = {
   k: 1e3,

@@ -1,4 +1,4 @@
-import { fromDisplay, type Money } from '@bizsim/money';
+import { fromDisplay, toDisplay, type Money } from '@bizsim/money';
 import type { Action, Business } from '@bizsim/schemas';
 import { parseAssumptionValue } from './setup';
 
@@ -206,4 +206,54 @@ export function translateTurn(body: TurnRequest, business: Business | undefined)
   }
 
   return actions;
+}
+
+const whole = (m: Money): string => toDisplay(m, { showCents: false });
+
+/**
+ * The player's moves, restated as the bet the narration will resolve.
+ *
+ * Described from the translated actions rather than the request, so the bet
+ * only claims what was actually accepted — a malformed field costs its move,
+ * and a bet line for a move that never queued would misstate what the player
+ * did. Labels come from the business the actions target, so "hired 1 block of
+ * Core cook / crew shift" reads in the player's own vocabulary.
+ */
+export function describeActions(actions: readonly Action[], business: Business): string[] {
+  const stepLabel = (costId: string): string =>
+    business.costs.stepFixed.find((c) => c.id === costId)?.label ?? costId;
+  const lines: string[] = [];
+  for (const a of actions) {
+    if (a.kind === 'SET_PRICE') lines.push(`price to ${toDisplay(a.newPrice)}`);
+    else if (a.kind === 'SET_MARKETING_SPEND') {
+      lines.push(`marketing to ${whole(a.amountPerQuarter)} per quarter`);
+    } else if (a.kind === 'ADD_STEP_BLOCK') {
+      lines.push(`hired ${a.blocks} block${a.blocks === 1 ? '' : 's'} of ${stepLabel(a.costId)}`);
+    } else if (a.kind === 'REMOVE_STEP_BLOCK') {
+      lines.push(`cut ${a.blocks} block${a.blocks === 1 ? '' : 's'} of ${stepLabel(a.costId)}`);
+    } else if (a.kind === 'ADJUST_ASSUMPTION') {
+      const label = business.assumptions.byId[a.assumptionId]?.label ?? a.assumptionId;
+      lines.push(`revised the "${label}" assumption`);
+    } else if (a.kind === 'EXPAND_CAPACITY') {
+      const s = a.spec;
+      if (s.qualityUpliftPct !== undefined) {
+        lines.push(
+          `bought a product upgrade for ${whole(s.buildoutCost)}, claiming ${(s.qualityUpliftPct * 100).toFixed(0)}% more willingness to pay`,
+        );
+      } else if (s.deltaDemandHoursPerQuarter !== undefined || s.deltaAddressableTrafficPerQuarter !== undefined) {
+        lines.push(`opened a new territory for ${whole(s.buildoutCost)} — more demand, not more room`);
+      } else {
+        lines.push(`expanded capacity for ${whole(s.buildoutCost)}`);
+      }
+    } else if (a.kind === 'RAISE_DEBT') {
+      lines.push(`raised a ${whole(a.spec.requestedPrincipal)} term loan — fee now, proceeds next quarter`);
+    } else if (a.kind === 'DRAW_REVOLVER') lines.push(`drew ${whole(a.amount)} on the revolver`);
+    else if (a.kind === 'REPAY_DEBT') lines.push(`repaid ${whole(a.amount)} of principal`);
+    else if (a.kind === 'INJECT_CAPITAL') {
+      lines.push(`injected ${whole(a.amount)} of household cash`);
+    } else if (a.kind === 'DISTRIBUTE') {
+      lines.push(`distributed ${whole(a.amount)} to the household`);
+    }
+  }
+  return lines;
 }

@@ -68,17 +68,32 @@ const briefingFor = (session: GameSession, business: Business) =>
  * BEFORE that quarter's eigen question — the turn is data first, then the
  * question, and the question is deterministic while this is optional color.
  */
-export async function narrateAdvance(session: GameSession): Promise<void> {
+export async function narrateAdvance(
+  session: GameSession,
+  betMoves: readonly string[] = [],
+): Promise<void> {
   const advisor = advisorFor(session);
   const business = businessOf(session);
   if (!advisor?.narrate || !business || business.status === 'CLOSED') return;
   const period = session.last.statements.period;
+  // The bet the quarter resolves: the moves the player staged, and the eigen
+  // question that was on the table when they staged them — the last question
+  // from BEFORE this quarter, since the new quarter's question is already in
+  // the feed by the time narration runs.
+  const priorQuestion = [...session.advisor]
+    .reverse()
+    .find((e) => e.kind === 'question' && (e.period ?? Number.MIN_SAFE_INTEGER) < period);
+  const bet =
+    betMoves.length > 0
+      ? { moves: betMoves, ...(priorQuestion ? { question: priorQuestion.text } : {}) }
+      : undefined;
   try {
     const outcome = await narrateQuarter(
       { narrate: (system, input) => advisor.narrate!(system, input) },
       briefingFor(session, business),
       () => Date.now(),
       session.attributions,
+      bet,
     );
     if (!outcome) {
       session.events.push({ kind: 'narration_failed', period });

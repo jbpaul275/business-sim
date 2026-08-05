@@ -118,6 +118,33 @@ describe('narration over the quarter', () => {
       expect(session.advisor.filter((e) => e.kind === 'question').length).toBeGreaterThan(1);
     });
   });
+
+  it('threads the bet into the narration: staged moves plus the prior question', async () => {
+    // The loop's bait: the narration opens on the bet the player placed, so
+    // its input carries what they staged and the eigen question that was on
+    // the table when they staged it — the question from BEFORE this quarter,
+    // not the fresh one already in the feed.
+    const session = createSession('storage');
+    const seen: string[] = [];
+    session.transport = {
+      narrate: async (_system: string, input: string) => {
+        seen.push(input);
+        return { headline: 'The hire cleared the queue.', narrative: 'Capacity caught demand.', suggestedQuestions: [] };
+      },
+    } as unknown as NonNullable<GameSession['transport']>;
+
+    const openingQuestion = session.advisor.find((e) => e.kind === 'question')!.text;
+    advanceSession(session, [], 0);
+    await narrateAdvance(session, ['hired 1 block of Site staff']);
+    expect(seen[0]).toContain("The player's bet this quarter");
+    expect(seen[0]).toContain('- hired 1 block of Site staff');
+    expect(seen[0]).toContain(openingQuestion);
+
+    // No moves staged → no bet in the input, nothing to resolve.
+    advanceSession(session, [], 0);
+    await narrateAdvance(session);
+    expect(seen[1]).not.toContain("The player's bet");
+  });
 });
 
 describe('the conversation', () => {

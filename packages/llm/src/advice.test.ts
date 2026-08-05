@@ -84,6 +84,15 @@ describe('what the briefing can account for', () => {
   it('says nothing about zero', () => {
     expect(unverifiedFigures('that costs you $0 to try', briefing, '')).toEqual([]);
   });
+
+  it('does not read "$30,000 marketing" as thirty billion', () => {
+    // The suffix must stop at word boundaries: the "m" of "marketing" is not
+    // "million". The unguarded regex flagged a reply for restating its own
+    // source, which is a retry burned on a parsing artifact.
+    expect(unverifiedFigures('a $30,000 marketing push', briefing, 'marketing to $30,000')).toEqual(
+      [],
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

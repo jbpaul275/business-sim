@@ -224,7 +224,11 @@ which the reference model omitted — the same reason its year three sat above b
   is folded into the same advise call: an instruction in chat ("raise the price to $6.50, hire another
   crew") comes back as `orderedCommands` in the game's own syntax — validated by the same parser as
   suggestions, staged only when the player confirms from the summary, with anything ambiguous or
-  inexpressible listed as unresolvable rather than guessed at. The register is tabbed by
+  inexpressible listed as unresolvable rather than guessed at. Narration resolves the player's bet:
+  the moves that actually queued (described server-side from the accepted actions) and the eigen
+  question they answered ride the §11.5 input, and the prompt opens the quarter on that bet's verdict —
+  a read on the outcome, never a judgement of the decision, and never invented when no moves were
+  staged. The register is tabbed by
   what each number bears on — investment (capex, working-capital terms, financing), P&L (prices, rates,
   recurring amounts), descriptive (square feet, seats, hours) — with the category clusters and the
   escalator column inside each tab, classified deterministically from `category`/`unit`/`isMoney`.

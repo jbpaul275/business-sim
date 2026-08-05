@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { advanceSession, getSession } from '../../../../../server/store';
 import { narrateAdvance } from '../../../../../server/advisor';
-import { translateTurn, type TurnRequest } from '../../../../../server/actions';
+import { describeActions, translateTurn, type TurnRequest } from '../../../../../server/actions';
 import { toView } from '../../../../../server/view';
 
 /**
@@ -28,6 +28,7 @@ export async function POST(
   advanceSession(session, actions, skip);
   // The model's paragraph over the quarter, when a key is present. Fails soft
   // inside — a transport fault costs the player a paragraph, not the turn.
-  await narrateAdvance(session);
+  // It opens on the bet: the moves that actually queued, in player words.
+  await narrateAdvance(session, business ? describeActions(actions, business) : []);
   return NextResponse.json(toView(session));
 }

@@ -131,6 +131,52 @@ describe('narrating a quarter', () => {
     expect(silent?.attributions).toBeUndefined();
   });
 
+  it('hands the model the bet — moves and the question they answered', async () => {
+    // Dave-the-Diver loop, financial form: each quarter resolves a bet the
+    // player placed on purpose, so the narration input carries what they
+    // staged and the eigen question that prompted it.
+    const transport = scripted([narration()]);
+    await narrateQuarter(transport, briefing, () => 0, undefined, {
+      question: 'Marketing is saturated — is the next dollar better spent on capacity?',
+      moves: ['hired 1 block of Front desk', 'marketing to $30,000 per quarter'],
+    });
+    expect(transport.seen[0]).toContain("The player's bet this quarter");
+    expect(transport.seen[0]).toContain('is the next dollar better spent on capacity?');
+    expect(transport.seen[0]).toContain('- hired 1 block of Front desk');
+    expect(transport.seen[0]).toContain('- marketing to $30,000 per quarter');
+  });
+
+  it('says nothing about a bet when no moves were staged', async () => {
+    // "Do not invent one" starts with the input: an empty bet never reaches
+    // the model as a bet at all.
+    const transport = scripted([narration()]);
+    await narrateQuarter(transport, briefing, () => 0, undefined, { moves: [] });
+    expect(transport.seen[0]).not.toContain('bet');
+  });
+
+  it('treats the bet as a legal source for the money guard', async () => {
+    // "Your $30,000 marketing push" restates the player's own move. Flagging
+    // the narration for quoting the bet it was asked to resolve would train
+    // everyone to ignore the guard.
+    const outcome = await narrateQuarter(
+      scripted([
+        narration({ narrative: 'The $30,000 marketing push bought less than the hire did.' }),
+      ]),
+      briefing,
+      () => 0,
+      undefined,
+      { moves: ['marketing to $30,000 per quarter'] },
+    );
+    expect(outcome).toBeDefined();
+    expect(outcome?.retriedOn).toBeUndefined();
+  });
+
+  it('the prompt opens on the bet and forbids inventing one', () => {
+    expect(NARRATION_PROMPT).toContain('Open on the player\'s bet');
+    expect(NARRATION_PROMPT).toContain('a read on the outcome, not a judgement of the decision');
+    expect(NARRATION_PROMPT).toContain('there is no bet');
+  });
+
   it('lets the model restate engine money from events and prior quarters', async () => {
     // The revolver draw and last quarter's revenue are engine-printed; quoting
     // them is the whole point of handing them over.
