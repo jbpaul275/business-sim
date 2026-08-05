@@ -65,6 +65,39 @@ export const zDraftParam = z.object({
 });
 export type DraftParam = z.infer<typeof zDraftParam>;
 
+/**
+ * Four quarterly weights out of whatever cadence the model actually wrote.
+ *
+ * "Seasonality needs exactly 4 quarterly weights" went to a live model twice
+ * in repair rounds and it still emitted a monthly curve — a coffee shop
+ * thinks in months — and the player got "could not produce a buildable
+ * draft" over cadence. The conversion is arithmetic, so it happens here,
+ * before validation ever sees it: a multiple of four averages down in
+ * consecutive groups (12 monthlies → 4 quarterly means), halves and a single
+ * flat weight repeat up, and a cadence with no clean mapping keeps its first
+ * four (padded flat) — downstream normalisation rescales the mean to 1.0
+ * either way. The wire schema also says minItems/maxItems 4, so a provider
+ * that enforces grammars never lets the wrong cadence exist at all; this is
+ * the salvage for the providers that do not. Non-arrays and non-numeric
+ * entries pass through untouched for the schema to reject honestly.
+ */
+export function coerceSeasonality(value: unknown): unknown {
+  if (!Array.isArray(value) || value.some((v) => typeof v !== 'number')) return value;
+  const q = value as number[];
+  if (q.length === 4) return q;
+  if (q.length === 0) return [1, 1, 1, 1];
+  if (q.length % 4 === 0) {
+    const size = q.length / 4;
+    return [0, 1, 2, 3].map(
+      (i) => q.slice(i * size, (i + 1) * size).reduce((a, b) => a + b, 0) / size,
+    );
+  }
+  if (4 % q.length === 0) {
+    return q.flatMap((v) => Array.from({ length: 4 / q.length }, () => v));
+  }
+  return [q[0] ?? 1, q[1] ?? 1, q[2] ?? 1, q[3] ?? 1];
+}
+
 export const zDraftStream = z.object({
   label: z.string(),
   archetype: z.enum([
@@ -78,7 +111,11 @@ export const zDraftStream = z.object({
   /** Why this archetype and not a neighbouring one. Shown to the player. */
   archetypeRationale: z.string(),
   params: z.array(zDraftParam),
-  seasonality: z.array(z.number()),
+  seasonality: z
+    .preprocess(coerceSeasonality, z.array(z.number()).length(4))
+    .describe(
+      'Exactly four quarterly demand multipliers, Q1 through Q4, averaging 1.0 across the year. Quarterly, never monthly.',
+    ),
   marketingSpendPerQuarter: z.number(),
   /**
    * What a mature year of this stream should produce, in dollars — the anchor

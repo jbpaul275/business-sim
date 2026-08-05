@@ -13,7 +13,13 @@ import { MalformedDraftError } from './draft.js';
 import type { InterviewMessage } from './client.js';
 import { CONCEPT_INTERVIEW_SYSTEM } from './prompt.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { zConceptDraft, zInterviewTurn, type ConceptDraft, type InterviewTurn } from './draft.js';
+import {
+  coerceSeasonality,
+  zConceptDraft,
+  zInterviewTurn,
+  type ConceptDraft,
+  type InterviewTurn,
+} from './draft.js';
 
 /**
  * The interview is the input method for §9.1 Phases 1-2 — the thing that
@@ -584,6 +590,41 @@ describe('draftIssues', () => {
       stream: { ...draft().stream, seasonality: [1, -0.5, 1, 1] },
     });
     expect(draftIssues(incoherent)[0]).toContain('non-negative');
+  });
+
+  it('coerces a monthly seasonality curve down to quarters at parse time', () => {
+    // Live: "seasonality needs exactly 4 quarterly weights" went to the model
+    // in two repair rounds, it emitted a monthly curve anyway, and a coffee
+    // shop build died over cadence. The conversion is arithmetic, so the
+    // schema does it before validation ever sees the array.
+    const monthly = [0.9, 1.0, 1.1, 1.2, 1.2, 1.2, 0.8, 0.8, 0.8, 1.0, 1.0, 1.0];
+    const parsed = zConceptDraft.parse({
+      ...draft(),
+      stream: { ...draft().stream, seasonality: monthly },
+    });
+    expect(parsed.stream.seasonality).toHaveLength(4);
+    [1.0, 1.2, 0.8, 1.0].forEach((expected, i) =>
+      expect(parsed.stream.seasonality[i]).toBeCloseTo(expected, 10),
+    );
+
+    // Halves repeat up; an empty array is a flat year; a cadence with no
+    // clean mapping keeps its first four rather than killing the build.
+    expect(coerceSeasonality([1.2, 0.8])).toEqual([1.2, 1.2, 0.8, 0.8]);
+    expect(coerceSeasonality([])).toEqual([1, 1, 1, 1]);
+    expect(coerceSeasonality([1.5, 0.5, 1])).toEqual([1.5, 0.5, 1, 1]);
+    // Garbage stays garbage for the schema to reject honestly.
+    expect(coerceSeasonality(['high', 'low'])).toEqual(['high', 'low']);
+  });
+
+  it('the wire schema itself demands exactly four weights', () => {
+    // Belt to the coercion's braces: a provider that enforces grammars never
+    // lets a monthly curve exist at all.
+    const schema = zodToJsonSchema(zConceptDraft, { $refStrategy: 'none' }) as {
+      properties: { stream: { properties: Record<string, { minItems?: number; maxItems?: number }> } };
+    };
+    const seasonality = schema.properties.stream.properties['seasonality']!;
+    expect(seasonality.minItems).toBe(4);
+    expect(seasonality.maxItems).toBe(4);
   });
 
   it('catches a step-fixed line with no block capacity', () => {
