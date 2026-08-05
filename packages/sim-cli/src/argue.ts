@@ -66,6 +66,8 @@ export interface ArgueRequest {
   businessName: string;
   /** 0 during setup; the current period in a live game. */
   period?: number;
+  /** The operator's stated years in this concept's domain (07, stage 4). */
+  operatorYears?: number;
 }
 
 export async function argueAssumption(request: ArgueRequest): Promise<ArgueOutcome> {
@@ -89,6 +91,7 @@ export async function argueAssumption(request: ArgueRequest): Promise<ArgueOutco
       assertedValue: asNumber(request.asserted),
       statedBasis: request.basis.trim() === '' ? null : request.basis.trim(),
       evidenceUrl: null,
+      operatorYears: request.operatorYears ?? 0,
     },
     businessContext: {
       archetype: request.archetype,

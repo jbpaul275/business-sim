@@ -53,6 +53,9 @@ export {
   LEVERAGE_PRICING,
   leverageSpread,
   openingLoanRate,
+  EXPERIENCE_ADVANCE_FACTOR,
+  EXPERIENCE_SPREAD_CREDIT,
+  isExperiencedOperator,
 } from './debt.js';
 export { computeTax, SECTION_179_CAP, SE_TAX_WAGE_BASE } from './tax.js';
 export { quarterlyDepreciation } from './depreciation.js';

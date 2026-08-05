@@ -105,6 +105,14 @@ export const ARCHETYPE_DRIVER: Record<Archetype, VolumeDriver> = {
 /** `REVENUE` capacity is denominated in money; everything else in counts. */
 export const isMoneyDriver = (d: VolumeDriver): boolean => d === 'REVENUE';
 
+/**
+ * Years of hands-on domain experience at which the world starts treating the
+ * operator as one — docs/plan/07-founder-profile.md. One threshold, shared by
+ * the lender's file (stage 3) and the challenge loop (stage 4), living here
+ * because llm and engine both need it and neither may import the other.
+ */
+export const EXPERIENCED_OPERATOR_YEARS = 5;
+
 export const zProvenance = z.enum([
   'CATALOG',
   'BENCHMARK',

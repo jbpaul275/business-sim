@@ -674,6 +674,8 @@ describe('draftIssues', () => {
     // persona declared in their own words, never picked from a menu.
     const labor = mapped.template.costDefaults.find((c) => c.class === 'STEP_FIXED' && c.isLabor);
     expect(labor?.ownerBlocks).toBe(1);
+    // Stages 3-4 read the profile off the mapped concept — it rides through.
+    expect(mapped.founderProfile.domainYears).toBe(4);
 
     // The cap: no résumé buys a ramp floor above 0.6.
     const veteran = draft({

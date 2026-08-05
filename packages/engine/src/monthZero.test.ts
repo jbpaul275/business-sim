@@ -29,6 +29,7 @@ const model = (kinds: ('SBA_7A' | 'REVOLVER')[]) => {
         requestedPrincipal: kind === 'REVOLVER' ? 3_000_00n : 100_000_00n,
         termQuarters: 40,
         personalGuarantee: true,
+        operatorYears: 0,
       })),
     },
   };

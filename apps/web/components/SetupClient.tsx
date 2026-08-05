@@ -481,6 +481,7 @@ function FundingPanel({
             </div>
           )}
           {f.plans.length > 0 && <div className="card-line quiet">{f.stressNote}</div>}
+          {f.experienceLine && <div className="card-line quiet">{f.experienceLine}</div>}
           <div className="plan-cards">
             {f.plans.map((p) => (
               <div className={`plan-card${p.proposed ? ' proposed' : ''}`} key={p.key}>

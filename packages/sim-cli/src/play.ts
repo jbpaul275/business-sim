@@ -1858,7 +1858,10 @@ async function parseCommand(
           {
             kind: 'RAISE_DEBT',
             businessId: business.id,
-            spec: { kind: 'SBA_7A', requestedPrincipal: principal, termQuarters, personalGuarantee: true },
+            // In-game raises carry no operator file yet: the profile lives in
+            // setup, and a business with trailing EBITDA is underwritten on
+            // DSCR, where experience is not the engine's pricing input.
+            spec: { kind: 'SBA_7A', requestedPrincipal: principal, termQuarters, personalGuarantee: true, operatorYears: 0 },
           },
         ],
       };

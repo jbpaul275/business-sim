@@ -24,6 +24,14 @@ export const zDebtSpec = z.object({
   requestedPrincipal: zMoney,
   termQuarters: z.number().int().positive(),
   personalGuarantee: z.boolean(),
+  /**
+   * The application's management-experience section (07, stage 3): the
+   * operator's stated years in this trade, straight from the founder
+   * profile. Real SBA files price this; ours does too — a spread credit and
+   * a wider advance at EXPERIENCED_OPERATOR_YEARS. Defaults to 0, which
+   * earns nothing.
+   */
+  operatorYears: z.number().nonnegative().default(0),
 });
 export type DebtSpec = z.infer<typeof zDebtSpec>;
 

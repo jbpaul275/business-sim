@@ -52,7 +52,13 @@ export interface BuildModelOptions {
   scale?: ScaleInput;
   marketingSpendPerQuarter?: Money;
   equityInjection: Money;
-  debt?: { kind: 'SBA_7A' | 'AMORTIZING' | 'REVOLVER'; principal: Money; termQuarters: number }[];
+  debt?: {
+    kind: 'SBA_7A' | 'AMORTIZING' | 'REVOLVER';
+    principal: Money;
+    termQuarters: number;
+    /** The operator's stated years in this trade — the lender prices it (07). */
+    operatorYears?: number;
+  }[];
   /** Lines the player explicitly acknowledged and zeroed (§4.6). */
   acknowledgedZeroes?: ReadonlySet<string>;
   /**
@@ -692,6 +698,8 @@ export function buildModelFromTemplate(options: BuildModelOptions): BusinessMode
         requestedPrincipal: d.principal,
         termQuarters: d.termQuarters,
         personalGuarantee: d.kind === 'SBA_7A',
+        // The application's management-experience section (07, stage 3).
+        operatorYears: d.operatorYears ?? 0,
       })),
     },
     preOpeningCosts: {

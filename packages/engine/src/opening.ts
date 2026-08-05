@@ -275,7 +275,7 @@ function openBusiness(
     annualRate:
       spec.kind === 'REVOLVER'
         ? 0.075 + DEBT_PRODUCTS.REVOLVER.spreadOverPrime
-        : openingLoanRate(0.075, spec.requestedPrincipal, equity + outside),
+        : openingLoanRate(0.075, spec.requestedPrincipal, equity + outside, spec.operatorYears ?? 0),
     termQuarters: spec.termQuarters,
     originatedPeriod: -1,
     originationFeePct: DEBT_PRODUCTS[spec.kind].originationFeePct,

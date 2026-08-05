@@ -555,7 +555,7 @@ function planCards(ctx: FundingContext, p: FundingProposal): StoredPlanCard[] {
     const declined = c.declined[0]?.reason;
     const rate =
       named.plan.loan > 0n
-        ? quoteForEquity(p.needed, ctx.config.primeRate, named.equity).rate
+        ? quoteForEquity(p.needed, ctx.config.primeRate, named.equity, ctx.domainYears ?? 0).rate
         : undefined;
     cards.push({
       key: named.key,
@@ -584,6 +584,7 @@ function fundingContext(session: SetupSession): FundingContext {
     config: session.config,
     provenanceFor: mapped.provenanceFor,
     sourceNoteFor: mapped.sourceNoteFor,
+    domainYears: mapped.founderProfile.domainYears,
   };
 }
 
@@ -632,7 +633,12 @@ function fundInner(
     if (dealEquity < p.equityFloor) {
       return { ok: false, belowFloor: p.equityFloor };
     }
-    const quote = quoteForEquity(p.needed, session.config.primeRate, dealEquity);
+    const quote = quoteForEquity(
+      p.needed,
+      session.config.primeRate,
+      dealEquity,
+      session.concept?.mapped.founderProfile.domainYears ?? 0,
+    );
     loan = quote.loan;
     revolver = revolverFor(p.lendable, dealEquity, loan);
     outside = dealEquity > p.investable ? dealEquity - p.investable : 0n;
@@ -714,6 +720,9 @@ export async function challenge(
       basis,
       archetype: model.streams[0]?.archetype ?? 'TRAFFIC',
       businessName: model.businessName,
+      // Expertise is evidence, one tier (07, stage 4) — the business under
+      // challenge is the domain the player declared their years in.
+      operatorYears: session.concept?.mapped.founderProfile.domainYears ?? 0,
     });
     session.events.push({ kind: 'objection', text: `challenge ${target.label}: ${rawValue} ${basis}`.trim() });
     return {

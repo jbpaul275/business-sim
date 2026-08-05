@@ -8,7 +8,12 @@ import {
   type SeedTemplate,
   type SeedTemplateInput,
 } from '@bizsim/schemas';
-import { type ConceptDraft, type DraftCostLine, type DraftStream } from './draft.js';
+import {
+  type ConceptDraft,
+  type DraftCostLine,
+  type DraftStream,
+  type FounderProfile,
+} from './draft.js';
 
 /**
  * Turn a drafted concept into the inputs `buildModelFromTemplate` already
@@ -58,6 +63,8 @@ export interface MappedConcept {
    * the player's own words instead of claiming a seed default (07).
    */
   sourceNoteFor: (path: string) => string | undefined;
+  /** The profile itself, for the lender's file and the challenge loop (07). */
+  founderProfile: FounderProfile;
 }
 
 /** Scale knobs the archetypes read, keyed as `ScaleInput` spells them. */
@@ -400,5 +407,6 @@ export function draftToTemplate(draft: ConceptDraft): MappedConcept {
     legalForm: draft.legalForm,
     businessName: draft.businessName,
     volumeNoun: stream.volumeNoun,
+    founderProfile: draft.founderProfile,
   };
 }

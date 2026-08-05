@@ -1,4 +1,5 @@
 import { mulRate, ratio, sum, type Money } from '@bizsim/money';
+import { EXPERIENCED_OPERATOR_YEARS } from '@bizsim/schemas';
 import type {
   Business,
   Covenant,
@@ -195,6 +196,25 @@ export const LEVERAGE_PRICING: readonly { maxDebtShare: number; spread: number }
   { maxDebtShare: 0.9, spread: 0.03 },
 ];
 
+/**
+ * What the lender's file gives an experienced operator — 07, stage 3.
+ *
+ * Real SBA underwriting prices management experience; ours does the same, in
+ * two small, named credits at `EXPERIENCED_OPERATOR_YEARS`: one shallow
+ * pricing tier off the leverage spread (never below the tier-0 price — a
+ * résumé does not beat a half-equity deal), and a modestly wider advance
+ * against the same collateral. Both read from `DebtSpec.operatorYears`, which
+ * carries only what the player actually said (the biography law).
+ */
+export const EXPERIENCE_SPREAD_CREDIT = 0.0075;
+export const EXPERIENCE_ADVANCE_FACTOR = 1.15;
+
+export const isExperiencedOperator = (operatorYears: number): boolean =>
+  operatorYears >= EXPERIENCED_OPERATOR_YEARS;
+
+const experiencedSpread = (spread: number, operatorYears: number): number =>
+  isExperiencedOperator(operatorYears) ? Math.max(0, spread - EXPERIENCE_SPREAD_CREDIT) : spread;
+
 /** The leverage step-up for a term loan against the equity in the deal. */
 export function leverageSpread(principal: Money, equityInDeal: Money): number {
   if (principal <= 0n) return 0;
@@ -216,8 +236,13 @@ export function openingLoanRate(
   primeRate: number,
   principal: Money,
   equityInDeal: Money,
+  operatorYears = 0,
 ): number {
-  return primeRate + DEBT_PRODUCTS.SBA_7A.spreadOverPrime + leverageSpread(principal, equityInDeal);
+  return (
+    primeRate +
+    DEBT_PRODUCTS.SBA_7A.spreadOverPrime +
+    experiencedSpread(leverageSpread(principal, equityInDeal), operatorYears)
+  );
 }
 
 export function underwrite(
@@ -261,10 +286,20 @@ export function underwrite(
     // there is, so it prices the loan. Term facilities only: a revolver's
     // spread already reflects that it lends against receivables, not the deal.
     if (spec.kind !== 'REVOLVER') {
-      rate += leverageSpread(spec.requestedPrincipal, equityInjection);
+      rate += experiencedSpread(
+        leverageSpread(spec.requestedPrincipal, equityInjection),
+        spec.operatorYears ?? 0,
+      );
     }
 
-    if (spec.requestedPrincipal > collateral) {
+    // The advance-rate credit: an operator the lender believes can run the
+    // thing makes the same collateral lend further. Applied here AND in the
+    // funding screen's `lendable`, one factor — a screen that proposed what
+    // this check then refused would be the PR #5 self-contradiction again.
+    const advance = isExperiencedOperator(spec.operatorYears ?? 0)
+      ? mulRate(collateral, EXPERIENCE_ADVANCE_FACTOR)
+      : collateral;
+    if (spec.requestedPrincipal > advance) {
       return {
         approved: false,
         rate,
@@ -272,7 +307,7 @@ export function underwrite(
         dscr: null,
         reason:
           `Requested $${Number(spec.requestedPrincipal) / 100} exceeds collateral coverage of ` +
-          `$${Number(collateral) / 100} and there is no trailing EBITDA to underwrite against.`,
+          `$${Number(advance) / 100} and there is no trailing EBITDA to underwrite against.`,
       };
     }
     if (equityInjection < minimumEquity) {

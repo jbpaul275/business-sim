@@ -417,6 +417,8 @@ async function challengeLoop(
   input: LineSource,
   model: BusinessModel,
   transport?: ConceptTransport,
+  // Expertise is evidence, one tier (07, stage 4).
+  operatorYears = 0,
 ): Promise<string | undefined> {
   // Selection shared with the web register — docs in `arguableAssumptions`.
   const arguable = arguableAssumptions(model.assumptions);
@@ -478,6 +480,7 @@ async function challengeLoop(
       basis,
       archetype: model.streams[0]?.archetype ?? 'TRAFFIC',
       businessName: model.businessName,
+      operatorYears,
     });
     const settled = outcome.settlement;
 
@@ -899,6 +902,7 @@ export async function runSetup(
         equityInjection: 0n,
         ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
         ...(concept ? { sourceNoteFor: concept.mapped.sourceNoteFor } : {}),
+        ...(concept ? { domainYears: concept.mapped.founderProfile.domainYears } : {}),
       });
       // Opened, so the assets exist to lend against. Nothing is committed by
       // this: it is the same throwaway probe the outlay figure comes from.
@@ -1110,7 +1114,12 @@ export async function runSetup(
             console.log(`  ${DIM}Fully funded — no debt needed at that figure.${RESET}`);
             break;
           }
-          const rate = openingLoanRate(config.primeRate, loan, dealEquity);
+          const rate = openingLoanRate(
+            config.primeRate,
+            loan,
+            dealEquity,
+            concept?.mapped.founderProfile.domainYears ?? 0,
+          );
           const share = Number(loan) / Number(loan + dealEquity);
           const tierIndex = LEVERAGE_PRICING.findIndex((t) => share <= t.maxDebtShare);
           const cheaper = tierIndex > 0 ? LEVERAGE_PRICING[tierIndex - 1] : undefined;
@@ -1164,6 +1173,7 @@ export async function runSetup(
         debt,
         ...(concept ? { provenanceFor: concept.mapped.provenanceFor } : {}),
         ...(concept ? { sourceNoteFor: concept.mapped.sourceNoteFor } : {}),
+        ...(concept ? { domainYears: concept.mapped.founderProfile.domainYears } : {}),
       });
 
       // The completeness invariant is a hard gate: a model with a hole in its
@@ -1331,7 +1341,12 @@ export async function runSetup(
       if (heavy) console.log(`\n${YELLOW}⚠ ${RESET}${note(heavy).trimStart()}`);
     }
 
-    const objection = await challengeLoop(input, model, options?.transport);
+    const objection = await challengeLoop(
+      input,
+      model,
+      options?.transport,
+      concept?.mapped.founderProfile.domainYears ?? 0,
+    );
     if (objection === undefined) break;
     journal.write({ kind: 'objection', text: objection });
     if (!concept?.reopen) {
