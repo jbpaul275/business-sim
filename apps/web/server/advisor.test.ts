@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { providerKeyVar, type ConceptTransport, type TurnAdvice, type TurnNarration } from '@bizsim/llm';
+import {
+  providerKeyPresent,
+  providerKeyVars,
+  type ConceptTransport,
+  type TurnAdvice,
+  type TurnNarration,
+} from '@bizsim/llm';
 import { advanceSession, createSession, type GameSession } from './store';
 import { askGame, narrateAdvance, parseSuggestion } from './advisor';
 
@@ -217,17 +223,51 @@ describe('the conversation', () => {
       expect(outcome.error).toContain('key');
     });
   });
+
+  it('hides every provider key, not just the resolved one', async () => {
+    // The regression this guards: `withoutKey` deleted only the key of
+    // whichever provider resolution picked. Resolution then fell through to the
+    // next provider that still had one, so on a machine with two keys exported
+    // the no-key tests ran against a live provider — a real, billable call
+    // inside the test asserting that no call is possible.
+    const prevKimi = process.env['MOONSHOT_API_KEY'];
+    const prevAnthropic = process.env['ANTHROPIC_API_KEY'];
+    process.env['MOONSHOT_API_KEY'] = 'decoy-kimi';
+    process.env['ANTHROPIC_API_KEY'] = 'decoy-anthropic';
+    try {
+      await withoutKey(async () => {
+        expect(providerKeyPresent()).toBe(false);
+      });
+      // And it puts them back.
+      expect(process.env['MOONSHOT_API_KEY']).toBe('decoy-kimi');
+      expect(process.env['ANTHROPIC_API_KEY']).toBe('decoy-anthropic');
+    } finally {
+      if (prevKimi === undefined) delete process.env['MOONSHOT_API_KEY'];
+      else process.env['MOONSHOT_API_KEY'] = prevKimi;
+      if (prevAnthropic === undefined) delete process.env['ANTHROPIC_API_KEY'];
+      else process.env['ANTHROPIC_API_KEY'] = prevAnthropic;
+    }
+  });
 });
 
-/** Runs a case with the provider key hidden, so no test can go live. */
+/**
+ * Runs a case with every provider key hidden, so no test can go live.
+ *
+ * Hiding only the resolved provider's key does not hide the capability:
+ * resolution falls through to the next provider that has one. A machine with
+ * both a Moonshot and an Anthropic key exported ran this suite against
+ * Anthropic — a real, billable call inside the test that asserts no call is
+ * possible. The forced-provider variable goes too, since a forced provider is
+ * honoured whether or not its key exists.
+ */
 async function withoutKey(run: () => Promise<void>): Promise<void> {
-  const keyVar = providerKeyVar();
-  const prev = process.env[keyVar];
-  delete process.env[keyVar];
+  const vars = [...providerKeyVars(), 'BIZSIM_LLM_PROVIDER'];
+  const prev = new Map(vars.map((v) => [v, process.env[v]]));
+  for (const v of vars) delete process.env[v];
   try {
     await run();
   } finally {
-    if (prev !== undefined) process.env[keyVar] = prev;
+    for (const [v, value] of prev) if (value !== undefined) process.env[v] = value;
   }
 }
 

@@ -32,6 +32,25 @@ const keyFor = (provider: ProviderName): string | undefined =>
     : process.env[providerKeyVar(provider)];
 
 /**
+ * Every environment variable that could make a call possible.
+ *
+ * Exists for the tests that must prove the no-key path: hiding only the
+ * resolved provider's key does not hide the capability, because resolution
+ * simply falls through to the next provider with a key. On a developer machine
+ * with two keys exported that turned "refuses politely when no key exists" into
+ * a live billable call against whichever provider was second in the preference
+ * order — the exact thing the helper was written to prevent.
+ */
+export function providerKeyVars(): string[] {
+  return [
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_AUTH_TOKEN',
+    'BIZSIM_API_KEY',
+    ...Object.values(VENDORS).map((v) => v.apiKeyVar),
+  ];
+}
+
+/**
  * Preference order when nothing is forced.
  *
  * Cheapest-plausible first, because the whole point of the routing work is that
