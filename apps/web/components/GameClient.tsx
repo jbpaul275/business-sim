@@ -269,7 +269,7 @@ export function GameClient({ initial }: { initial: GameView }) {
           )}
         </section>
 
-        <section className="pane" aria-label="Statements">
+        <section className="pane center" aria-label="Statements">
           <div className="tiles">
             {view.tiles.map((tile) => (
               <div className={`tile${tile.tone ? ` ${tile.tone}` : ''}`} key={tile.label}>

@@ -25,6 +25,25 @@
   --critical: #d03b3b;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --sans: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  /*
+   * Depth, radius and motion as tokens rather than per-rule guesses. Three
+   * elevations only: content sits flat, chrome (top bar, action bar) casts a
+   * shadow so it reads as floating over the document, and things that open
+   * over the page (popovers) cast a deeper one. A raised edge — one hairline
+   * of light along the top — is what separates a tile from the panel behind
+   * it on a surface this dark, where borders alone go muddy.
+   */
+  --lift-1: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --lift-2: 0 2px 10px rgba(0, 0, 0, 0.36);
+  --lift-3: 0 10px 32px rgba(0, 0, 0, 0.48);
+  --edge: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+  --ease: 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+  --accent-soft: rgba(57, 135, 229, 0.13);
+  --accent-line: rgba(57, 135, 229, 0.42);
 }
 
 * {
@@ -40,26 +59,104 @@ body {
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Figures are read in columns here — statements, tiles, register — so digits
+   are fixed-width everywhere, not only where the mono stack applies. */
+.statement,
+.reg-table,
+.tile .value,
+.facts,
+.budget-line .num {
+  font-variant-numeric: tabular-nums;
 }
 
 button {
   font: inherit;
   cursor: pointer;
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    color var(--ease),
+    box-shadow var(--ease);
+}
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* One focus ring, everywhere, and only for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 3px;
 }
 
 input,
-select {
+select,
+textarea {
   font: inherit;
   background: var(--surface-2);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 8px;
+  transition:
+    border-color var(--ease),
+    box-shadow var(--ease);
+}
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #45453f;
 }
 input:focus,
-select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+::placeholder {
+  color: var(--text-muted);
+}
+::selection {
+  background: rgba(57, 135, 229, 0.32);
+}
+
+/* The default dark scrollbar is a wide grey slab that cuts every pane in
+   half. These are the same hairline the panes are bordered with. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3d3d38 transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3d3d38;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #55554e;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+  button:not(:disabled):active {
+    transform: none;
+  }
 }
 
 /* ---------- scenario picker ---------- */
@@ -70,7 +167,8 @@ select:focus {
   padding: 0 24px;
 }
 .picker h1 {
-  font-size: 22px;
+  font-size: 27px;
+  letter-spacing: -0.015em;
   margin-bottom: 4px;
 }
 .picker p.sub {
@@ -81,19 +179,28 @@ select:focus {
   display: block;
   margin-top: 20px;
   background: linear-gradient(135deg, rgba(57, 135, 229, 0.14), var(--surface-1) 55%);
-  border: 1px solid var(--accent);
-  border-radius: 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
   text-decoration: none;
   color: var(--text-primary);
-  transition: background 0.15s;
+  box-shadow: var(--lift-2), var(--edge);
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    box-shadow var(--ease),
+    transform var(--ease);
 }
 .hero-card:hover {
   background: linear-gradient(135deg, rgba(57, 135, 229, 0.22), var(--surface-1) 60%);
+  border-color: var(--accent);
+  box-shadow: var(--lift-3), var(--edge);
+  transform: translateY(-1px);
 }
 .hero-title {
   font-weight: 700;
-  font-size: 17px;
+  font-size: 18px;
+  letter-spacing: -0.01em;
 }
 .hero-sub {
   color: var(--text-secondary);
@@ -135,16 +242,24 @@ select:focus {
   gap: 4px;
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 13px 14px;
   text-align: left;
   color: var(--text-primary);
   text-decoration: none;
-  transition: border-color 0.12s;
+  box-shadow: var(--lift-1), var(--edge);
+  transition:
+    border-color var(--ease),
+    background var(--ease),
+    box-shadow var(--ease),
+    transform var(--ease);
 }
 .scenario-card:hover,
 .scenario-card:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--surface-2);
+  box-shadow: var(--lift-2), var(--edge);
+  transform: translateY(-1px);
   outline: none;
 }
 .hero-card:focus-visible {
@@ -218,17 +333,24 @@ select:focus {
   height: 100vh;
 }
 
+/* Chrome — the top bar and the action bar — is lighter than the document and
+   casts a shadow onto it, so the middle of the screen reads as the thing
+   being worked on rather than one more panel. */
 .topbar {
   display: flex;
   align-items: baseline;
   gap: 14px;
-  padding: 10px 16px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-1);
+  background: linear-gradient(var(--surface-2), var(--surface-1));
+  box-shadow: var(--lift-2);
+  position: relative;
+  z-index: 3;
 }
 .topbar .name {
   font-weight: 650;
-  font-size: 15px;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
 }
 .topbar .period {
   color: var(--text-secondary);
@@ -263,6 +385,12 @@ select:focus {
 }
 .pane:last-child {
   border-right: none;
+  border-left: 1px solid var(--border);
+}
+/* The statements pane: the document, set on the page colour. */
+.pane.center {
+  background: var(--surface-0);
+  padding: 16px 20px;
 }
 .pane h2 {
   font-size: 11px;
@@ -274,57 +402,84 @@ select:focus {
 
 /* ---------- metric tiles ---------- */
 
+/* Seven metrics into a fixed-column grid always strands the last one in a
+   row of its own beside empty cells, which reads as a rendering fault. Flex
+   lets the final row divide the width it has, so a short row looks chosen. */
 .tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .tile {
-  background: var(--surface-2);
+  flex: 1 1 140px;
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: var(--radius);
+  padding: 9px 11px;
+  box-shadow: var(--lift-1), var(--edge);
 }
 .tile .label {
-  font-size: 11px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 .tile .value {
   font-family: var(--mono);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  margin-top: 2px;
+  letter-spacing: -0.01em;
+  margin-top: 3px;
 }
 .tile .hint {
   font-size: 11px;
   color: var(--text-secondary);
 }
+/* Status reaches the border as well as the figure — but the hint line always
+   says it in words, so colour is never carrying the meaning alone. */
 .tile.critical .value {
   color: var(--critical);
 }
+.tile.critical {
+  border-color: rgba(208, 59, 59, 0.55);
+}
 .tile.warning .value {
   color: var(--warning);
+}
+.tile.warning {
+  border-color: rgba(250, 178, 25, 0.45);
 }
 
 /* ---------- statements ---------- */
 
 .tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 10px;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 3px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  align-self: flex-start;
+  width: fit-content;
 }
 .tabs button {
   background: none;
   border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
   color: var(--text-secondary);
+}
+.tabs button:hover {
+  color: var(--text-primary);
 }
 .tabs button.active {
   background: var(--surface-2);
   border-color: var(--border);
   color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--lift-1);
 }
 
 .statement {
@@ -334,7 +489,12 @@ select:focus {
   font-size: 13px;
 }
 .statement td {
-  padding: 3px 4px;
+  padding: 4px 6px;
+}
+/* A statement line is read left label to right figure across the full width
+   of the pane. Without this the eye drops a row somewhere in the middle. */
+.statement tr:hover td {
+  background: rgba(255, 255, 255, 0.028);
 }
 .statement td.num {
   text-align: right;
@@ -510,19 +670,27 @@ select:focus {
   display: flex;
   gap: 14px;
   align-items: flex-end;
-  padding: 10px 16px;
+  padding: 12px 16px 13px;
   border-top: 1px solid var(--border);
-  background: var(--surface-1);
+  background: linear-gradient(var(--surface-1), var(--surface-2));
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.36);
+  position: relative;
+  z-index: 2;
   flex-wrap: wrap;
 }
 .control {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .control label {
-  font-size: 11px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-muted);
+  /* The bar is the last row of a 100vh grid; without this the label clipped
+     against the viewport edge at short heights. */
+  line-height: 1.3;
 }
 .control input {
   width: 110px;
@@ -537,21 +705,32 @@ select:focus {
   gap: 8px;
 }
 .run button {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 18px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-primary);
+  box-shadow: var(--lift-1), var(--edge);
+}
+.run button:not(:disabled):hover {
+  border-color: #4c4c45;
+  background: #2a2a27;
 }
 .run button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
+  box-shadow: var(--lift-2);
+}
+.run button.primary:not(:disabled):hover {
+  background: #4c95ea;
+  border-color: #4c95ea;
 }
 .run button:disabled {
   opacity: 0.5;
   cursor: default;
+  box-shadow: none;
 }
 
 .gameover {
@@ -607,17 +786,26 @@ select:focus {
   gap: 8px;
 }
 .share-actions button {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 14px;
   border: 1px solid var(--border);
   background: var(--surface-1);
   color: var(--text-primary);
+  box-shadow: var(--lift-1), var(--edge);
+}
+.share-actions button:hover {
+  border-color: #4c4c45;
+  background: var(--surface-2);
 }
 .share-actions button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
+}
+.share-actions button.primary:hover {
+  background: #4c95ea;
+  border-color: #4c95ea;
 }
 .share-panel code {
   font-family: var(--mono);
@@ -694,9 +882,12 @@ select:focus {
   background: var(--surface-2);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 8px 10px;
   resize: vertical;
+  /* The placeholder was being cut off mid-sentence at the default rows
+     height — a box that looks broken before it is even typed into. */
+  min-height: 5.8em;
 }
 .say-buttons {
   display: flex;
@@ -705,11 +896,17 @@ select:focus {
 }
 .say-buttons button,
 .setup-card button:not(.share-link) {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 7px 14px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-primary);
+  box-shadow: var(--lift-1), var(--edge);
+}
+.say-buttons button:not(:disabled):hover,
+.setup-card button:not(.share-link):not(:disabled):hover {
+  border-color: #4c4c45;
+  background: #2a2a27;
 }
 .say-buttons button.primary,
 .setup-card button.primary {
@@ -717,24 +914,33 @@ select:focus {
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
+  box-shadow: var(--lift-2);
+}
+.say-buttons button.primary:not(:disabled):hover,
+.setup-card button.primary:not(:disabled):hover {
+  background: #4c95ea;
+  border-color: #4c95ea;
 }
 .say-buttons button:disabled,
 .setup-card button:disabled {
   opacity: 0.5;
   cursor: default;
+  box-shadow: none;
 }
 
 .setup-card {
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
   margin-bottom: 14px;
   font-size: 14px;
+  box-shadow: var(--lift-1), var(--edge);
 }
 .setup-card .card-title {
   font-weight: 650;
   font-size: 15px;
+  letter-spacing: -0.005em;
   margin-bottom: 6px;
 }
 .setup-card .card-sub {
@@ -862,8 +1068,9 @@ select:focus {
 .a-question {
   background: linear-gradient(135deg, rgba(57, 135, 229, 0.12), var(--surface-2) 60%);
   border: 1px solid var(--accent);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  padding: 11px 13px;
+  box-shadow: var(--lift-2), var(--edge);
 }
 .a-fact {
   font-size: 12px;
@@ -949,14 +1156,27 @@ select:focus {
 }
 .plan-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  padding: 11px 13px;
   background: var(--surface-0);
   display: flex;
   flex-direction: column;
   gap: 6px;
+  box-shadow: var(--lift-1);
+  transition:
+    border-color var(--ease),
+    box-shadow var(--ease);
+}
+.plan-card:hover {
+  border-color: #45453f;
+  box-shadow: var(--lift-2);
 }
 .plan-card.proposed {
+  border-color: var(--accent);
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface-0) 60%);
+  box-shadow: var(--lift-2);
+}
+.plan-card.proposed:hover {
   border-color: var(--accent);
 }
 .plan-head {
@@ -1028,10 +1248,20 @@ select:focus {
   color: var(--text-primary);
   cursor: pointer;
 }
+.plan-card button:hover {
+  border-color: #4c4c45;
+  background: #2a2a27;
+}
 .plan-card button.primary {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
+  font-weight: 600;
+  box-shadow: var(--lift-1);
+}
+.plan-card button.primary:hover {
+  border-color: #4c95ea;
+  background: #4c95ea;
 }
 
 .advisor .say-row {
@@ -1072,13 +1302,16 @@ select:focus {
   font-size: 15px;
   padding: 10px 18px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface-2);
   color: var(--text-primary);
+  box-shadow: var(--lift-1), var(--edge);
 }
 .tier-row .tier:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--lift-2), var(--edge);
 }
 
 /* The occasional moves: capital, growth, and owner cash, behind a toggle. */
@@ -1088,10 +1321,17 @@ select:focus {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 6px 16px;
+  padding: 7px 16px;
   border-top: 1px solid var(--border);
   background: var(--surface-1);
   font-size: 12px;
+  position: relative;
+  z-index: 2;
+}
+.staged-cap {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 10.5px;
 }
 .staged-cap {
   color: var(--text-muted);
@@ -1159,11 +1399,11 @@ select:focus {
   bottom: 100%;
   left: 0;
   right: 0;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius);
+  box-shadow: var(--lift-3);
   max-height: 300px;
   overflow-y: auto;
   z-index: 20;
@@ -1250,14 +1490,21 @@ select:focus {
 .reg-tabs button {
   background: var(--surface-0);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 4px 10px;
   font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
 }
+.reg-tabs button:hover {
+  color: var(--text-primary);
+  border-color: #45453f;
+}
 .reg-tabs button.active {
-  color: var(--text);
+  /* was var(--text), which is not a token we define — the active tab was
+     inheriting its colour and reading identical to the inactive ones. */
+  color: var(--text-primary);
+  background: var(--accent-soft);
   border-color: var(--accent);
   font-weight: 600;
 }
@@ -1273,9 +1520,12 @@ select:focus {
   font-size: 13px;
 }
 .reg-table td {
-  padding: 5px 6px 5px 0;
+  padding: 6px 6px 6px 0;
   border-bottom: 1px solid var(--border);
   vertical-align: baseline;
+}
+.reg-table tr:hover td {
+  background: rgba(255, 255, 255, 0.028);
 }
 .reg-table .rt-label {
   width: 38%;
