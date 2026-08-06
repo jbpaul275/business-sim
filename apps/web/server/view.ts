@@ -8,6 +8,7 @@ import {
 } from '@bizsim/schemas';
 import { priceUnits, shareNotice, uploadTarget } from '@bizsim/sim-cli';
 import { advisorAvailable, WEB_COMMANDS } from './advisor';
+import { mathByLabel, type MathView } from './math';
 import type { AdvisorEntry, GameSession, TurnLogEntry } from './store';
 
 /**
@@ -27,6 +28,12 @@ export interface Row {
   strong?: boolean;
   /** Negative money — rendered in the critical color. */
   negative?: boolean;
+  /**
+   * The arithmetic behind this figure (§16 Q3), hidden until asked for. Absent
+   * where the engine recorded nothing — the row then offers no affordance,
+   * because one that opens onto an empty panel is worse than none.
+   */
+  math?: MathView;
 }
 
 export interface Tile {
@@ -381,6 +388,16 @@ export function toView(session: GameSession): GameView {
     row(isRows, 'Pretax income', is.pretaxIncome, { strong: true });
     if (is.incomeTaxExpense !== 0n) row(isRows, 'Income tax expense', is.incomeTaxExpense, { indent: 1 });
     row(isRows, 'Net income', is.netIncome, { strong: true });
+
+    // Stage 1 of §16 Q3 covers the income statement, so the math hangs on
+    // these rows only. "Net income" appears on the cash flow too and would
+    // match by label; it is left alone there until stage 2 explains that
+    // statement properly.
+    const math = mathByLabel(session);
+    for (const r of isRows) {
+      const m = math[r.label];
+      if (m) r.math = m;
+    }
 
     row(bsRows, 'Cash', bs.cash, { indent: 1 });
     row(bsRows, 'Accounts receivable', bs.accountsReceivable, { indent: 1 });

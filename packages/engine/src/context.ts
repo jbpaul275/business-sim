@@ -1,4 +1,5 @@
 import type { AssumptionRegister, PeriodIndex } from '@bizsim/schemas';
+import type { Derivation, DerivationMap, TraceKey } from './derivation.js';
 
 /**
  * Provenance tracing — spec §10.4.
@@ -16,13 +17,19 @@ import type { AssumptionRegister, PeriodIndex } from '@bizsim/schemas';
  * assumption no line reads cannot move the output, so its sweep can be skipped.
  */
 
-export type TraceKey = string;
+export type { TraceKey } from './derivation.js';
 
 export interface ComputationTrace {
   /** statement line or metric id → assumption paths that fed it */
   byLine: Record<TraceKey, string[]>;
   /** assumption path → statement lines it feeds */
   byPath: Record<string, TraceKey[]>;
+  /**
+   * figure id → the arithmetic that produced it (§16 Q3). Separate from
+   * byLine/byPath on purpose: this channel does not touch the scope stack, so
+   * recording a derivation cannot perturb §10.4 attribution.
+   */
+  derivations: DerivationMap;
 }
 
 export interface TickContext {
@@ -32,11 +39,23 @@ export interface TickContext {
   p<T>(path: string, value: T): T;
   /** Attribute every read inside `fn` to `line`. */
   scope<T>(line: TraceKey, fn: () => T): T;
+  /**
+   * Record how a figure was computed, from the code that computed it
+   * (docs/plan/08-show-the-math.md). Atomic — one call, one complete
+   * derivation.
+   */
+  derive(key: string, derivation: Derivation): void;
+  /**
+   * Whether anything will read what `derive` is handed. Building a step array
+   * allocates whether or not it is kept, so hot paths guard construction on
+   * this rather than relying on the null context to discard it.
+   */
+  readonly tracing: boolean;
   readonly trace: ComputationTrace;
 }
 
 class Tracer implements TickContext {
-  readonly trace: ComputationTrace = { byLine: {}, byPath: {} };
+  readonly trace: ComputationTrace = { byLine: {}, byPath: {}, derivations: {} };
   private stack: TraceKey[] = [];
 
   constructor(
@@ -63,6 +82,12 @@ class Tracer implements TickContext {
       this.stack.pop();
     }
   }
+
+  derive(key: string, derivation: Derivation): void {
+    this.trace.derivations[key] = derivation;
+  }
+
+  readonly tracing = true;
 }
 
 /**
@@ -71,7 +96,7 @@ class Tracer implements TickContext {
  * budget, and nothing reads the trace.
  */
 class NullTracer implements TickContext {
-  readonly trace: ComputationTrace = { byLine: {}, byPath: {} };
+  readonly trace: ComputationTrace = { byLine: {}, byPath: {}, derivations: {} };
   constructor(
     readonly period: PeriodIndex,
     readonly register: AssumptionRegister | undefined,
@@ -82,6 +107,12 @@ class NullTracer implements TickContext {
   scope<T>(_line: TraceKey, fn: () => T): T {
     return fn();
   }
+  derive(_key: string, _derivation: Derivation): void {
+    // Deliberately nothing. Callers guard construction with `ctx.tracing`, so
+    // in the property suite (240,000 quarter-ticks) the steps are never even
+    // built.
+  }
+  readonly tracing = false;
 }
 
 export function createContext(

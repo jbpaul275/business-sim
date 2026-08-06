@@ -67,6 +67,15 @@ export {
 } from './costs.js';
 export { deltaNetWorkingCapital, cashConversionCycle, type MonthZeroOutlays } from './workingCapital.js';
 export type { ComputationTrace } from './context.js';
+// "Show the math" (§16 Q3): the arithmetic behind a figure, recorded by the
+// code that computed it and never rebuilt by the code that displays it.
+export type {
+  Derivation,
+  DerivationMap,
+  DerivationStep,
+  DerivedValue,
+} from './derivation.js';
+export { statementMath, type StatementMath } from './showMath.js';
 export type { CapacityResolution } from './costs.js';
 export {
   buildModelFromTemplate,

@@ -10,6 +10,15 @@ import {
 } from '@bizsim/schemas';
 import type { TickContext } from './context.js';
 import {
+  count,
+  factor as asFactor,
+  figureId,
+  money as asMoney,
+  number as asNumber,
+  rate as asRate,
+  type DerivationStep,
+} from './derivation.js';
+import {
   clamp,
   effectiveCac,
   marketingMultiplier,
@@ -215,6 +224,61 @@ export function computeDemand(
     : 1;
 
   const season = seasonalityFactor(stream.seasonality, period);
+
+  /**
+   * The factors every archetype shares, in the order the formulas apply them.
+   * Built only when something will read them (§16 Q3) — the property suite
+   * ticks this path 240,000 times and never opens a math panel.
+   */
+  const commonFactors = (opts: { marketing: boolean; ramp: boolean; season: boolean }): DerivationStep[] => {
+    const steps: DerivationStep[] = [];
+    if (opts.marketing && applies.marketing) {
+      steps.push({
+        label: 'Marketing lift',
+        value: asFactor(mkt),
+        op: '×',
+        path: `${path}.modifiers.marketingMaxLift`,
+        note: 'from this quarter’s marketing spend, at diminishing returns',
+      });
+    }
+    steps.push({
+      label: 'Price response',
+      value: asFactor(pe.multiplier),
+      op: '×',
+      path: `${path}.modifiers.priceElasticity`,
+      ...(pe.clamped ? { note: 'clamped — the price is outside the elastic range' } : {}),
+    });
+    if (opts.ramp && applies.ramp) {
+      steps.push({
+        label: `Maturity ramp, quarter ${q + 1}`,
+        value: asFactor(ramp),
+        op: '×',
+        path: `${path}.modifiers.rampFloor`,
+      });
+    }
+    if (opts.season) {
+      steps.push({
+        label: 'Seasonality',
+        value: asFactor(season),
+        op: '×',
+        path: `${path}.seasonality`,
+      });
+    }
+    return steps;
+  };
+
+  /** Record the chain that produced this stream's unconstrained demand. */
+  const recordDemand = (steps: DerivationStep[], result: DemandResult['demandVolume'] | Money): void => {
+    if (!ctx.tracing) return;
+    ctx.derive(figureId.streamDemand(stream.id), {
+      label: `${stream.label} — demand before capacity`,
+      line: 'incomeStatement.revenue',
+      steps,
+      result:
+        typeof result === 'bigint' ? asMoney(result) : count(result, stream.volumeNoun),
+    });
+  };
+
   const base: Omit<DemandResult, 'demandVolume' | 'physicalCapacity'> = {
     streamId: stream.id,
     driver: ARCHETYPE_DRIVER[stream.params.kind],
@@ -259,6 +323,25 @@ export function computeDemand(
       const peak = ctx.p(`${path}.params.peakConcentration`, p.peakConcentration);
       const physical = effective * (1 - 0.5 * Math.max(0, peak - 0.35));
 
+      if (ctx.tracing) {
+        recordDemand(
+          [
+            {
+              label: 'Addressable traffic',
+              value: count(p.addressableTrafficPerQuarter, 'passers-by'),
+              path: `${path}.params.addressableTrafficPerQuarter`,
+            },
+            {
+              label: 'Capture rate',
+              value: asRate(p.captureRate),
+              op: '×',
+              path: `${path}.params.captureRate`,
+            },
+            ...commonFactors({ marketing: true, ramp: true, season: true }),
+          ],
+          demand,
+        );
+      }
       return { ...base, demandVolume: demand, physicalCapacity: physical };
     }
 
@@ -269,6 +352,19 @@ export function computeDemand(
         pe.multiplier *
         ramp *
         season;
+      if (ctx.tracing) {
+        recordDemand(
+          [
+            {
+              label: 'Hours the market wants',
+              value: count(p.demandHoursPerQuarter, 'hours'),
+              path: `${path}.params.demandHoursPerQuarter`,
+            },
+            ...commonFactors({ marketing: true, ramp: true, season: true }),
+          ],
+          demandHours,
+        );
+      }
       // Capacity is entirely a function of staffed blocks (§3.2, §4.3), so
       // there is no physical ceiling independent of headcount.
       return { ...base, demandVolume: demandHours, physicalCapacity: null };
@@ -288,6 +384,35 @@ export function computeDemand(
         newCustomers *
         ctx.p(`${path}.params.ordersPerNewCustomerFirstQuarter`, p.ordersPerNewCustomerFirstQuarter);
       const orders = (newOrders + repeatOrders) * pe.multiplier;
+      if (ctx.tracing) {
+        recordDemand(
+          [
+            { label: 'Marketing spend', value: asMoney(stream.marketingSpendPerQuarter) },
+            {
+              label: 'Effective acquisition cost',
+              value: asMoney(cac),
+              op: '÷',
+              path: `${path}.params.baseCac`,
+              note: 'the base CAC, inflated by spending above the reference level',
+            },
+            {
+              label: 'Orders per new customer',
+              value: asNumber(p.ordersPerNewCustomerFirstQuarter),
+              op: '×',
+              path: `${path}.params.ordersPerNewCustomerFirstQuarter`,
+            },
+            {
+              label: 'Repeat orders',
+              value: count(repeatOrders, 'orders'),
+              op: '+',
+              path: `${path}.params.repeatPurchaseRatePerQuarter`,
+              note: `from ${Math.round(begin).toLocaleString('en-US')} existing customers, after seasonality`,
+            },
+            ...commonFactors({ marketing: false, ramp: false, season: false }),
+          ],
+          Math.max(0, orders),
+        );
+      }
       return { ...base, demandVolume: Math.max(0, orders), physicalCapacity: null };
     }
 
@@ -301,6 +426,27 @@ export function computeDemand(
         (cac > 0n ? ratio(stream.marketingSpendPerQuarter, cac) : 0) * pe.multiplier * ramp * season;
       const begin = stream.state.subscribers ?? 0;
       const churn = ctx.p(`${path}.params.quarterlyChurnRate`, p.quarterlyChurnRate);
+      if (ctx.tracing) {
+        recordDemand(
+          [
+            { label: 'Subscribers at the start', value: count(begin, 'subscribers') },
+            {
+              label: 'Additions',
+              value: count(Math.max(0, adds), 'subscribers'),
+              op: '+',
+              path: `${path}.params.baseCac`,
+              note: 'marketing spend ÷ effective CAC, after price, ramp and seasonality',
+            },
+            {
+              label: 'Churn',
+              value: count(begin * churn, 'subscribers'),
+              op: '−',
+              path: `${path}.params.quarterlyChurnRate`,
+            },
+          ],
+          Math.max(0, begin + Math.max(0, adds) - begin * churn),
+        );
+      }
       // Demand volume is the ending subscriber count this stream is reaching for.
       return {
         ...base,
@@ -319,6 +465,21 @@ export function computeDemand(
         1,
       );
       const units = ctx.p(`${path}.params.units`, p.units);
+      if (ctx.tracing) {
+        recordDemand(
+          [
+            { label: 'Units', value: count(units, 'units'), path: `${path}.params.units` },
+            {
+              label: 'Occupancy reached',
+              value: asRate(occupancy),
+              op: '×',
+              path: `${path}.params.stabilizedOccupancy`,
+              note: 'the stabilized rate, after ramp, price response and seasonality',
+            },
+          ],
+          units * occupancy,
+        );
+      }
       return { ...base, demandVolume: units * occupancy, physicalCapacity: units };
     }
 
@@ -334,6 +495,43 @@ export function computeDemand(
         wins * (1 + ctx.p(`${path}.params.changeOrderPctOfContract`, p.changeOrderPctOfContract)),
       );
       const available = (stream.state.backlog ?? 0n) + newBacklog;
+      if (ctx.tracing) {
+        recordDemand(
+          [
+            {
+              label: 'Bids submitted',
+              value: count(p.bidsSubmittedPerQuarter, 'bids'),
+              path: `${path}.params.bidsSubmittedPerQuarter`,
+            },
+            {
+              label: 'Effective win rate',
+              value: asRate(effWinRate),
+              op: '×',
+              path: `${path}.params.winRate`,
+              note: 'the base win rate, after price response and marketing',
+            },
+            {
+              label: 'Average contract value',
+              value: asMoney(p.avgContractValue),
+              op: '×',
+              path: `${path}.params.avgContractValue`,
+            },
+            {
+              label: 'Change orders',
+              value: asFactor(1 + p.changeOrderPctOfContract),
+              op: '×',
+              path: `${path}.params.changeOrderPctOfContract`,
+            },
+            {
+              label: 'Backlog carried in',
+              value: asMoney(stream.state.backlog ?? 0n),
+              op: '+',
+              note: 'work won in earlier quarters and not yet executed',
+            },
+          ],
+          available,
+        );
+      }
       // Demand is denominated in revenue dollars; the ceiling is the crew.
       return {
         ...base,
@@ -391,9 +589,56 @@ export function realize(
     contributionMarginPct,
   };
 
+  /**
+   * Demand, less whatever capacity refused, is where every archetype's revenue
+   * starts. Naming which ceiling bound matters more than the number: "we turned
+   * away 400 visits" is a different decision from "we turned away 400 visits
+   * because the counter is too small" (§16 Q3).
+   */
+  const servedSteps = (noun?: string): DerivationStep[] => {
+    const steps: DerivationStep[] = [
+      { label: 'Demand before capacity', value: count(demand.demandVolume, noun) },
+    ];
+    if (lost > 0.5) {
+      const staffedBinds =
+        staffedCapacity !== null && staffedCapacity <= (demand.physicalCapacity ?? Infinity);
+      steps.push({
+        label: 'Turned away',
+        value: count(lost, noun),
+        op: '−',
+        note: staffedBinds
+          ? 'staffing capped what could be served'
+          : 'the physical ceiling capped what could be served',
+      });
+    }
+    return steps;
+  };
+
+  const recordRevenue = (steps: DerivationStep[], revenue: Money): void => {
+    if (!ctx.tracing) return;
+    ctx.derive(figureId.streamRevenue(stream.id), {
+      label: `${stream.label} — revenue`,
+      line: 'incomeStatement.revenue',
+      steps,
+      result: asMoney(revenue),
+    });
+  };
+
   switch (p.kind) {
     case 'TRAFFIC': {
       const revenue = mulRate(ctx.p(`${path}.params.avgTicket`, p.avgTicket), realized);
+      recordRevenue(
+        [
+          ...servedSteps(stream.volumeNoun),
+          {
+            label: 'Average ticket',
+            value: asMoney(p.avgTicket),
+            op: '×',
+            path: `${path}.params.avgTicket`,
+          },
+        ],
+        revenue,
+      );
       state.cumulativeLostDemand = (stream.state.cumulativeLostDemand ?? 0) + lost;
       metrics.revenue = revenue;
       return {
@@ -419,6 +664,25 @@ export function realize(
         billableHours * realization,
       );
       const target = ctx.p(`${path}.params.targetUtilization`, p.targetUtilization);
+      recordRevenue(
+        [
+          ...servedSteps('hours'),
+          {
+            label: 'Realization rate',
+            value: asRate(realization),
+            op: '×',
+            path: `${path}.params.realizationRate`,
+            note: 'the share of worked hours that survives to an invoice',
+          },
+          {
+            label: 'Blended hourly rate',
+            value: asMoney(p.blendedHourlyRate),
+            op: '×',
+            path: `${path}.params.blendedHourlyRate`,
+          },
+        ],
+        revenue,
+      );
       metrics.revenue = revenue;
       metrics.realizedUtilization = gross > 0 ? billableHours / gross : 0;
       metrics.benchStress = Math.max(0, gross * target - billableHours);
@@ -442,6 +706,18 @@ export function realize(
 
       const aov = ctx.p(`${path}.params.avgOrderValue`, p.avgOrderValue);
       const revenue = mulRate(aov, realized);
+      recordRevenue(
+        [
+          ...servedSteps('orders'),
+          {
+            label: 'Average order value',
+            value: asMoney(aov),
+            op: '×',
+            path: `${path}.params.avgOrderValue`,
+          },
+        ],
+        revenue,
+      );
       const perQuarterOrders = p.repeatPurchaseRatePerQuarter;
       metrics.revenue = revenue;
       metrics.effectiveCac = cac;
@@ -479,6 +755,34 @@ export function realize(
       const subscriptionRevenue = mulRate(arpu, avgSubs * nrr);
       const setupRevenue = mulRate(ctx.p(`${path}.params.setupFee`, p.setupFee), adds);
       const revenue = subscriptionRevenue + setupRevenue;
+      recordRevenue(
+        [
+          {
+            label: 'Average subscribers',
+            value: count(avgSubs, 'subscribers'),
+            note: 'the mean of the opening and closing counts — nobody pays a full quarter for half a quarter',
+          },
+          { label: 'ARPU', value: asMoney(arpu), op: '×', path: `${path}.params.arpuPerQuarter` },
+          {
+            label: 'Net revenue retention',
+            value: asFactor(nrr),
+            op: '×',
+            path: `${path}.params.netRevenueRetention`,
+          },
+          ...(setupRevenue !== 0n
+            ? [
+                {
+                  label: 'Setup fees',
+                  value: asMoney(setupRevenue),
+                  op: '+' as const,
+                  path: `${path}.params.setupFee`,
+                  note: `on ${Math.round(adds).toLocaleString('en-US')} new subscribers`,
+                },
+              ]
+            : []),
+        ],
+        revenue,
+      );
 
       const prepayMonths = ctx.p(`${path}.params.prepayMonths`, p.prepayMonths);
       let deferredCashCollected: Money | undefined;
@@ -526,6 +830,35 @@ export function realize(
         ctx.p(`${path}.params.ancillaryRevenuePctOfBase`, p.ancillaryRevenuePctOfBase),
       );
       const revenue = baseRevenue + ancillary;
+      recordRevenue(
+        [
+          { label: 'Units occupied', value: count(occupiedUnits, 'units') },
+          {
+            label: 'Rate per unit',
+            value: asMoney(p.ratePerUnitPerQuarter),
+            op: '×',
+            path: `${path}.params.ratePerUnitPerQuarter`,
+          },
+          {
+            label: 'After concessions',
+            value: asFactor(1 - concessions),
+            op: '×',
+            path: `${path}.params.concessionsPct`,
+            note: 'free months and move-in discounts',
+          },
+          ...(ancillary !== 0n
+            ? [
+                {
+                  label: 'Ancillary revenue',
+                  value: asMoney(ancillary),
+                  op: '+' as const,
+                  path: `${path}.params.ancillaryRevenuePctOfBase`,
+                },
+              ]
+            : []),
+        ],
+        revenue,
+      );
       metrics.revenue = revenue;
       metrics.occupancy = occupancy;
       return {
@@ -567,6 +900,24 @@ export function realize(
       }
       state.retainageSchedule = remaining;
 
+      recordRevenue(
+        [
+          {
+            label: 'Backlog available to execute',
+            value: asMoney(available),
+            note: 'work carried in, plus what this quarter’s bids won',
+          },
+          {
+            label: 'Executed this quarter',
+            value: asMoney(recognized),
+            note:
+              recognized < available
+                ? 'the crew could not get through all of it'
+                : 'the crew got through all of it',
+          },
+        ],
+        recognized,
+      );
       metrics.revenue = recognized;
       metrics.backlogCoverageQuarters =
         p.executionCapacityPerQuarter > 0n ? ratio(state.backlog, p.executionCapacityPerQuarter) : 0;

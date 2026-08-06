@@ -1,5 +1,7 @@
 import { mulRate, sum, type Money } from '@bizsim/money';
 import type { Business, FixedAsset, PeriodIndex } from '@bizsim/schemas';
+import { LINE, type TickContext } from './context.js';
+import { factor as asFactor, money as asMoney, number as asNumber } from './derivation.js';
 
 /**
  * Straight-line depreciation — spec §2.5.
@@ -26,10 +28,43 @@ export function quarterlyDepreciation(asset: FixedAsset, period: PeriodIndex): M
   return perQuarter > remaining ? remaining : perQuarter;
 }
 
-export function computeDepreciation(business: Business, period: PeriodIndex): DepreciationResult {
+export function computeDepreciation(
+  business: Business,
+  period: PeriodIndex,
+  ctx?: TickContext,
+): DepreciationResult {
   const byAsset = new Map<string, Money>();
   for (const asset of business.assets) {
-    byAsset.set(asset.id, quarterlyDepreciation(asset, period));
+    const charge = quarterlyDepreciation(asset, period);
+    byAsset.set(asset.id, charge);
+    if (ctx?.tracing && charge > 0n) {
+      ctx.derive(`asset.${asset.id}.depreciation`, {
+        label: asset.label,
+        line: LINE.depreciation,
+        steps: [
+          { label: 'Cost of the asset', value: asMoney(asset.grossCost) },
+          ...(asset.salvageValue !== 0n
+            ? [{ label: 'Salvage value', value: asMoney(asset.salvageValue), op: '−' as const }]
+            : []),
+          {
+            label: 'Useful life',
+            value: asNumber(asset.usefulLifeYears * 4, 'quarters'),
+            op: '÷',
+            note: `${asset.usefulLifeYears} years, straight line`,
+          },
+          ...(charge < mulRate(asset.grossCost - asset.salvageValue, 1 / (asset.usefulLifeYears * 4))
+            ? [
+                {
+                  label: 'Capped',
+                  value: asFactor(1),
+                  note: 'the asset is nearly written down — only the remaining basis is charged',
+                },
+              ]
+            : []),
+        ],
+        result: asMoney(charge),
+      });
+    }
   }
   return { total: sum([...byAsset.values()]), byAsset };
 }

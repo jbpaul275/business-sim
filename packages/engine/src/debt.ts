@@ -9,6 +9,8 @@ import type {
   PeriodIndex,
   WorldConfig,
 } from '@bizsim/schemas';
+import { LINE, type TickContext } from './context.js';
+import { money as asMoney, rate as asRate } from './derivation.js';
 
 /**
  * Financing — spec §6.
@@ -46,7 +48,11 @@ export interface DebtServiceResult {
  * errors in founder financial thinking; only the interest portion is an
  * expense, and the principal portion is a financing cash flow.
  */
-export function computeDebtService(business: Business, period: PeriodIndex): DebtServiceResult {
+export function computeDebtService(
+  business: Business,
+  period: PeriodIndex,
+  ctx?: TickContext,
+): DebtServiceResult {
   const byDebt: DebtServiceLine[] = [];
 
   for (const debt of business.debts) {
@@ -78,6 +84,27 @@ export function computeDebtService(business: Business, period: PeriodIndex): Deb
       }
     }
 
+    if (ctx?.tracing && interest > 0n) {
+      ctx.derive(`debt.${debt.id}.interest`, {
+        label: debt.label,
+        line: LINE.interest,
+        steps: [
+          { label: 'Outstanding principal', value: asMoney(debt.outstandingPrincipal) },
+          {
+            label: 'Quarterly rate',
+            value: asRate(r),
+            op: '×',
+            note: `${(debt.annualRate * 100).toFixed(2)}% a year, charged quarterly`,
+          },
+        ],
+        // Interest only. The principal portion is a financing cash flow and the
+        // unused-line fee is a financing cost — neither is an expense, and
+        // folding either in here would both break the tie to the row above and
+        // teach the exact error this interest/principal split exists to
+        // correct.
+        result: asMoney(interest),
+      });
+    }
     byDebt.push({ debtId: debt.id, interest, principal, fees });
   }
 

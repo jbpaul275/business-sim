@@ -512,6 +512,110 @@ textarea:focus {
   color: var(--serious);
 }
 
+/* "Show the math" (§16 Q3) — hidden until asked for, per figure. Faint rather
+   than absent at rest: an affordance nobody can see before they hover is one
+   most players never learn exists, and twelve faint ones still do not shout
+   down the statement they annotate. */
+.math-toggle {
+  margin-left: 8px;
+  /* Bordered even at rest: a bare "=" beside a label reads as punctuation, and
+     the player needs to see a control. */
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  opacity: 0.45;
+}
+.statement tr:hover .math-toggle,
+.math-toggle:focus-visible,
+.math-toggle.on {
+  opacity: 1;
+}
+.math-toggle:hover,
+.math-toggle.on {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.math-row td {
+  padding: 0 0 8px 18px;
+}
+.math-panel {
+  border-left: 2px solid var(--accent-line);
+  padding: 8px 0 8px 12px;
+  font-family: var(--sans);
+}
+.math-steps {
+  display: grid;
+  grid-template-columns: 1.1em 1fr auto;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+.math-step {
+  display: contents;
+}
+.math-op {
+  font-family: var(--mono);
+  color: var(--text-muted);
+  text-align: center;
+}
+.math-label {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+.math-note {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  max-width: 62ch;
+}
+.math-value {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+.math-rounded {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+/* A rolled-up line: each contributing cost or stream, openable in turn. The
+   total is the statement row this panel hangs under, never re-printed here. */
+.math-parts {
+  display: flex;
+  flex-direction: column;
+}
+.math-part summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.math-part summary:hover {
+  color: var(--text-primary);
+}
+.math-part-value {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.math-part[open] summary {
+  color: var(--text-primary);
+}
+.math-part .math-steps {
+  padding: 4px 0 10px 14px;
+}
+
 .streams {
   margin: 14px 0 0;
 }

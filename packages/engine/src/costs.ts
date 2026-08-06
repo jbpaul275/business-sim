@@ -10,6 +10,15 @@ import {
 } from '@bizsim/schemas';
 import type { DemandResult, RealizeResult } from './archetypes.js';
 import { lineKey, type TickContext } from './context.js';
+import {
+  count,
+  factor as asFactor,
+  figureId,
+  money as asMoney,
+  number as asNumber,
+  rate as asRate,
+  type DerivationStep,
+} from './derivation.js';
 
 /**
  * The cost engine — spec §4. Costs decompose by BEHAVIOUR, not by industry.
@@ -164,6 +173,28 @@ export function resolveCapacity(
 // Cost classes
 // ---------------------------------------------------------------------------
 
+/**
+ * Record how one cost line got its number (§16 Q3). Every cost class routes
+ * through here so the rollup under a statement subtotal is uniform, and so the
+ * guard on `tracing` lives in exactly one place.
+ */
+function recordCost(
+  ctx: TickContext,
+  id: string,
+  label: string,
+  statementLine: StatementLine,
+  amount: Money,
+  steps: DerivationStep[],
+): void {
+  if (!ctx.tracing) return;
+  ctx.derive(figureId.cost(id), {
+    label,
+    line: lineKey(statementLine),
+    steps,
+    result: asMoney(amount),
+  });
+}
+
 /** §4.1 — scales directly with revenue dollars. */
 export function variableWithRevenue(
   ctx: TickContext,
@@ -179,10 +210,26 @@ export function variableWithRevenue(
           .map(([, revenue]) => revenue),
       );
       const pct = ctx.p(`costs.${cost.id}.pctOfRevenue`, cost.pctOfRevenue);
+      const amount = mulRate(base, pct);
+      recordCost(ctx, cost.id, cost.label, cost.statementLine, amount, [
+        {
+          label: 'Revenue it scales with',
+          value: asMoney(base),
+          ...(cost.appliesToStreamIds === undefined
+            ? {}
+            : { note: 'only the streams this cost applies to' }),
+        },
+        {
+          label: 'Share of revenue',
+          value: asRate(pct),
+          op: '×',
+          path: `costs.${cost.id}.pctOfRevenue`,
+        },
+      ]);
       push(bucket, {
         id: cost.id,
         label: cost.label,
-        amount: mulRate(base, pct),
+        amount,
         statementLine: cost.statementLine,
         accruable: cost.accruable,
       });
@@ -215,10 +262,24 @@ export function variableWithActivity(
         volume += outcome.activity[cost.driver as VolumeDriver] ?? 0;
       }
       const perUnit = ctx.p(`costs.${cost.id}.costPerUnit`, cost.costPerUnit);
+      const amount = mulRate(perUnit, volume);
+      recordCost(ctx, cost.id, cost.label, cost.statementLine, amount, [
+        {
+          label: 'Volume actually delivered',
+          value: count(volume, cost.driver.toLowerCase().replace(/_/g, ' ')),
+          note: 'realized, not demanded — you only pay to ship what shipped',
+        },
+        {
+          label: 'Cost per unit',
+          value: asMoney(perUnit),
+          op: '×',
+          path: `costs.${cost.id}.costPerUnit`,
+        },
+      ]);
       push(bucket, {
         id: cost.id,
         label: cost.label,
-        amount: mulRate(perUnit, volume),
+        amount,
         statementLine: cost.statementLine,
         accruable: cost.accruable,
       });
@@ -239,11 +300,41 @@ export function stepFixedCosts(ctx: TickContext, business: Business): CostBucket
     ctx.scope(lineKey(cost.statementLine), () => {
       const perBlock = ctx.p(`costs.${cost.id}.blockCostPerQuarter`, cost.blockCostPerQuarter);
       // Cost is driven by current PLUS pending blocks; capacity by current alone.
-      const gross = mulRate(perBlock, cost.currentBlocks + cost.pendingBlocks);
+      const blocks = cost.currentBlocks + cost.pendingBlocks;
+      const gross = mulRate(perBlock, blocks);
+      const amount = cost.isLabor ? mulRate(gross, 1 + load) : gross;
+      recordCost(ctx, cost.id, cost.label, cost.statementLine, amount, [
+        {
+          label: 'Blocks on the payroll',
+          value: asNumber(blocks, 'blocks'),
+          ...(cost.pendingBlocks > 0
+            ? {
+                note: `${cost.currentBlocks} working plus ${cost.pendingBlocks} hired and not yet productive — you pay a quarter before they raise capacity`,
+              }
+            : {}),
+        },
+        {
+          label: 'Cost per block',
+          value: asMoney(perBlock),
+          op: '×',
+          path: `costs.${cost.id}.blockCostPerQuarter`,
+        },
+        ...(cost.isLabor
+          ? [
+              {
+                label: 'Payroll load',
+                value: asFactor(1 + load),
+                op: '×' as const,
+                path: 'costs.payrollLoadPct',
+                note: 'employer taxes, insurance and benefits on top of wages',
+              },
+            ]
+          : []),
+      ]);
       push(bucket, {
         id: cost.id,
         label: cost.label,
-        amount: cost.isLabor ? mulRate(gross, 1 + load) : gross,
+        amount,
         statementLine: cost.statementLine,
         // Labor is never accruable — payroll clears on a two-week cycle
         // regardless of when customers pay (§5.1).
@@ -281,6 +372,33 @@ export function fixedPeriodCosts(
       return { escalated: mulRate(base, Math.pow(1 + escalator, yearsElapsed)) };
     });
     const withLoad = cost.isLabor ? mulRate(escalated, 1 + load) : escalated;
+    recordCost(ctx, cost.id, cost.label, cost.statementLine, withLoad, [
+      {
+        label: 'Contracted amount',
+        value: asMoney(cost.amountPerQuarter),
+        path: `costs.${cost.id}.amountPerQuarter`,
+      },
+      ...(yearsElapsed > 0
+        ? [
+            {
+              label: `Escalation, ${yearsElapsed} ${yearsElapsed === 1 ? 'year' : 'years'} in`,
+              value: asFactor(Math.pow(1 + cost.annualEscalatorPct, yearsElapsed)),
+              op: '×' as const,
+              path: `costs.${cost.id}.annualEscalatorPct`,
+            },
+          ]
+        : []),
+      ...(cost.isLabor
+        ? [
+            {
+              label: 'Payroll load',
+              value: asFactor(1 + load),
+              op: '×' as const,
+              path: 'costs.payrollLoadPct',
+            },
+          ]
+        : []),
+    ]);
 
     // Deferring owner compensation does NOT remove the expense. The work was
     // done and the founder is owed for it — §9.4 is explicit that it "accrues
@@ -304,13 +422,27 @@ export function fixedPeriodCosts(
 }
 
 /** Marketing is set per stream (§3.0.5), booked in the quarter incurred, never accruable. */
-export function marketingCost(business: Business): CostBucket {
+export function marketingCost(business: Business, ctx?: TickContext): CostBucket {
   const bucket = emptyBucket();
   for (const stream of business.streams) {
     if (stream.marketingSpendPerQuarter === 0n) continue;
+    const id = `marketing:${stream.id}`;
+    const label = `Marketing — ${stream.label}`;
+    // No formula: the cost is the number the player set. Worth recording all
+    // the same, because the panel's job is to say where a figure came from,
+    // and "you chose it" is an answer — and it names the lever.
+    if (ctx) {
+      recordCost(ctx, id, label, 'MARKETING', stream.marketingSpendPerQuarter, [
+        {
+          label: 'Spend you set for this quarter',
+          value: asMoney(stream.marketingSpendPerQuarter),
+          path: `streams.${stream.id}.marketingSpendPerQuarter`,
+        },
+      ]);
+    }
     push(bucket, {
-      id: `marketing:${stream.id}`,
-      label: `Marketing — ${stream.label}`,
+      id,
+      label,
       amount: stream.marketingSpendPerQuarter,
       statementLine: 'MARKETING',
       accruable: false,

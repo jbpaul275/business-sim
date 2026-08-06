@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useRef, useState } from 'react';
+import type { MathView } from '../server/math';
 import type { AdvisorEntry, StagedMove } from '../server/store';
 import type { AttributionView, GameView, Row } from '../server/view';
 import { groupDigits, groupMoney, ungroup } from './format';
@@ -876,17 +877,110 @@ function AdvisorFeed({
 }
 
 function Statement({ rows }: { rows: Row[] }) {
+  // Open panels are keyed by row label, not index, so a figure a player has
+  // opened stays open when the quarter advances and the rows are rebuilt.
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (label: string): void =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(label)) next.add(label);
+      return next;
+    });
+
   return (
     <table className="statement">
       <tbody>
-        {rows.map((row, i) => (
-          <tr key={`${row.label}-${i}`} className={row.strong ? 'strong' : ''}>
-            <td className={row.indent ? 'indent' : ''}>{row.label}</td>
-            <td className={`num${row.negative ? ' negative' : ''}`}>{row.value}</td>
-          </tr>
-        ))}
+        {rows.map((row, i) => {
+          const shown = open.has(row.label);
+          return (
+            <Fragment key={`${row.label}-${i}`}>
+              <tr className={row.strong ? 'strong' : ''}>
+                <td className={row.indent ? 'indent' : ''}>
+                  {row.label}
+                  {row.math && (
+                    <button
+                      type="button"
+                      className={`math-toggle${shown ? ' on' : ''}`}
+                      aria-expanded={shown}
+                      title={shown ? 'Hide the math' : 'Show the math'}
+                      onClick={() => toggle(row.label)}
+                    >
+                      {shown ? '−' : '='}
+                    </button>
+                  )}
+                </td>
+                <td className={`num${row.negative ? ' negative' : ''}`}>{row.value}</td>
+              </tr>
+              {row.math && shown && (
+                <tr className="math-row">
+                  <td colSpan={2}>
+                    <MathPanel math={row.math} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
       </tbody>
     </table>
+  );
+}
+
+/**
+ * The arithmetic behind a figure (§16 Q3). Every number here was computed by
+ * the engine and formatted by the server; this lays it out and does no math.
+ *
+ * The panel never re-prints the figure it hangs under as its own headline —
+ * the row above it is the headline.
+ */
+function MathPanel({ math }: { math: MathView }) {
+  const parts = math.parts ?? [];
+  // A line built from several contributors shows the contributors, each
+  // openable in turn. Printing the sum as well would list them twice, and the
+  // total is already the row this panel hangs under.
+  if (parts.length > 0) {
+    return (
+      <div className="math-panel">
+        <div className="math-parts">
+          {parts.map((part) => (
+            <details className="math-part" key={part.label}>
+              <summary>
+                <span>{part.label}</span>
+                <span className="math-part-value">{part.result}</span>
+              </summary>
+              <Steps steps={part.steps} />
+            </details>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="math-panel">
+      <Steps steps={math.steps} />
+      {math.rounded && (
+        <p className="math-rounded">
+          Volumes are shown rounded — the figure above uses the exact demand.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Steps({ steps }: { steps: MathView['steps'] }) {
+  return (
+    <div className="math-steps">
+      {steps.map((s, i) => (
+        <div className="math-step" key={`${s.label}-${i}`}>
+          <span className="math-op">{s.op ?? ''}</span>
+          <span className="math-label">
+            {s.label}
+            {s.note && <span className="math-note">{s.note}</span>}
+          </span>
+          <span className="math-value">{s.value}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

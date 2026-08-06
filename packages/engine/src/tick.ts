@@ -426,7 +426,7 @@ function computePreCrisis(
     revenue,
     variableRevenueCosts: variableWithRevenue(ctx, business, revenueByStream),
     variableActivityCosts: variableWithActivity(ctx, business, outcomes),
-    marketingCosts: marketingCost(business),
+    marketingCosts: marketingCost(business, ctx),
     contributionMarginByStream,
   };
 }
@@ -469,9 +469,9 @@ function computePostCrisis(
     deferOwnerComp: crisis.deferOwnerComp,
   });
   // 10. Depreciation.
-  const dep = computeDepreciation(business, period);
+  const dep = computeDepreciation(business, period, ctx);
   // 11. Interest, split from principal.
-  const debtService = computeDebtService(business, period);
+  const debtService = computeDebtService(business, period, ctx);
 
   const all = addBuckets(
     pre.variableRevenueCosts,

@@ -31,6 +31,14 @@ import {
  * code save would silently end the game.
  */
 
+/**
+ * Web ticks record the trace. The CLI's batch runs and the property suite do
+ * not — but here every tick feeds exactly one screen a player will read, and
+ * that screen offers "show the math" (§16 Q3) on every derived figure. The
+ * derivations are built during the tick that produced them or not at all.
+ */
+const TICK = { throwOnAssertionFailure: false, trace: true } as const;
+
 export interface TurnLogEntry {
   period: number;
   /** Non-INFO engine events, described in words. */
@@ -155,7 +163,7 @@ export function createSession(scenario: string): GameSession {
 
   // Period 0 runs immediately, same as the CLI: there is something to look at
   // before the first decision.
-  const first = tick(world, [], { throwOnAssertionFailure: false });
+  const first = tick(world, [], TICK);
   const session: GameSession = {
     // A full UUID, because this doubles as the primary key a QA share uploads
     // under — and the reference the player quotes to have it deleted.
@@ -214,7 +222,7 @@ export function createSessionFromWorld(
 ): GameSession {
   const businessId = world.businesses[0]?.id;
   if (!businessId) throw new Error('committed world has no business');
-  const first = tick(world, [], { throwOnAssertionFailure: false });
+  const first = tick(world, [], TICK);
   const session: GameSession = {
     id: randomUUID(),
     scenario: label,
@@ -260,7 +268,7 @@ export function advanceSession(session: GameSession, actions: Action[], skip = 0
       };
     }
     const applied = i === 0 ? actions : [];
-    const result = tick(before, applied, { throwOnAssertionFailure: false });
+    const result = tick(before, applied, TICK);
     session.attributions = session.priorStatements
       ? attributeQuarter(
           { state: before, statements: session.priorStatements },
