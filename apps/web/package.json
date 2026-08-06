@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "predev": "kill -9 $(lsof -ti tcp:4321) 2>/dev/null || true",
+    "dev": "next dev -p 4321",
     "build": "next build",
     "start": "next start"
   },

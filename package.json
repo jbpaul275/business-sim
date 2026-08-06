@@ -14,6 +14,7 @@
     "test:slow": "SLOW_TESTS=1 vitest run",
     "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
     "check": "pnpm typecheck && pnpm boundaries && pnpm test",
+    "web": "pnpm --filter @bizsim/web dev",
     "sim": "tsx packages/sim-cli/src/cli.ts",
     "smoke": "tsx packages/sim-cli/src/smoke.ts"
   },

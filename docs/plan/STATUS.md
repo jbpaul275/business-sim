@@ -141,7 +141,13 @@ registered assumptions are sourced at `PLAYER_SOURCED` or better. Uncertainty is
 pnpm sim --new                                  # Phases 0-4, then play what you designed
 pnpm sim --play --scenario contractor           # skip setup, play a seeded scenario
 pnpm sim --scenario restaurant --print bands    # batch run, for calibration
+pnpm web                                        # the web app, on http://localhost:4321
 ```
+
+`pnpm web` pins port 4321 and frees it before starting. Next's default is to walk up from
+3000 until it finds a free port, which quietly scatters abandoned servers across 3000-3010;
+they rename themselves `next-server`, so a `pkill -f "next dev"` misses them and the next
+start dies on `EADDRINUSE`. One fixed port, cleared each time, ends that.
 
 `--new` covers §9.1 Phases 0 through 4. **Phases 1-2 are now a conversation**: describe a
 business in a sentence and the interview asks what it needs, estimates the rest, and emits a
